@@ -51,7 +51,7 @@ type headerFields struct {
 	Extra               []byte         `json:"extraData"        gencodec:"required"`
 	MixDigest           common.Hash    `json:"mixHash"          gencodec:"required"`
 	// Additional Fields
-	BDLSDecide []byte `json:"signature" gencodec:"required"` // the related <decide> message to this block
+	BDLSDecide []byte `json:"decide" gencodec:"required"` // the related <decide> message to this block
 }
 
 // ParentHash is the header hash of the parent block.  For the genesis block
