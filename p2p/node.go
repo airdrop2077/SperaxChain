@@ -1,14 +1,19 @@
 package main
 
 import (
+	"sync"
+
+	"github.com/libp2p/go-libp2p-core/crypto"
+
 	"context"
-	"fmt"
 	"time"
+
+	"github.com/Sperax/bdls"
+	"github.com/libp2p/go-libp2p-core/network"
 
 	"github.com/libp2p/go-libp2p"
 	autonat "github.com/libp2p/go-libp2p-autonat-svc"
 	connmgr "github.com/libp2p/go-libp2p-connmgr"
-	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/host"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	libp2pquic "github.com/libp2p/go-libp2p-quic-transport"
@@ -17,36 +22,14 @@ import (
 	libp2ptls "github.com/libp2p/go-libp2p-tls"
 )
 
-func main() {
+// CreateNode initialize a p2p node with given multiaddr, consensus and ledger
+func CreateNode(addr string, priv crypto.PrivKey, consensus *bdls.Consensus) *Node {
 	// The context governs the lifetime of the libp2p node.
 	// Cancelling it will stop the the host.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// To construct a simple host with all the default settings, just use `New`
-	h, err := libp2p.New(ctx)
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Printf("Hello World, my hosts ID is %s\n", h.ID())
-
-	// Now, normally you do not just want a simple host, you want
-	// that is fully configured to best support your p2p application.
-	// Let's create a second host setting some more options.
-
-	// Set your own keypair
-	priv, _, err := crypto.GenerateKeyPair(
-		crypto.Ed25519, // Select your key type. Ed25519 are nice short
-		-1,             // Select key length when possible (i.e. RSA).
-	)
-	if err != nil {
-		panic(err)
-	}
-
-	var idht *dht.IpfsDHT
-
-	h2, err := libp2p.New(ctx,
+	host, err := libp2p.New(ctx,
 		// Use the keypair we generated
 		libp2p.Identity(priv),
 		// Multiple listen addresses
@@ -73,7 +56,7 @@ func main() {
 		libp2p.NATPortMap(),
 		// Let this host use the DHT to find other hosts
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
-			idht, err = dht.New(ctx, h)
+			idht, err := dht.New(ctx, h)
 			return idht, err
 		}),
 		// Let this host use relays and advertise itself on relays if
@@ -88,7 +71,7 @@ func main() {
 	// If you want to help other peers to figure out if they are behind
 	// NATs, you can launch the server-side of AutoNAT too (AutoRelay
 	// already runs the client)
-	_, err = autonat.NewAutoNATService(ctx, h2,
+	_, err = autonat.NewAutoNATService(ctx, host,
 		// Support same non default security and transport options as
 		// original host.
 		libp2p.Security(libp2ptls.ID, libp2ptls.New),
@@ -110,5 +93,52 @@ func main() {
 			h2.Connect(ctx, *pi)
 		}
 	*/
-	fmt.Printf("Hello World, my second hosts ID is %s\n", h2.ID())
+
+	node := NewNode(host)
+	return node
+}
+
+// ETH protocol
+const ethProtocol = "/eth/0.0.1"
+
+// BDLS consensus protocol
+const bdlsProtocol = "/bdls/0.0.1"
+
+type EthHandler struct {
+}
+
+func (handler *EthHandler) handleMessage(s network.Stream) {
+}
+
+type ConsensusHandler struct {
+}
+
+func (handler *ConsensusHandler) handleMessage(s network.Stream) {
+}
+
+type Node struct {
+	host.Host        // the lib-p2p host
+	ethHandler       *EthHandler
+	consensusHandler *ConsensusHandler
+	die              chan struct{}
+	dieOnce          sync.Once
+}
+
+// Create a new node with its implemented protocols
+func NewNode(host host.Host) *Node {
+	node := &Node{Host: host}
+	node.die = make(chan struct{})
+	node.initETHProtocol()
+	node.initBDLSProtocol()
+	return node
+}
+
+func (node *Node) initETHProtocol() {
+	node.ethHandler = new(EthHandler)
+	node.SetStreamHandler(ethProtocol, node.ethHandler.handleMessage)
+}
+
+func (node *Node) initBDLSProtocol() {
+	node.consensusHandler = new(ConsensusHandler)
+	node.SetStreamHandler(bdlsProtocol, node.consensusHandler.handleMessage)
 }

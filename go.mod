@@ -3,10 +3,10 @@ module github.com/Sperax/SperaxChain
 go 1.14
 
 require (
+	github.com/Sperax/bdls v1.0.0
 	github.com/allegro/bigcache v1.2.1 // indirect
 	github.com/aristanetworks/goarista v0.0.0-20190607111240-52c2a7864a08 // indirect
 	github.com/ethereum/go-ethereum v1.9.13
-	github.com/golang/protobuf v1.3.2 // indirect
 	github.com/golang/snappy v0.0.1
 	github.com/libp2p/go-libp2p v0.8.1
 	github.com/libp2p/go-libp2p-autonat-svc v0.1.0
