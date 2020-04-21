@@ -93,10 +93,10 @@ func CreateNode(addr string, priv crypto.PrivKey, consensus *bdls.Consensus) *No
 }
 
 // ETH protocol
-const ethProtocol = "/eth/0.0.1"
+const ethProtocol = "/sperax/eth/0.0.1"
 
 // BDLS consensus protocol
-const bdlsProtocol = "/bdls/0.0.1"
+const bdlsProtocol = "/sperax/bdls/0.0.1"
 
 type EthHandler struct {
 }
