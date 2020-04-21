@@ -23,6 +23,7 @@ import (
 )
 
 // CreateNode initialize a p2p node with given multiaddr, consensus and ledger
+// eg addr: "/ip4/0.0.0.0/tcp/9000"
 func CreateNode(addr string, priv crypto.PrivKey, consensus *bdls.Consensus) *Node {
 	// The context governs the lifetime of the libp2p node.
 	// Cancelling it will stop the the host.
@@ -34,15 +35,8 @@ func CreateNode(addr string, priv crypto.PrivKey, consensus *bdls.Consensus) *No
 		libp2p.Identity(priv),
 		// Multiple listen addresses
 		libp2p.ListenAddrStrings(
-			"/ip4/0.0.0.0/tcp/9000",      // regular tcp connections
-			"/ip4/0.0.0.0/udp/9000/quic", // a UDP endpoint for the QUIC transport
+			addr, // regular tcp connections
 		),
-		// support TLS connections
-		libp2p.Security(libp2ptls.ID, libp2ptls.New),
-		// support secio connections
-		libp2p.Security(secio.ID, secio.New),
-		// support QUIC - experimental
-		libp2p.Transport(libp2pquic.NewTransport),
 		// support any other default transports (TCP)
 		libp2p.DefaultTransports,
 		// Let's prevent our peer from having too many
