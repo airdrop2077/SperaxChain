@@ -61,3 +61,6 @@ func NewHost(port string, priv libp2p_crypto.PrivKey) (*Host, error) {
 	}
 	return h, nil
 }
+
+// Join to a given topic
+func (h *Host) Join(topic string) (*libp2p_pubsub.Topic, error) { return h.pubsub.Join(topic) }

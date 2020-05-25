@@ -3,6 +3,7 @@ module github.com/Sperax/SperaxChain
 go 1.14
 
 require (
+	github.com/Sperax/bdls v1.1.0
 	github.com/allegro/bigcache v1.2.1 // indirect
 	github.com/aristanetworks/goarista v0.0.0-20200520141224-0f14e646773f // indirect
 	github.com/elastic/gosigar v0.10.5 // indirect
@@ -18,6 +19,8 @@ require (
 	github.com/multiformats/go-multibase v0.0.3 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.18.0
+	github.com/urfave/cli v1.22.1
+	github.com/urfave/cli/v2 v2.2.0
 	golang.org/x/crypto v0.0.0-20200510223506-06a226fb4e37
 	golang.org/x/net v0.0.0-20200520182314-0ba52f642ac2 // indirect
 	golang.org/x/sys v0.0.0-20200523222454-059865788121 // indirect
