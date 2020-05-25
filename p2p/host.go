@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"crypto/ecdsa"
 	"fmt"
 	"sync"
 
@@ -15,16 +16,19 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
+const ConsensusTopic = "/sperax/consensus/1.0.0"
+
 type Host struct {
-	h      libp2p_host.Host
+	host   libp2p_host.Host
 	pubsub *libp2p_pubsub.PubSub
-	priKey libp2p_crypto.PrivKey
-	lock   sync.Mutex
+	priKey *ecdsa.PrivateKey
+	topics map[string]*libp2p_pubsub.Topic // joined topic
+	sync.Mutex
 }
 
 // NewHost initialize a p2p node with given multiaddr
 // eg addr: "/ip4/0.0.0.0/tcp/9000"
-func NewHost(port string, priv libp2p_crypto.PrivKey) (*Host, error) {
+func NewHost(port string, priv *ecdsa.PrivateKey) (*Host, error) {
 	// address creation
 	listenAddr, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", port))
 	if err != nil {
@@ -33,9 +37,15 @@ func NewHost(port string, priv libp2p_crypto.PrivKey) (*Host, error) {
 	}
 	ctx := context.Background()
 
+	// conver to p2p private key
+	p2p_priv, err := libp2p_crypto.UnmarshalSecp256k1PrivateKey(priv.D.Bytes())
+	if err != nil {
+		panic(err)
+	}
+
 	// init peer
 	p2pHost, err := libp2p.New(ctx,
-		libp2p.ListenAddrs(listenAddr), libp2p.Identity(priv),
+		libp2p.ListenAddrs(listenAddr), libp2p.Identity(p2p_priv),
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot initialize libp2p host")
@@ -55,12 +65,29 @@ func NewHost(port string, priv libp2p_crypto.PrivKey) (*Host, error) {
 
 	// host object
 	h := &Host{
-		h:      p2pHost,
+		host:   p2pHost,
 		pubsub: pubsub,
 		priKey: priv,
+		topics: make(map[string]*libp2p_pubsub.Topic),
 	}
 	return h, nil
 }
 
-// Join to a given topic
-func (h *Host) Join(topic string) (*libp2p_pubsub.Topic, error) { return h.pubsub.Join(topic) }
+// Join or Get a given topic
+func (h *Host) Join(topic string) (*libp2p_pubsub.Topic, error) {
+	h.Lock()
+	defer h.Unlock()
+
+	t, ok := h.topics[topic]
+	if ok {
+		return t, nil
+	}
+
+	t, err := h.pubsub.Join(topic)
+	if err != nil {
+		return nil, err
+	}
+
+	h.topics[topic] = t
+	return t, nil
+}
