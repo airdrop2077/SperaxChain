@@ -8,6 +8,8 @@ import (
 	libp2p_pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
+const ConsensusTopic = "/sperax/consensus/1.0.0"
+
 type p2pAddress string
 
 func (p2pAddress) Network() string     { return "p2p" }
@@ -29,6 +31,8 @@ func NewPeer(h *Host) (*Peer, error) {
 	p.topic = topic
 	return p, nil
 }
+
+func (p *Peer) Topic() *libp2p_pubsub.Topic { return p.topic }
 
 // We adapt broadcasting scheme for consensus algorithm, so we need only ONE consensus peer for
 // message routing.

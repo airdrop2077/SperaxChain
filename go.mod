@@ -15,10 +15,12 @@ require (
 	github.com/libp2p/go-libp2p-swarm v0.2.5 // indirect
 	github.com/libp2p/go-libp2p-yamux v0.2.8 // indirect
 	github.com/libp2p/go-maddr-filter v0.1.0 // indirect
+	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/multiformats/go-multiaddr v0.2.2
 	github.com/multiformats/go-multibase v0.0.3 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.18.0
+	github.com/stretchr/testify v1.5.1
 	github.com/urfave/cli v1.22.1
 	github.com/urfave/cli/v2 v2.2.0
 	golang.org/x/crypto v0.0.0-20200510223506-06a226fb4e37

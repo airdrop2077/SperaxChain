@@ -16,8 +16,6 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
-const ConsensusTopic = "/sperax/consensus/1.0.0"
-
 type Host struct {
 	host   libp2p_host.Host
 	pubsub *libp2p_pubsub.PubSub
