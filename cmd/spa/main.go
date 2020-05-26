@@ -188,6 +188,8 @@ func main() {
 						panic(err)
 					}
 
+					log.Println("Address:", h.Address())
+
 					if id != 0 {
 						bootstrap, err := multiaddr.NewMultiaddr(c.String("bootstrap"))
 						if err != nil {

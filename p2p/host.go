@@ -34,7 +34,6 @@ type Host struct {
 }
 
 // NewHost initialize a p2p node with given multiaddr
-// eg addr: "/ip4/0.0.0.0/tcp/9000"
 func NewHost(port string, priv *ecdsa.PrivateKey) (*Host, error) {
 	// address creation
 	listenAddr, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", port))
@@ -57,9 +56,6 @@ func NewHost(port string, priv *ecdsa.PrivateKey) (*Host, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot initialize libp2p host")
 	}
-
-	hostAddr, _ := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s", host.ID().Pretty()))
-	log.Println(host.Addrs()[0].Encapsulate(hostAddr))
 
 	// init DHT module
 	dataStorePath := fmt.Sprintf(".dht-%s", host.ID().Pretty())
@@ -108,6 +104,12 @@ func NewHost(port string, priv *ecdsa.PrivateKey) (*Host, error) {
 
 	go h.peerRefresh(peerChan)
 	return h, nil
+}
+
+// Address returns host's multiaddr
+func (h *Host) Address() ma.Multiaddr {
+	hostAddr, _ := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s", h.host.ID().Pretty()))
+	return h.host.Addrs()[0].Encapsulate(hostAddr)
 }
 
 // GetOrJoin or Get a given topic
