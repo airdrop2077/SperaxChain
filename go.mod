@@ -8,6 +8,7 @@ require (
 	github.com/aristanetworks/goarista v0.0.0-20200520141224-0f14e646773f // indirect
 	github.com/elastic/gosigar v0.10.5 // indirect
 	github.com/ethereum/go-ethereum v1.9.14
+	github.com/ipfs/go-ds-badger v0.2.3
 	github.com/ipfs/go-log/v2 v2.0.8 // indirect
 	github.com/libp2p/go-libp2p v0.9.2
 	github.com/libp2p/go-libp2p-core v0.5.6

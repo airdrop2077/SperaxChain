@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 	"sync"
-	"time"
 
+	badger "github.com/ipfs/go-ds-badger"
 	"github.com/pkg/errors"
 
 	"context"
@@ -21,11 +21,14 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
+const Rendezvous = "/sperax/1.0.0"
+
+// Host defines a host to participant in p2p network
 type Host struct {
 	host   libp2p_host.Host
 	pubsub *libp2p_pubsub.PubSub
 	priKey *ecdsa.PrivateKey
-	topics map[string]*libp2p_pubsub.Topic // joined topic
+	topics map[string]*libp2p_pubsub.Topic
 	dht    *kaddht.IpfsDHT
 	sync.Mutex
 }
@@ -41,25 +44,30 @@ func NewHost(port string, priv *ecdsa.PrivateKey) (*Host, error) {
 	}
 	ctx := context.Background()
 
-	// conver to p2p private key
+	// convert secp256k1 ecdsa privatekey to p2p private key
 	p2p_priv, err := libp2p_crypto.UnmarshalSecp256k1PrivateKey(priv.D.Bytes())
 	if err != nil {
 		panic(err)
 	}
 
-	// init host
-	p2pHost, err := libp2p.New(ctx,
+	// init p2p host
+	host, err := libp2p.New(ctx,
 		libp2p.ListenAddrs(listenAddr), libp2p.Identity(p2p_priv),
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot initialize libp2p host")
 	}
 
-	hostAddr, _ := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s", p2pHost.ID().Pretty()))
-	log.Println(p2pHost.Addrs()[0].Encapsulate(hostAddr))
+	hostAddr, _ := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s", host.ID().Pretty()))
+	log.Println(host.Addrs()[0].Encapsulate(hostAddr))
 
-	// DHT
-	dht, err := kaddht.New(ctx, p2pHost)
+	// init DHT module
+	dataStorePath := fmt.Sprintf(".dht-%s", host.ID().Pretty())
+	dataStore, err := badger.NewDatastore(dataStorePath, nil)
+	if err != nil {
+		log.Println(err, "cannot initialize DHT cache at %s", dataStorePath)
+	}
+	dht, err := kaddht.New(ctx, host, kaddht.Datastore(dataStore), kaddht.Mode(kaddht.ModeServer))
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot create DHT")
 	}
@@ -68,31 +76,23 @@ func NewHost(port string, priv *ecdsa.PrivateKey) (*Host, error) {
 	if err != nil {
 		panic(err)
 	}
-	// Let's connect to the bootstrap nodes first. They will tell us about the
-	// other nodes in the network.
-	var wg sync.WaitGroup
-	for _, peerAddr := range kaddht.DefaultBootstrapPeers {
-		peerinfo, _ := peer.AddrInfoFromP2pAddr(peerAddr)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := p2pHost.Connect(ctx, *peerinfo); err != nil {
-				log.Println(err)
-			} else {
-				log.Println("Connection established with bootstrap node:", *peerinfo)
-			}
-		}()
-	}
-	wg.Wait()
 
-	// init pubsub
+	// init peer discovery module
+	routingDiscovery := discovery.NewRoutingDiscovery(dht)
+	discovery.Advertise(ctx, routingDiscovery, Rendezvous)
+	peerChan, err := routingDiscovery.FindPeers(ctx, Rendezvous)
+	if err != nil {
+		panic(err)
+	}
+
+	// init pubsub module
 	const MaxSize = 1048576
 	options := []libp2p_pubsub.Option{
 		libp2p_pubsub.WithPeerOutboundQueueSize(64),
 		libp2p_pubsub.WithMaxMessageSize(MaxSize),
 	}
 
-	pubsub, err := libp2p_pubsub.NewGossipSub(ctx, p2pHost, options...)
+	pubsub, err := libp2p_pubsub.NewGossipSub(ctx, host, options...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot initialize libp2p pubsub")
 	}
@@ -100,18 +100,18 @@ func NewHost(port string, priv *ecdsa.PrivateKey) (*Host, error) {
 	// host object
 	h := &Host{
 		dht:    dht,
-		host:   p2pHost,
+		host:   host,
 		pubsub: pubsub,
 		priKey: priv,
 		topics: make(map[string]*libp2p_pubsub.Topic),
 	}
 
-	go h.peerWatcher()
+	go h.peerRefresh(peerChan)
 	return h, nil
 }
 
-// Join or Get a given topic
-func (h *Host) Join(topic string) (*libp2p_pubsub.Topic, error) {
+// GetOrJoin or Get a given topic
+func (h *Host) GetOrJoin(topic string) (*libp2p_pubsub.Topic, error) {
 	h.Lock()
 	defer h.Unlock()
 
@@ -129,6 +129,7 @@ func (h *Host) Join(topic string) (*libp2p_pubsub.Topic, error) {
 	return t, nil
 }
 
+// Connect initiate an active connection to a given peer
 func (h *Host) Connect(addr ma.Multiaddr) error {
 	targetInfo, err := peer.AddrInfoFromP2pAddr(addr)
 	if err != nil {
@@ -139,35 +140,18 @@ func (h *Host) Connect(addr ma.Multiaddr) error {
 	return h.host.Connect(ctx, *targetInfo)
 }
 
-func (h *Host) peerWatcher() {
-	routingDiscovery := discovery.NewRoutingDiscovery(h.dht)
-
-	for {
+// peerRefresh monitors and connect to new peer
+func (h *Host) peerRefresh(peerChan <-chan peer.AddrInfo) {
+	for peer := range peerChan {
+		if peer.ID == h.host.ID() {
+			continue
+		}
 		ctx := context.Background()
-		discovery.Advertise(ctx, routingDiscovery, "sperax")
-		peerChan, err := routingDiscovery.FindPeers(ctx, "sperax")
+		err := h.host.Connect(ctx, peer)
 		if err != nil {
-			panic(err)
+			log.Println("Connection failed:", err)
+			continue
 		}
-
-		log.Println(h.host.Peerstore().Peers())
-
-		for peer := range peerChan {
-			log.Println("peer:", peer)
-			if peer.ID == h.host.ID() {
-				continue
-			}
-			log.Println("Found peer:", peer)
-
-			log.Println("Connecting to:", peer)
-			err := h.host.Connect(ctx, peer)
-			if err != nil {
-				log.Println("Connection failed:", err)
-				continue
-			}
-			log.Println("Connected to:", peer)
-		}
-
-		<-time.After(2 * time.Second)
+		log.Println("Connected to:", peer)
 	}
 }

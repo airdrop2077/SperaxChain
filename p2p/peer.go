@@ -23,7 +23,7 @@ type Peer struct {
 func NewPeer(h *Host) (*Peer, error) {
 	p := new(Peer)
 	p.h = h
-	topic, err := h.Join(ConsensusTopic)
+	topic, err := h.GetOrJoin(ConsensusTopic)
 	if err != nil {
 		return nil, err
 	}
