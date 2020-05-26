@@ -68,6 +68,22 @@ func NewHost(port string, priv *ecdsa.PrivateKey) (*Host, error) {
 	if err != nil {
 		panic(err)
 	}
+	// Let's connect to the bootstrap nodes first. They will tell us about the
+	// other nodes in the network.
+	var wg sync.WaitGroup
+	for _, peerAddr := range kaddht.DefaultBootstrapPeers {
+		peerinfo, _ := peer.AddrInfoFromP2pAddr(peerAddr)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := p2pHost.Connect(ctx, *peerinfo); err != nil {
+				log.Println(err)
+			} else {
+				log.Println("Connection established with bootstrap node:", *peerinfo)
+			}
+		}()
+	}
+	wg.Wait()
 
 	// init pubsub
 	const MaxSize = 1048576

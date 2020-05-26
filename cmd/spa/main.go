@@ -50,7 +50,6 @@ import (
 	"github.com/Sperax/bdls"
 	libp2p_pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/minio/blake2b-simd"
-	"github.com/multiformats/go-multiaddr"
 	"github.com/urfave/cli/v2"
 )
 
@@ -188,17 +187,19 @@ func main() {
 						panic(err)
 					}
 
-					if id != 0 {
-						bootstrap, err := multiaddr.NewMultiaddr(c.String("bootstrap"))
-						if err != nil {
-							panic(err)
-						}
+					/*
+						if id != 0 {
+							bootstrap, err := multiaddr.NewMultiaddr(c.String("bootstrap"))
+							if err != nil {
+								panic(err)
+							}
 
-						err = h.Connect(bootstrap)
-						if err != nil {
-							panic(err)
+							err = h.Connect(bootstrap)
+							if err != nil {
+								panic(err)
+							}
 						}
-					}
+					*/
 
 					// consensus peer adapter
 					peer, err := p2p.NewPeer(h)
