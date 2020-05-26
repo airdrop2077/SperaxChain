@@ -3,6 +3,7 @@ package p2p
 import (
 	"crypto/ecdsa"
 	"fmt"
+	"log"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -12,6 +13,7 @@ import (
 	"github.com/libp2p/go-libp2p"
 	libp2p_crypto "github.com/libp2p/go-libp2p-core/crypto"
 	libp2p_host "github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/peer"
 	libp2p_pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ma "github.com/multiformats/go-multiaddr"
 )
@@ -48,6 +50,9 @@ func NewHost(port string, priv *ecdsa.PrivateKey) (*Host, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot initialize libp2p host")
 	}
+	hostAddr, _ := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s", p2pHost.ID().Pretty()))
+
+	log.Println(p2pHost.Addrs()[0].Encapsulate(hostAddr))
 
 	// init pubsub
 	const MaxSize = 1048576
@@ -88,4 +93,14 @@ func (h *Host) Join(topic string) (*libp2p_pubsub.Topic, error) {
 
 	h.topics[topic] = t
 	return t, nil
+}
+
+func (h *Host) Connect(addr ma.Multiaddr) error {
+	targetInfo, err := peer.AddrInfoFromP2pAddr(addr)
+	if err != nil {
+		panic(err)
+	}
+	log.Println(targetInfo)
+	ctx := context.Background()
+	return h.host.Connect(ctx, *targetInfo)
 }
