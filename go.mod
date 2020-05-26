@@ -11,7 +11,10 @@ require (
 	github.com/ipfs/go-log/v2 v2.0.8 // indirect
 	github.com/libp2p/go-libp2p v0.9.2
 	github.com/libp2p/go-libp2p-core v0.5.6
+	github.com/libp2p/go-libp2p-discovery v0.4.0
+	github.com/libp2p/go-libp2p-kad-dht v0.8.0
 	github.com/libp2p/go-libp2p-pubsub v0.3.0
+	github.com/libp2p/go-libp2p-routing v0.1.0
 	github.com/libp2p/go-libp2p-swarm v0.2.5 // indirect
 	github.com/libp2p/go-libp2p-yamux v0.2.8 // indirect
 	github.com/libp2p/go-maddr-filter v0.1.0 // indirect
