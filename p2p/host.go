@@ -15,8 +15,8 @@ import (
 	libp2p_crypto "github.com/libp2p/go-libp2p-core/crypto"
 	libp2p_host "github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
-	discovery "github.com/libp2p/go-libp2p-discovery"
-	kaddht "github.com/libp2p/go-libp2p-kad-dht"
+	libp2p_disc "github.com/libp2p/go-libp2p-discovery"
+	libp2p_dht "github.com/libp2p/go-libp2p-kad-dht"
 	libp2p_pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ma "github.com/multiformats/go-multiaddr"
 )
@@ -29,7 +29,7 @@ type Host struct {
 	pubsub *libp2p_pubsub.PubSub
 	priKey *ecdsa.PrivateKey
 	topics map[string]*libp2p_pubsub.Topic
-	dht    *kaddht.IpfsDHT
+	dht    *libp2p_dht.IpfsDHT
 	sync.Mutex
 }
 
@@ -63,7 +63,7 @@ func NewHost(port string, priv *ecdsa.PrivateKey) (*Host, error) {
 	if err != nil {
 		log.Println(err, "cannot initialize DHT cache at %s", dataStorePath)
 	}
-	dht, err := kaddht.New(ctx, host, kaddht.Datastore(dataStore), kaddht.Mode(kaddht.ModeServer))
+	dht, err := libp2p_dht.New(ctx, host, libp2p_dht.Datastore(dataStore), libp2p_dht.Mode(libp2p_dht.ModeServer))
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot create DHT")
 	}
@@ -74,8 +74,8 @@ func NewHost(port string, priv *ecdsa.PrivateKey) (*Host, error) {
 	}
 
 	// init peer discovery module
-	routingDiscovery := discovery.NewRoutingDiscovery(dht)
-	discovery.Advertise(ctx, routingDiscovery, Rendezvous)
+	routingDiscovery := libp2p_disc.NewRoutingDiscovery(dht)
+	libp2p_disc.Advertise(ctx, routingDiscovery, Rendezvous)
 	peerChan, err := routingDiscovery.FindPeers(ctx, Rendezvous)
 	if err != nil {
 		panic(err)
