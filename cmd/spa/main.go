@@ -203,7 +203,7 @@ func main() {
 					}
 
 					// consensus peer adapter
-					peer, err := p2p.NewPeer(h)
+					peer, err := p2p.NewConsensusPeerAdapter(h)
 					if err != nil {
 						panic(err)
 					}
