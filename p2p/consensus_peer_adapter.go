@@ -8,18 +8,22 @@ import (
 	libp2p_pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
+// ConsensusTopic defines consensus messaging topic
 const ConsensusTopic = "/sperax/consensus/1.0.0"
 
-type p2pAddress string
+// consensus address, to uniquely identifies a node
+type consensusAddress string
 
-func (p2pAddress) Network() string     { return "p2p" }
-func (addr p2pAddress) String() string { return string(addr) }
+func (consensusAddress) Network() string     { return "p2p" }
+func (addr consensusAddress) String() string { return string(addr) }
 
+// ConsensusPeerAdapter defines a peer to work with consensus algorithm and libp2p
 type ConsensusPeerAdapter struct {
 	h     *Host
 	topic *libp2p_pubsub.Topic
 }
 
+// NewConsensusPeerAdapter creates a peer adapter for consensus algorithm, and works on libp2p.
 func NewConsensusPeerAdapter(h *Host) (*ConsensusPeerAdapter, error) {
 	p := new(ConsensusPeerAdapter)
 	p.h = h
@@ -32,18 +36,23 @@ func NewConsensusPeerAdapter(h *Host) (*ConsensusPeerAdapter, error) {
 	return p, nil
 }
 
+// Topic returns the topic for consensus messaging
 func (p *ConsensusPeerAdapter) Topic() *libp2p_pubsub.Topic { return p.topic }
 
-// We adapt broadcasting scheme for consensus algorithm, so we need only ONE consensus peer for
+// We adapt BROADCASTING scheme for consensus algorithm, so we need only ONE consensus peer for
 // message routing.
-// below are the interfaces adapter for consensus, will treat this p2p host as a peer for
+//
+// Below are the interfaces adapter for consensus, will treat this p2p host as a peer for
 // broadcasting entry.
+//
+// To work with UNICASTING scheme for consensus, this can be adjusted to peer's public key,
+// and should be cautious with directly unreachable peers.
 func (p *ConsensusPeerAdapter) GetPublicKey() *ecdsa.PublicKey { return &p.h.priKey.PublicKey }
 
-// RemoteAddr returns remote addr
-func (p *ConsensusPeerAdapter) RemoteAddr() net.Addr { return p2pAddress(p.h.host.ID()) }
+// RemoteAddr returns remote addr for consensus algorithm to uniquely identifies a peer.
+func (p *ConsensusPeerAdapter) RemoteAddr() net.Addr { return consensusAddress(p.h.host.ID()) }
 
-// Send a msg to this peer
+// Send is callback for consensus message exchanging.
 func (p *ConsensusPeerAdapter) Send(msg []byte) error {
 	go func() {
 		ctx := context.Background()
