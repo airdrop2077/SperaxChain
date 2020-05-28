@@ -176,12 +176,12 @@ func main() {
 						config.Participants = append(config.Participants, &priv.PublicKey)
 					}
 					// init consensus
-					consensus, err := bdls.NewConsensus(config)
+					bdlsConsensus, err := bdls.NewConsensus(config)
 					if err != nil {
 						panic(err)
 					}
-					consensus.SetLatency(200 * time.Millisecond)
-					var consensusLock sync.Mutex
+					bdlsConsensus.SetLatency(200 * time.Millisecond)
+					var bdlsConsensusLock sync.Mutex
 
 					h, err := p2p.NewHost(fmt.Sprint(3000+id), config.PrivateKey)
 					if err != nil {
@@ -203,11 +203,11 @@ func main() {
 					}
 
 					// consensus peer adapter
-					peer, err := p2p.NewConsensusPeerAdapter(h)
+					peer, err := p2p.NewBDLSPeerAdapter(h)
 					if err != nil {
 						panic(err)
 					}
-					consensus.Join(peer)
+					bdlsConsensus.Join(peer)
 
 					// receiver
 					sub, err := peer.Topic().Subscribe()
@@ -220,18 +220,18 @@ func main() {
 								log.Println(err)
 								continue
 							}
-							consensusLock.Lock()
-							consensus.ReceiveMessage(msg.Data, time.Now())
-							consensusLock.Unlock()
+							bdlsConsensusLock.Lock()
+							bdlsConsensus.ReceiveMessage(msg.Data, time.Now())
+							bdlsConsensusLock.Unlock()
 						}
 					}(sub)
 
 					// updater
 					go func() {
 						for {
-							consensusLock.Lock()
-							consensus.Update(time.Now())
-							consensusLock.Unlock()
+							bdlsConsensusLock.Lock()
+							bdlsConsensus.Update(time.Now())
+							bdlsConsensusLock.Unlock()
 							<-time.After(20 * time.Millisecond)
 						}
 					}()
@@ -243,12 +243,12 @@ func main() {
 						data := make([]byte, 1024)
 						io.ReadFull(rand.Reader, data)
 
-						consensusLock.Lock()
-						consensus.Propose(data)
-						consensusLock.Unlock()
+						bdlsConsensusLock.Lock()
+						bdlsConsensus.Propose(data)
+						bdlsConsensusLock.Unlock()
 
 						for {
-							newHeight, newRound, newState := consensus.CurrentState()
+							newHeight, newRound, newState := bdlsConsensus.CurrentState()
 							if newHeight > currentHeight {
 								h := blake2b.Sum256(newState)
 								log.Printf("<decide> at height:%v round:%v hash:%v", newHeight, newRound, hex.EncodeToString(h[:]))
