@@ -6,6 +6,7 @@ require (
 	github.com/Sperax/bdls v1.1.0
 	github.com/allegro/bigcache v1.2.1 // indirect
 	github.com/aristanetworks/goarista v0.0.0-20200520141224-0f14e646773f // indirect
+	github.com/davecgh/go-spew v1.1.1
 	github.com/elastic/gosigar v0.10.5 // indirect
 	github.com/ethereum/go-ethereum v1.9.14
 	github.com/ipfs/go-ds-badger v0.2.3
@@ -15,7 +16,6 @@ require (
 	github.com/libp2p/go-libp2p-discovery v0.4.0
 	github.com/libp2p/go-libp2p-kad-dht v0.8.0
 	github.com/libp2p/go-libp2p-pubsub v0.3.0
-	github.com/libp2p/go-libp2p-routing v0.1.0
 	github.com/libp2p/go-libp2p-swarm v0.2.5 // indirect
 	github.com/libp2p/go-libp2p-yamux v0.2.8 // indirect
 	github.com/libp2p/go-maddr-filter v0.1.0 // indirect
@@ -24,8 +24,6 @@ require (
 	github.com/multiformats/go-multibase v0.0.3 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.18.0
-	github.com/stretchr/testify v1.5.1
-	github.com/urfave/cli v1.22.1
 	github.com/urfave/cli/v2 v2.2.0
 	golang.org/x/crypto v0.0.0-20200510223506-06a226fb4e37
 	golang.org/x/net v0.0.0-20200520182314-0ba52f642ac2 // indirect
