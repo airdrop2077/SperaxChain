@@ -20,12 +20,12 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/Sperax/SperaxChain/consensus"
+	"github.com/Sperax/SperaxChain/consensus/misc"
+	"github.com/Sperax/SperaxChain/core/state"
+	"github.com/Sperax/SperaxChain/core/types"
+	"github.com/Sperax/SperaxChain/core/vm"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/consensus"
-	"github.com/ethereum/go-ethereum/consensus/misc"
-	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/params"
 )
@@ -256,7 +256,6 @@ func makeHeader(chain consensus.ChainReader, parent *types.Block, state *state.S
 			Number:     parent.Number(),
 			Time:       time - 10,
 			Difficulty: parent.Difficulty(),
-			UncleHash:  parent.UncleHash(),
 		}),
 		GasLimit: CalcGasLimit(parent, parent.GasLimit(), parent.GasLimit()),
 		Number:   new(big.Int).Add(parent.Number(), common.Big1),
