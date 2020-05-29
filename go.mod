@@ -9,6 +9,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/elastic/gosigar v0.10.5 // indirect
 	github.com/ethereum/go-ethereum v1.9.14
+	github.com/hashicorp/golang-lru v0.5.4
 	github.com/ipfs/go-ds-badger v0.2.3
 	github.com/ipfs/go-log/v2 v2.0.8 // indirect
 	github.com/libp2p/go-libp2p v0.9.2
