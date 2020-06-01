@@ -32,24 +32,19 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"crypto/ecdsa"
 	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"math/big"
 	"os"
-	"sync"
 	"time"
 
+	"github.com/Sperax/SperaxChain/node"
 	"github.com/Sperax/SperaxChain/p2p"
 	"github.com/Sperax/bdls"
-	libp2p_pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/minio/blake2b-simd"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/urfave/cli/v2"
 )
@@ -181,8 +176,8 @@ func main() {
 						panic(err)
 					}
 					bdlsConsensus.SetLatency(200 * time.Millisecond)
-					var bdlsConsensusLock sync.Mutex
 
+					// init p2p
 					h, err := p2p.NewHost(fmt.Sprint(3000+id), config.PrivateKey)
 					if err != nil {
 						panic(err)
@@ -202,65 +197,9 @@ func main() {
 						}
 					}
 
-					// consensus peer adapter
-					peer, err := p2p.NewBDLSPeerAdapter(h)
-					if err != nil {
-						panic(err)
-					}
-					bdlsConsensus.Join(peer)
-
-					// receiver
-					sub, err := peer.Topic().Subscribe()
-					go func(sub *libp2p_pubsub.Subscription) {
-						ctx, cancel := context.WithCancel(context.Background())
-						defer cancel()
-						for {
-							msg, err := sub.Next(ctx)
-							if err != nil {
-								log.Println(err)
-								continue
-							}
-							bdlsConsensusLock.Lock()
-							bdlsConsensus.ReceiveMessage(msg.Data, time.Now())
-							bdlsConsensusLock.Unlock()
-						}
-					}(sub)
-
-					// updater
-					go func() {
-						for {
-							bdlsConsensusLock.Lock()
-							bdlsConsensus.Update(time.Now())
-							bdlsConsensusLock.Unlock()
-							<-time.After(20 * time.Millisecond)
-						}
-					}()
-
-					// proposer
-					var currentHeight uint64
-				PROPOSE:
-					for {
-						data := make([]byte, 1024)
-						io.ReadFull(rand.Reader, data)
-
-						bdlsConsensusLock.Lock()
-						bdlsConsensus.Propose(data)
-						bdlsConsensusLock.Unlock()
-
-						for {
-							newHeight, newRound, newState := bdlsConsensus.CurrentState()
-							if newHeight > currentHeight {
-								h := blake2b.Sum256(newState)
-								log.Printf("<decide> at height:%v round:%v hash:%v", newHeight, newRound, hex.EncodeToString(h[:]))
-								currentHeight = newHeight
-								continue PROPOSE
-							}
-							// wait
-							<-time.After(20 * time.Millisecond)
-						}
-					}
-
-					return nil
+					// now we can spin up the node
+					node.New(h, bdlsConsensus)
+					select {}
 				},
 			},
 		},
