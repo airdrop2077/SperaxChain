@@ -2,20 +2,33 @@ package node
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 
+	"github.com/Sperax/SperaxChain/core"
+	"github.com/Sperax/SperaxChain/core/rawdb"
+	"github.com/Sperax/SperaxChain/core/vm"
 	"github.com/Sperax/SperaxChain/p2p"
 	"github.com/Sperax/bdls"
+	"github.com/ethereum/go-ethereum/params"
 
 	"github.com/Sperax/bdls/timer"
 )
 
 // Node represents a Sperax node on it's network
 type Node struct {
-	host          *p2p.Host       // the p2p host
+	host *p2p.Host // the p2p host
+
+	// consensus related
 	consensus     *bdls.Consensus // the core consensus algorithm
 	consensusLock sync.Mutex      // consensus lock
+
+	// transactions pool
+	txPool *core.TxPool
+
+	// blockchain related
+	blockchain *core.BlockChain
 
 	die     chan struct{} // closing signal
 	dieOnce sync.Once
@@ -28,7 +41,7 @@ type Node struct {
 func New(
 	host *p2p.Host,
 	consensus *bdls.Consensus,
-) *Node {
+) (*Node, error) {
 
 	node := new(Node)
 	node.host = host
@@ -38,11 +51,48 @@ func New(
 	node.ctx = ctx
 	node.cancel = cancel
 
+	// init chaindb
+	config := Config{}
+	chainDb, err := rawdb.NewLevelDBDatabaseWithFreezer(".", config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "sperax/db/chaindata/")
+	if err != nil {
+		return nil, err
+	}
+	chainConfig, genesisHash, genesisErr := core.SetupGenesisBlock(chainDb, config.Genesis)
+	if _, ok := genesisErr.(*params.ConfigCompatError); genesisErr != nil && !ok {
+		return nil, genesisErr
+	}
+	log.Println("Initialised chain configuration", "config", chainConfig, genesisHash)
+
+	// cache config
+	cacheConfig := &core.CacheConfig{
+		TrieCleanLimit:      config.TrieCleanCache,
+		TrieCleanNoPrefetch: config.NoPrefetch,
+		TrieDirtyLimit:      config.TrieDirtyCache,
+		TrieDirtyDisabled:   config.NoPruning,
+		TrieTimeLimit:       config.TrieTimeout,
+		SnapshotLimit:       config.SnapshotCache,
+	}
+
+	// vm config
+	vmConfig := vm.Config{
+		EnablePreimageRecording: config.EnablePreimageRecording,
+		EWASMInterpreter:        config.EWASMInterpreter,
+		EVMInterpreter:          config.EVMInterpreter,
+	}
+	// init blockchain
+	node.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, nil, vmConfig, nil, &config.TxLookupLimit)
+	if err != nil {
+		return nil, err
+	}
+	// init txpool
+	txPoolConfig := core.DefaultTxPoolConfig
+	node.txPool = core.NewTxPool(txPoolConfig, chainConfig, node.blockchain)
+
 	// trigger the consensus updater
 	node.consensusUpdate()
 	// start consensus messaging loop
 	go node.consensusMessenger(node.ctx)
-	return node
+	return node, nil
 }
 
 // Close this node
