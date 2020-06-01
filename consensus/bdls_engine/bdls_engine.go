@@ -25,6 +25,7 @@ func NewBDLSEngine() *BDLSEngine {
 	return engine
 }
 
+// SetConsensus sets a new consensus object to engine for validation
 func (e *BDLSEngine) SetConsensus(consensus *bdls.Consensus) {
 	e.consensus = consensus
 }

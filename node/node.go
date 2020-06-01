@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Sperax/SperaxChain/consensus"
+	"github.com/Sperax/SperaxChain/consensus/bdls_engine"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/rawdb"
 	"github.com/Sperax/SperaxChain/core/vm"
@@ -21,14 +23,17 @@ type Node struct {
 	host *p2p.Host // the p2p host
 
 	// consensus related
-	consensus     *bdls.Consensus // the core consensus algorithm
-	consensusLock sync.Mutex      // consensus lock
+	consensus       *bdls.Consensus // the core consensus algorithm
+	consensusLock   sync.Mutex      // consensus lock
+	consensusEngine consensus.Engine
 
 	// transactions pool
 	txPool *core.TxPool
 
 	// blockchain related
 	blockchain *core.BlockChain
+
+	// TODO: worker
 
 	die     chan struct{} // closing signal
 	dieOnce sync.Once
@@ -53,8 +58,10 @@ func New(
 
 	// init chaindb
 	config := Config{}
-	chainDb, err := rawdb.NewLevelDBDatabaseWithFreezer(".", config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "sperax/db/chaindata/")
+	config.DatabaseFreezer = "freezer"
+	chainDb, err := rawdb.NewLevelDBDatabaseWithFreezer("data", config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "sperax/db/chaindata/")
 	if err != nil {
+		log.Println("new leveldb:", chainDb, err)
 		return nil, err
 	}
 	chainConfig, genesisHash, genesisErr := core.SetupGenesisBlock(chainDb, config.Genesis)
@@ -79,9 +86,15 @@ func New(
 		EWASMInterpreter:        config.EWASMInterpreter,
 		EVMInterpreter:          config.EVMInterpreter,
 	}
+
+	// init consensus engine
+	engine := bdls_engine.NewBDLSEngine()
+	engine.SetConsensus(consensus)
+
 	// init blockchain
-	node.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, nil, vmConfig, nil, &config.TxLookupLimit)
+	node.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, engine, vmConfig, nil, &config.TxLookupLimit)
 	if err != nil {
+		log.Println("new blockchain:", err)
 		return nil, err
 	}
 	// init txpool

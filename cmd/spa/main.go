@@ -198,7 +198,14 @@ func main() {
 					}
 
 					// now we can spin up the node
-					node.New(h, bdlsConsensus)
+					_, err = node.New(h, bdlsConsensus)
+					if err != nil {
+						log.Println(err)
+					}
+
+					// TODO:
+					// tx loop
+
 					select {}
 				},
 			},
