@@ -198,7 +198,9 @@ func main() {
 					}
 
 					// now we can spin up the node
-					_, err = node.New(h, bdlsConsensus)
+					datadir := fmt.Sprintf("data/node%v", id)
+					freezerdir := fmt.Sprintf("freezer/node%v", id)
+					_, err = node.New(h, bdlsConsensus, datadir, freezerdir)
 					if err != nil {
 						log.Println(err)
 					}

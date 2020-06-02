@@ -51,6 +51,8 @@ type Node struct {
 func New(
 	host *p2p.Host,
 	consensus *bdls.Consensus,
+	datadir string,
+	freezerdir string,
 ) (*Node, error) {
 
 	node := new(Node)
@@ -63,8 +65,7 @@ func New(
 
 	// init chaindb
 	config := Config{}
-	config.DatabaseFreezer = "freezer"
-	chainDb, err := rawdb.NewLevelDBDatabaseWithFreezer("data", config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "sperax/db/chaindata/")
+	chainDb, err := rawdb.NewLevelDBDatabaseWithFreezer(datadir, config.DatabaseCache, config.DatabaseHandles, freezerdir, "sperax/db/chaindata/")
 	if err != nil {
 		log.Println("new leveldb:", chainDb, err)
 		return nil, err
@@ -163,7 +164,6 @@ func (node *Node) consensusUpdate() {
 
 // consensusClock is the main block generation clock for blockchain
 func (node *Node) consensusClock() {
-	log.Println("consensus clock")
 	node.consensusLock.Lock()
 	node.proposeNewBlock()
 	currentHeight, _, _ := node.consensus.CurrentState()
@@ -180,7 +180,9 @@ func (node *Node) consensusClock() {
 			currentHeight = newHeight
 
 			// CLOCK
+			node.consensusLock.Lock()
 			node.proposeNewBlock()
+			node.consensusLock.Unlock()
 		}
 		// wait
 		<-time.After(20 * time.Millisecond)
@@ -221,4 +223,5 @@ func (node *Node) proposeNewBlock() {
 		log.Println(err)
 	}
 	node.consensus.Propose(encodedBlockHeader)
+	log.Println("proposed")
 }
