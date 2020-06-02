@@ -140,7 +140,6 @@ func (e *BDLSEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *ty
 // Note, the method returns immediately and will send the result async. More
 // than one result may also be returned depending on the consensus algorithm.
 func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
-	// TODO: consensus at new height
 	return nil
 }
 
