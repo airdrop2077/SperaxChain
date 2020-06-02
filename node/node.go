@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"encoding/hex"
 	"log"
 	"sync"
 	"time"
@@ -10,10 +11,14 @@ import (
 	"github.com/Sperax/SperaxChain/consensus/bdls_engine"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/rawdb"
+	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/core/vm"
 	"github.com/Sperax/SperaxChain/p2p"
 	"github.com/Sperax/bdls"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/minio/blake2b-simd"
 
 	"github.com/Sperax/bdls/timer"
 )
@@ -105,6 +110,8 @@ func New(
 	node.consensusUpdate()
 	// start consensus messaging loop
 	go node.consensusMessenger(node.ctx)
+	//  the main clock for generating blocks
+	go node.consensusClock()
 	return node, nil
 }
 
@@ -154,28 +161,64 @@ func (node *Node) consensusUpdate() {
 	timer.SystemTimedSched.Put(node.consensusUpdate, time.Now().Add(20*time.Millisecond))
 }
 
-/*
-// proposer
-					var currentHeight uint64
-				PROPOSE:
-					for {
-						data := make([]byte, 1024)
-						io.ReadFull(rand.Reader, data)
+// consensusClock is the main block generation clock for blockchain
+func (node *Node) consensusClock() {
+	log.Println("consensus clock")
+	node.consensusLock.Lock()
+	node.proposeNewBlock()
+	currentHeight, _, _ := node.consensus.CurrentState()
+	node.consensusLock.Unlock()
 
-						bdlsConsensusLock.Lock()
-						bdlsConsensus.Propose(data)
-						bdlsConsensusLock.Unlock()
+	for {
+		node.consensusLock.Lock()
+		newHeight, newRound, newState := node.consensus.CurrentState()
+		node.consensusLock.Unlock()
 
-						for {
-							newHeight, newRound, newState := bdlsConsensus.CurrentState()
-							if newHeight > currentHeight {
-								h := blake2b.Sum256(newState)
-								log.Printf("<decide> at height:%v round:%v hash:%v", newHeight, newRound, hex.EncodeToString(h[:]))
-								currentHeight = newHeight
-								continue PROPOSE
-							}
-							// wait
-							<-time.After(20 * time.Millisecond)
-						}
-					}
-*/
+		if newHeight > currentHeight {
+			h := blake2b.Sum256(newState)
+			log.Printf("<decide> at height:%v round:%v hash:%v", newHeight, newRound, hex.EncodeToString(h[:]))
+			currentHeight = newHeight
+
+			// CLOCK
+			node.proposeNewBlock()
+		}
+		// wait
+		<-time.After(20 * time.Millisecond)
+	}
+}
+
+// proposeNewBlock collects transactions from txpool and seal a new block to propose to
+// consensus algorithm
+func (node *Node) proposeNewBlock() {
+	pending, err := node.txPool.Pending()
+	if err != nil {
+		log.Println("Failed to fetch pending transactions")
+		return
+	}
+	parent := node.blockchain.CurrentBlock()
+	timestamp := time.Now().Unix()
+	num := parent.Number()
+	if parent.Time() >= uint64(timestamp) {
+		timestamp = int64(parent.Time() + 1)
+	}
+	header := &types.Header{
+		ParentHash: parent.Hash(),
+		Number:     num.Add(num, common.Big1),
+		Time:       uint64(timestamp),
+	}
+
+	// simply include all transactions
+	var txs []*types.Transaction
+	for _, list := range pending {
+		for _, tx := range list {
+			txs = append(txs, tx)
+		}
+	}
+
+	newblock := types.NewBlock(header, txs, nil)
+	encodedBlockHeader, err := rlp.EncodeToBytes(newblock.Header())
+	if err != nil {
+		log.Println(err)
+	}
+	node.consensus.Propose(encodedBlockHeader)
+}

@@ -85,6 +85,7 @@ func (e *BDLSEngine) VerifyUncles(chain consensus.ChainReader, block *types.Bloc
 // the consensus rules of the given engine.
 func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Header) error {
 	// step 1. Get the SealHash(without Decision field) of this header
+
 	sealHash := e.SealHash(header).Bytes()
 
 	// step 2. validate decide message integrity
