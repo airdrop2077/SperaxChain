@@ -8,9 +8,9 @@ import (
 
 type Config struct {
 	Genesis         *core.Genesis `toml:",omitempty"`
-	DatabaseHandles int           `toml:"-"`
+	DatabaseDir     string
+	DatabaseHandles int `toml:"-"`
 	DatabaseCache   int
-	DatabaseFreezer string
 
 	// cache
 	TrieCleanCache int

@@ -23,6 +23,10 @@ import (
 	"github.com/Sperax/bdls/timer"
 )
 
+const freezerDir = "/freezer"
+const chainDBDir = "/chaindb"
+const namespace = "sperax/db/chaindata/"
+
 // Node represents a Sperax node on it's network
 type Node struct {
 	host *p2p.Host // the p2p host
@@ -48,13 +52,7 @@ type Node struct {
 }
 
 // New creates a new node.
-func New(
-	host *p2p.Host,
-	consensus *bdls.Consensus,
-	datadir string,
-	freezerdir string,
-) (*Node, error) {
-
+func New(host *p2p.Host, consensus *bdls.Consensus, config *Config) (*Node, error) {
 	node := new(Node)
 	node.host = host
 	node.consensus = consensus
@@ -64,8 +62,7 @@ func New(
 	node.cancel = cancel
 
 	// init chaindb
-	config := Config{}
-	chainDb, err := rawdb.NewLevelDBDatabaseWithFreezer(datadir, config.DatabaseCache, config.DatabaseHandles, freezerdir, "sperax/db/chaindata/")
+	chainDb, err := rawdb.NewLevelDBDatabaseWithFreezer(config.DatabaseDir+chainDBDir, config.DatabaseCache, config.DatabaseHandles, config.DatabaseDir+freezerDir, namespace)
 	if err != nil {
 		log.Println("new leveldb:", chainDb, err)
 		return nil, err
@@ -184,8 +181,8 @@ func (node *Node) consensusClock() {
 			node.proposeNewBlock()
 			node.consensusLock.Unlock()
 		}
-		// wait
-		<-time.After(20 * time.Millisecond)
+		// check periodically for new height
+		<-time.After(1 * time.Second)
 	}
 }
 
@@ -224,4 +221,15 @@ func (node *Node) proposeNewBlock() {
 	}
 	node.consensus.Propose(encodedBlockHeader)
 	log.Println("proposed")
+}
+
+// Add a remote transactions
+func (node *Node) AddRemoteTransaction(tx *types.Transaction) error {
+	err := node.txPool.AddRemote(tx)
+	if err != nil {
+		return err
+	}
+	pendingCount, queueCount := node.txPool.Stats()
+	log.Println("addtx:", pendingCount, queueCount)
+	return nil
 }
