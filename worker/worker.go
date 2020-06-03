@@ -1,7 +1,6 @@
 package worker
 
 import (
-	"errors"
 	"log"
 
 	"github.com/Sperax/SperaxChain/consensus"
@@ -11,6 +10,7 @@ import (
 	"github.com/Sperax/SperaxChain/core/vm"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/pkg/errors"
 )
 
 // environment is the worker's current environment and holds all of the current state information.
@@ -150,4 +150,16 @@ func (w *Worker) CommitTransactions(pendingNormal map[common.Address]types.Trans
 	log.Println("blockGasLimit", w.current.header.GasLimit)
 	log.Println("blockGasUsed", w.current.header.GasUsed)
 	return nil
+}
+
+// FinalizeNewBlock generate a new block for the next consensus round.
+func (w *Worker) FinalizeNewBlock() (*types.Block, error) {
+	state := w.current.state.Copy()
+	copyHeader := types.CopyHeader(w.current.header)
+	block, err := w.engine.FinalizeAndAssemble(w.chain, copyHeader, state, w.current.txs, nil, w.current.receipts)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot finalize block")
+	}
+
+	return block, nil
 }
