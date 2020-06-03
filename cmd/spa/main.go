@@ -42,6 +42,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/node"
 	"github.com/Sperax/SperaxChain/p2p"
 	"github.com/Sperax/bdls"
@@ -199,6 +200,7 @@ func main() {
 
 					// now we can spin up the node
 					nconfig := &node.Config{}
+					nconfig.Genesis = core.DefaultRopstenGenesisBlock()
 					nconfig.DatabaseDir = fmt.Sprintf("data/node%v", id)
 					_, err = node.New(h, bdlsConsensus, nconfig)
 					if err != nil {

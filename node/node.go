@@ -50,8 +50,7 @@ type Node struct {
 	// blockchain related
 	blockchain *core.BlockChain
 
-	// TODO: worker
-
+	// closing
 	die     chan struct{} // closing signal
 	dieOnce sync.Once
 
@@ -101,6 +100,7 @@ func New(host *p2p.Host, consensus *bdls.Consensus, config *Config) (*Node, erro
 	// init consensus engine
 	engine := bdls_engine.NewBDLSEngine()
 	engine.SetConsensus(consensus)
+	node.consensusEngine = engine
 
 	// init blockchain
 	node.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, engine, vmConfig, nil, &config.TxLookupLimit)
@@ -139,6 +139,18 @@ func (node *Node) consensusMessenger(ctx context.Context) {
 	}
 	node.consensus.Join(peer)
 
+	newBlock, err := node.proposeNewBlock()
+	if err != nil {
+		log.Println(err)
+		panic(err)
+	}
+
+	log.Println("newBlock:", newBlock)
+	sealHash := node.consensusEngine.SealHash(newBlock.Header()).Bytes()
+	node.consensusLock.Lock()
+	node.consensus.Propose(sealHash)
+	node.consensusLock.Unlock()
+
 	// subscribe & handle messages
 	sub, err := peer.Topic().Subscribe()
 	for {
@@ -159,7 +171,8 @@ func (node *Node) consensusMessenger(ctx context.Context) {
 		newHeight, newRound, newState := node.consensus.CurrentState()
 		node.consensusLock.Unlock()
 
-		// should propose new block as participants
+		// should propose new block as participants if consensus
+		// has confirmed a new height
 		if newHeight > currentHeight {
 			h := blake2b.Sum256(newState)
 			log.Printf("<decide> at height:%v round:%v hash:%v", newHeight, newRound, hex.EncodeToString(h[:]))
