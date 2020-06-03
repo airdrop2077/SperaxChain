@@ -6,6 +6,7 @@ require (
 	github.com/Sperax/bdls v1.1.2
 	github.com/VictoriaMetrics/fastcache v1.5.7
 	github.com/ethereum/go-ethereum v1.9.14
+	github.com/gogo/protobuf v1.3.1
 	github.com/golang/snappy v0.0.1
 	github.com/harmony-one/harmony v1.9.0
 	github.com/hashicorp/golang-lru v0.5.4

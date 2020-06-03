@@ -66,9 +66,6 @@ type Node struct {
 	// closing signal
 	die     chan struct{} // closing signal
 	dieOnce sync.Once
-
-	ctx    context.Context    // context based goroutines
-	cancel context.CancelFunc // cancel function
 }
 
 // New creates a new node.
@@ -76,9 +73,6 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 	node := new(Node)
 	node.host = host
 	node.die = make(chan struct{})
-	ctx, cancel := context.WithCancel(context.Background())
-	node.ctx = ctx
-	node.cancel = cancel
 	node.consensusConfig = consensusConfig
 	topic, err := host.GetOrJoin(p2pGenericTopic)
 	if err != nil {
@@ -151,7 +145,7 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 	// trigger the consensus updater
 	node.consensusUpdater()
 	// start consensus messaging loop
-	go node.consensusMessenger(node.ctx)
+	go node.consensusMessenger()
 	return node, nil
 }
 
@@ -159,12 +153,35 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 func (node *Node) Close() {
 	node.dieOnce.Do(func() {
 		close(node.die)
-		node.cancel()
 	})
 }
 
-// consensusMessenger is a goroutine to receive all messages required for consensus & transactions
-func (node *Node) consensusMessenger(ctx context.Context) {
+// genericMessenger is a goroutine to receive all messages required for transactions & blocks
+func (node *Node) genericMessenger() {
+	sub, err := node.genericTopic.Subscribe()
+	if err != nil {
+		panic(err)
+	}
+
+	ctx := context.Background()
+	for {
+		msg, err := sub.Next(ctx)
+		if err != nil {
+			select {
+			case <-node.die: //  signal messenger exit
+				return
+			default:
+				continue
+			}
+		}
+
+		_ = msg
+		//msg.Data
+	}
+}
+
+// consensusMessenger is a goroutine to receive all messages required for BDLS consensus
+func (node *Node) consensusMessenger() {
 	newBlock, err := node.proposeNewBlock()
 	if err != nil {
 		panic(err)
@@ -175,9 +192,10 @@ func (node *Node) consensusMessenger(ctx context.Context) {
 
 	// subscribe & handle messages
 	sub, err := node.p2pEntry.Topic().Subscribe()
+	ctx := context.Background()
 	for {
 		msg, err := sub.Next(ctx)
-		if err != nil { // cancelFunc trigger error
+		if err != nil {
 			select {
 			case <-node.die: //  signal messenger exit
 				return
@@ -193,8 +211,7 @@ func (node *Node) consensusMessenger(ctx context.Context) {
 		newHeight, newRound, newState := node.consensus.CurrentState()
 		node.consensusLock.Unlock()
 
-		// should propose new block as participants if consensus
-		// has confirmed a new height
+		// new height,  propose new block
 		if newHeight > currentHeight {
 			h := blake2b.Sum256(newState)
 			log.Printf("<decide> at height:%v round:%v hash:%v", newHeight, newRound, hex.EncodeToString(h[:]))
@@ -271,7 +288,7 @@ func (node *Node) beginConsensus(block *types.Block, height uint64) error {
 	if err != nil {
 		return err
 	}
-	node.genericTopic.Publish(node.ctx, bts)
+	node.genericTopic.Publish(context.Background(), bts)
 
 	// propose the block hash to consensus
 	node.consensus.Propose(blockHash.Bytes())
