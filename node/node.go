@@ -19,6 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
+	lru "github.com/hashicorp/golang-lru"
 	libp2p_pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/minio/blake2b-simd"
 
@@ -49,7 +50,8 @@ type Node struct {
 	consensusEngine *bdls_engine.BDLSEngine // the current working consensus engine(for verification)
 	consensusLock   sync.Mutex              // consensus related lock
 	// consensus in-progress blocks
-	allProposedBlocks *sync.Map // common.Hash -> *types.Block
+	unconfirmedBlocks *lru.Cache
+	proposedBlock     *types.Block
 
 	// generic topic to exchange transactions, blocks
 	genericTopic *libp2p_pubsub.Topic
@@ -79,8 +81,12 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 		return nil, err
 	}
 	node.genericTopic = topic
-	node.allProposedBlocks = new(sync.Map)
+	cache, err := lru.New(128) // TODO: config
+	if err != nil {
+		panic(err)
+	}
 
+	node.unconfirmedBlocks = cache
 	// consensus network entry
 	entry, err := p2p.NewBDLSPeerAdapter(node.host)
 	if err != nil {
@@ -186,6 +192,7 @@ func (node *Node) consensusMessenger() {
 	if err != nil {
 		panic(err)
 	}
+	node.proposedBlock = newBlock
 
 	log.Println("current height:", uint64(node.blockchain.CurrentHeader().Number.Int64()))
 	node.beginConsensus(newBlock, uint64(node.blockchain.CurrentHeader().Number.Int64())+1)
@@ -220,7 +227,7 @@ func (node *Node) consensusMessenger() {
 
 			// TODO:get the block via hash(newState)
 			blkHash := common.BytesToHash(newState)
-			blk, ok := node.allProposedBlocks.Load(blkHash)
+			blk, ok := node.unconfirmedBlocks.Get(blkHash)
 			if !ok {
 				panic("no block")
 			}
@@ -236,11 +243,8 @@ func (node *Node) consensusMessenger() {
 			if err != nil {
 				panic(err)
 			}
-
-			// TODO:
-			// step 1. broadcast block data
-
-			//  step2. consensus propose
+			node.proposedBlock = newBlock
+			// start consensus
 			log.Println("current height:", uint64(node.blockchain.CurrentHeader().Number.Int64()))
 			node.beginConsensus(newBlock, uint64(node.blockchain.CurrentHeader().Number.Int64())+1)
 		}
@@ -261,7 +265,12 @@ func (node *Node) beginConsensus(block *types.Block, height uint64) error {
 	newConfig.CurrentHeight = height
 	newConfig.StateValidate = func(s bdls.State) bool {
 		h := common.BytesToHash(s)
-		if _, ok := node.allProposedBlocks.Load(h); ok {
+		// check if it's the local proposed block
+		if node.proposedBlock.Hash() == h {
+			return true
+		}
+		// check if it's the remote proposed block
+		if _, ok := node.unconfirmedBlocks.Get(h); ok {
 			log.Println("state validate true")
 			return true
 		}
@@ -269,26 +278,30 @@ func (node *Node) beginConsensus(block *types.Block, height uint64) error {
 		return false
 	}
 
-	// replace current working consensus object
+	// we register a consensus message watcher here, to send data along with consensus
+	newConfig.MessageCallback = func(m *bdls.Message, sp *bdls.SignedProto) {
+		if m.Type == bdls.MessageType_RoundChange {
+			// TODO: broadcast block
+			// publish this block before consensus
+			bts, err := rlp.EncodeToBytes(block)
+			if err != nil {
+				panic(err)
+			}
+
+			// TODO: block message encapsulation
+			node.genericTopic.Publish(context.Background(), bts)
+		}
+	}
+
+	// replace current working consensus object with newer
 	node.consensus, _ = bdls.NewConsensus(newConfig)
 	node.consensus.Join(node.p2pEntry)
 
 	// also update the engine for verification
 	node.consensusEngine.SetConsensus(node.consensus)
 
-	//  remove obsolete ones and track this new block
-	node.allProposedBlocks.Range(func(key interface{}, value interface{}) bool {
-		node.allProposedBlocks.Delete(key)
-		return true
-	})
-	node.allProposedBlocks.Store(blockHash, block)
-
-	// publish this block before consensus
-	bts, err := rlp.EncodeToBytes(block)
-	if err != nil {
-		return err
-	}
-	node.genericTopic.Publish(context.Background(), bts)
+	// purge all unconfirmed blocks
+	node.unconfirmedBlocks.Purge()
 
 	// propose the block hash to consensus
 	node.consensus.Propose(blockHash.Bytes())
