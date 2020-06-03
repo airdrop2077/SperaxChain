@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"math/big"
+	"sync"
 
 	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/core/state"
@@ -17,7 +18,8 @@ import (
 )
 
 type BDLSEngine struct {
-	consensus *bdls.Consensus
+	consensus  *bdls.Consensus // the related consensus core
+	sync.Mutex                 // the consensus algorithm lock
 }
 
 func NewBDLSEngine() *BDLSEngine {
@@ -27,6 +29,8 @@ func NewBDLSEngine() *BDLSEngine {
 
 // SetConsensus sets a new consensus object to engine for validation
 func (e *BDLSEngine) SetConsensus(consensus *bdls.Consensus) {
+	e.Lock()
+	defer e.Unlock()
 	e.consensus = consensus
 }
 
@@ -84,6 +88,9 @@ func (e *BDLSEngine) VerifyUncles(chain consensus.ChainReader, block *types.Bloc
 // VerifySeal checks whether the crypto seal on a header is valid according to
 // the consensus rules of the given engine.
 func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Header) error {
+	e.Lock()
+	defer e.Unlock()
+
 	// step 1. Get the SealHash(without Decision field) of this header
 
 	sealHash := e.SealHash(header).Bytes()

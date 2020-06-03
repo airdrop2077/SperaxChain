@@ -150,13 +150,11 @@ func main() {
 					}
 					log.Println("identity:", id)
 
-					// create configuration
-					config := new(bdls.Config)
-					config.Epoch = time.Now()
-					config.CurrentState = make([]byte, 1024) // fake state
-					config.CurrentHeight = 0
-					config.StateCompare = func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) }
-					config.StateValidate = func(bdls.State) bool { return true }
+					// create basic configuration for blockchain startup
+					consensusConfig := new(bdls.Config)
+					consensusConfig.Epoch = time.Now()
+					consensusConfig.StateCompare = func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) }
+					consensusConfig.StateValidate = func(bdls.State) bool { return true }
 
 					for k := range quorum.Keys {
 						priv := new(ecdsa.PrivateKey)
@@ -165,21 +163,15 @@ func main() {
 						priv.PublicKey.X, priv.PublicKey.Y = bdls.DefaultCurve.ScalarBaseMult(priv.D.Bytes())
 						// myself
 						if id == k {
-							config.PrivateKey = priv
+							consensusConfig.PrivateKey = priv
 						}
 
 						// set validator sequence
-						config.Participants = append(config.Participants, &priv.PublicKey)
+						consensusConfig.Participants = append(consensusConfig.Participants, &priv.PublicKey)
 					}
-					// init consensus
-					bdlsConsensus, err := bdls.NewConsensus(config)
-					if err != nil {
-						panic(err)
-					}
-					bdlsConsensus.SetLatency(200 * time.Millisecond)
 
 					// init p2p
-					h, err := p2p.NewHost(fmt.Sprint(3000+id), config.PrivateKey)
+					h, err := p2p.NewHost(fmt.Sprint(3000+id), consensusConfig.PrivateKey)
 					if err != nil {
 						panic(err)
 					}
@@ -199,10 +191,11 @@ func main() {
 					}
 
 					// now we can spin up the node
-					nconfig := &node.Config{}
-					nconfig.Genesis = core.DefaultRopstenGenesisBlock()
-					nconfig.DatabaseDir = fmt.Sprintf("data/node%v", id)
-					_, err = node.New(h, bdlsConsensus, nconfig)
+					nodeConfig := &node.Config{}
+					nodeConfig.Genesis = core.DefaultRopstenGenesisBlock()
+					nodeConfig.DatabaseDir = fmt.Sprintf("data/node%v", id)
+
+					_, err = node.New(h, consensusConfig, nodeConfig)
 					if err != nil {
 						log.Println(err)
 					}

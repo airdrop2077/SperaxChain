@@ -2,6 +2,7 @@ package worker
 
 import (
 	"log"
+	"time"
 
 	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/core"
@@ -49,6 +50,21 @@ func New(config *params.ChainConfig, chain *core.BlockChain, engine consensus.En
 	worker.makeCurrent(parent, header)
 
 	return worker
+}
+
+// UpdateCurrent updates the current environment with the current state and header.
+func (w *Worker) UpdateCurrent() error {
+	parent := w.chain.CurrentBlock()
+	num := parent.Number()
+	timestamp := time.Now().Unix()
+
+	header := &types.Header{
+		ParentHash: parent.Hash(),
+		GasLimit:   core.CalcGasLimit(parent, w.gasFloor, w.gasCeil),
+		Number:     num.Add(num, common.Big1),
+		Time:       uint64(timestamp),
+	}
+	return w.makeCurrent(parent, header)
 }
 
 // makeCurrent creates a new environment for the current cycle.

@@ -22,6 +22,8 @@ github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAE
 github.com/OpenPeeDeeP/depguard v1.0.1/go.mod h1:xsIw86fROiiwelg+jB2uM9PiKihMMmUx/1V+TNhjQvM=
 github.com/Sperax/bdls v1.1.1 h1:dWKTi4v++SxKTHZfP3ED2Yu54OJUcu4ouYCZo4TIVH4=
 github.com/Sperax/bdls v1.1.1/go.mod h1:Y8GrgnL0DLu+SNzq74iz60gFtlnfDU6dyZ4VOCO278o=
+github.com/Sperax/bdls v1.1.2 h1:jqHWIeKfI5A1iJKuLTwhBvAXanGOVQRadvaU04+UcCM=
+github.com/Sperax/bdls v1.1.2/go.mod h1:Y8GrgnL0DLu+SNzq74iz60gFtlnfDU6dyZ4VOCO278o=
 github.com/StackExchange/wmi v0.0.0-20180116203802-5d049714c4a6/go.mod h1:3eOhrUMpNV+6aFIbp5/iudMxNCF27Vw2OZgy4xEx0Fg=
 github.com/VictoriaMetrics/fastcache v1.5.7 h1:4y6y0G8PRzszQUYIQHHssv/jgPHAb5qQuuDNdCbyAgw=
 github.com/VictoriaMetrics/fastcache v1.5.7/go.mod h1:ptDBkNMQI4RtmVo8VS/XwRY6RoTu1dAWCbrk+6WsEM8=

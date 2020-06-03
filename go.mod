@@ -3,7 +3,7 @@ module github.com/Sperax/SperaxChain
 go 1.14
 
 require (
-	github.com/Sperax/bdls v1.1.1
+	github.com/Sperax/bdls v1.1.2
 	github.com/VictoriaMetrics/fastcache v1.5.7
 	github.com/ethereum/go-ethereum v1.9.14
 	github.com/golang/snappy v0.0.1
