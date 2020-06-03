@@ -94,12 +94,12 @@ func (w *Worker) commitTransaction(tx *types.Transaction, coinbase common.Addres
 }
 
 // CommitTransactions commits transactions for new block.
-func (w *Worker) CommitTransactions(pendingNormal map[common.Address]types.Transactions, coinbase common.Address) error {
+func (w *Worker) CommitTransactions(pending map[common.Address]types.Transactions, coinbase common.Address) error {
 	if w.current.gasPool == nil {
 		w.current.gasPool = new(core.GasPool).AddGas(w.current.header.GasLimit)
 	}
 
-	txs := types.NewTransactionsByPriceAndNonce(w.current.signer, pendingNormal)
+	txs := types.NewTransactionsByPriceAndNonce(w.current.signer, pending)
 	for {
 		// If we don't have enough gas for any further transactions then we're done
 		if w.current.gasPool.Gas() < params.TxGas {

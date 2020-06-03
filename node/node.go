@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"log"
 	"sync"
 	"time"
@@ -14,18 +15,22 @@ import (
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/core/vm"
 	"github.com/Sperax/SperaxChain/p2p"
+	"github.com/Sperax/SperaxChain/worker"
 	"github.com/Sperax/bdls"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/minio/blake2b-simd"
 
 	"github.com/Sperax/bdls/timer"
 )
 
-const freezerDir = "/freezer"
-const chainDBDir = "/chaindb"
-const namespace = "sperax/db/chaindata/"
+const (
+	freezerDir = "/freezer"
+	chainDBDir = "/chaindb"
+	namespace  = "sperax/db/chaindata/"
+)
+
+const ()
 
 // Node represents a Sperax node on it's network
 type Node struct {
@@ -35,6 +40,9 @@ type Node struct {
 	consensus       *bdls.Consensus // the core consensus algorithm
 	consensusLock   sync.Mutex      // consensus lock
 	consensusEngine consensus.Engine
+
+	// worker
+	worker *worker.Worker
 
 	// transactions pool
 	txPool *core.TxPool
@@ -104,12 +112,13 @@ func New(host *p2p.Host, consensus *bdls.Consensus, config *Config) (*Node, erro
 	txPoolConfig := core.DefaultTxPoolConfig
 	node.txPool = core.NewTxPool(txPoolConfig, chainConfig, node.blockchain)
 
+	// init worker
+	node.worker = worker.New(config.Genesis.Config, node.blockchain, engine)
+
 	// trigger the consensus updater
 	node.consensusUpdate()
 	// start consensus messaging loop
 	go node.consensusMessenger(node.ctx)
-	//  the main clock for generating blocks
-	go node.consensusClock()
 	return node, nil
 }
 
@@ -143,10 +152,32 @@ func (node *Node) consensusMessenger(ctx context.Context) {
 			}
 		}
 
-		// handle consensus messages
 		node.consensusLock.Lock()
+		currentHeight, _, _ := node.consensus.CurrentState()
+		// handle consensus messages
 		node.consensus.ReceiveMessage(msg.Data, time.Now())
+		newHeight, newRound, newState := node.consensus.CurrentState()
 		node.consensusLock.Unlock()
+
+		// should propose new block as participants
+		if newHeight > currentHeight {
+			h := blake2b.Sum256(newState)
+			log.Printf("<decide> at height:%v round:%v hash:%v", newHeight, newRound, hex.EncodeToString(h[:]))
+
+			newBlock, err := node.proposeNewBlock()
+			if err != nil {
+				panic(err)
+			}
+
+			// TODO:
+			// step 1. broadcast block data
+
+			//  step2. consensus propose
+			sealHash := node.consensusEngine.SealHash(newBlock.Header()).Bytes()
+			node.consensusLock.Lock()
+			node.consensus.Propose(sealHash)
+			node.consensusLock.Unlock()
+		}
 	}
 }
 
@@ -159,68 +190,21 @@ func (node *Node) consensusUpdate() {
 	timer.SystemTimedSched.Put(node.consensusUpdate, time.Now().Add(20*time.Millisecond))
 }
 
-// consensusClock is the main block generation clock for blockchain
-func (node *Node) consensusClock() {
-	node.consensusLock.Lock()
-	node.proposeNewBlock()
-	currentHeight, _, _ := node.consensus.CurrentState()
-	node.consensusLock.Unlock()
-
-	for {
-		node.consensusLock.Lock()
-		newHeight, newRound, newState := node.consensus.CurrentState()
-		node.consensusLock.Unlock()
-
-		if newHeight > currentHeight {
-			h := blake2b.Sum256(newState)
-			log.Printf("<decide> at height:%v round:%v hash:%v", newHeight, newRound, hex.EncodeToString(h[:]))
-			currentHeight = newHeight
-
-			// CLOCK
-			node.consensusLock.Lock()
-			node.proposeNewBlock()
-			node.consensusLock.Unlock()
-		}
-		// check periodically for new height
-		<-time.After(1 * time.Second)
-	}
-}
-
 // proposeNewBlock collects transactions from txpool and seal a new block to propose to
 // consensus algorithm
-func (node *Node) proposeNewBlock() {
+func (node *Node) proposeNewBlock() (*types.Block, error) {
 	pending, err := node.txPool.Pending()
 	if err != nil {
-		log.Println("Failed to fetch pending transactions")
-		return
-	}
-	parent := node.blockchain.CurrentBlock()
-	timestamp := time.Now().Unix()
-	num := parent.Number()
-	if parent.Time() >= uint64(timestamp) {
-		timestamp = int64(parent.Time() + 1)
-	}
-	header := &types.Header{
-		ParentHash: parent.Hash(),
-		Number:     num.Add(num, common.Big1),
-		Time:       uint64(timestamp),
+		return nil, errors.New("Failed to fetch pending transactions")
 	}
 
-	// simply include all transactions
-	var txs []*types.Transaction
-	for _, list := range pending {
-		for _, tx := range list {
-			txs = append(txs, tx)
-		}
+	coinbase := common.Address{}
+	if err := node.worker.CommitTransactions(pending, coinbase); err != nil {
+		return nil, err
 	}
 
-	newblock := types.NewBlock(header, txs, nil)
-	encodedBlockHeader, err := rlp.EncodeToBytes(newblock.Header())
-	if err != nil {
-		log.Println(err)
-	}
-	node.consensus.Propose(encodedBlockHeader)
 	log.Println("proposed")
+	return node.worker.FinalizeNewBlock()
 }
 
 // Add a remote transactions
