@@ -66,11 +66,6 @@ func (b *BlockGen) SetExtra(data []byte) {
 	b.header.Extra = data
 }
 
-// SetNonce sets the nonce field of the generated block.
-func (b *BlockGen) SetNonce(nonce types.BlockNonce) {
-	b.header.Nonce = nonce
-}
-
 // SetDifficulty sets the difficulty field of the generated block. This method is
 // useful for Clique tests where the difficulty does not depend on time. For the
 // ethash tests, please use OffsetTime, which implicitly recalculates the diff.
