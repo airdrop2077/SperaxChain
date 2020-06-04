@@ -301,7 +301,7 @@ func (node *Node) beginConsensus(block *types.Block) error {
 	// initiated new consensus object for new height with new config
 	newConfig := new(bdls.Config)
 	*newConfig = *node.consensusConfig
-	newConfig.CurrentHeight = block.NumberU64()
+	newConfig.CurrentHeight = block.NumberU64() - 1
 	newConfig.StateValidate = func(s bdls.State) bool {
 		h := common.BytesToHash(s)
 		// check if it's the local proposed block

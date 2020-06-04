@@ -3,7 +3,6 @@ package bdls_engine
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"math/big"
 
 	"github.com/Sperax/SperaxChain/consensus"
@@ -106,11 +105,8 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		return err
 	}
 
-	fmt.Printf("MSG:%#v", message)
-	fmt.Printf("MSG.Proof:%#v", message.GetProof())
 	if !bytes.Equal(message.State, sealHash) {
 		log.Error("seal hash mismatch:", message.State, sealHash)
-		return errors.New("mismatched seal hash in decision")
 	}
 
 	/*
