@@ -202,8 +202,8 @@ func (node *Node) messenger() {
 				continue
 			}
 
-			if block.Decision() == nil { // unconfirmed block, awaiting consensus
-				// validators  may broadcast unconfirmed blocks ahead of consensus.roundchange
+			if len(block.Decision()) == 0 {
+				// nil decision field suggests it's an unconfirmed block awaiting consensus.
 				node.unconfirmedBlocks.Add(block.Hash(), block)
 			} else {
 				// confirmed block, store to blockchain
@@ -315,12 +315,10 @@ func (node *Node) beginConsensus(block *types.Block, height uint64) error {
 		if node.proposedBlock.Hash() == h {
 			return true
 		}
-		// check if it's the remote proposed block
+		// check if it's a remote proposed block
 		if _, ok := node.unconfirmedBlocks.Get(h); ok {
-			log.Println("state validate true")
 			return true
 		}
-		log.Println("state validate false")
 		return false
 	}
 
@@ -361,6 +359,7 @@ func (node *Node) beginConsensus(block *types.Block, height uint64) error {
 
 	// propose the block hash to consensus
 	node.consensus.Propose(blockHash.Bytes())
+	log.Println("proposed:", blockHash.Bytes())
 	return nil
 }
 
