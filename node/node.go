@@ -205,6 +205,7 @@ func (node *Node) messenger() {
 				}
 				newHeight := uint64(node.blockchain.CurrentHeader().Number.Int64())
 
+				log.Println("newheight:", newHeight)
 				// as validator we should propose new block at new height
 				if newHeight > height {
 					newBlock, err := node.proposeNewBlock()
@@ -214,7 +215,7 @@ func (node *Node) messenger() {
 					node.proposedBlock = newBlock
 					// start consensus
 					log.Println("current height:", newHeight)
-					node.beginConsensus(newBlock, newHeight+1)
+					node.beginConsensus(newBlock)
 				}
 			}
 		}
@@ -228,9 +229,7 @@ func (node *Node) consensusMessenger() {
 		panic(err)
 	}
 	node.proposedBlock = newBlock
-
-	log.Println("current height:", uint64(node.blockchain.CurrentHeader().Number.Int64()))
-	node.beginConsensus(newBlock, uint64(node.blockchain.CurrentHeader().Number.Int64())+1)
+	node.beginConsensus(newBlock)
 
 	// subscribe & handle messages
 	sub, err := node.p2pEntry.Topic().Subscribe()
@@ -238,7 +237,7 @@ func (node *Node) consensusMessenger() {
 	for {
 		msg, err := sub.Next(ctx)
 		if err != nil {
-			log.Println(err)
+			log.Println("sub.Next:", err)
 			continue
 		}
 
@@ -292,7 +291,7 @@ func (node *Node) broadcastBlock(block *types.Block) error {
 }
 
 //  begin Consensus on new height
-func (node *Node) beginConsensus(block *types.Block, height uint64) error {
+func (node *Node) beginConsensus(block *types.Block) error {
 	node.consensusLock.Lock()
 	defer node.consensusLock.Unlock()
 
@@ -302,7 +301,7 @@ func (node *Node) beginConsensus(block *types.Block, height uint64) error {
 	// initiated new consensus object for new height with new config
 	newConfig := new(bdls.Config)
 	*newConfig = *node.consensusConfig
-	newConfig.CurrentHeight = height
+	newConfig.CurrentHeight = block.NumberU64()
 	newConfig.StateValidate = func(s bdls.State) bool {
 		h := common.BytesToHash(s)
 		// check if it's the local proposed block
@@ -398,11 +397,15 @@ func (node *Node) AddRemoteTransaction(tx *types.Transaction) error {
 
 // AddBlock
 func (node *Node) AddBlock(block *types.Block) error {
-	_, err := node.blockchain.InsertChain([]*types.Block{block})
+	log.Printf("%#v", block.Header())
+	n, err := node.blockchain.InsertChain([]*types.Block{block})
 	if err != nil {
 		return err
 	}
 
-	log.Println("added new block:", block.NumberU64())
+	if n > 0 {
+		log.Printf("Get Pvev:%#v", node.blockchain.GetBlockByHash(block.ParentHash()).Header())
+		log.Println("added new block:", block.NumberU64(), n, "current:", node.blockchain.CurrentBlock().NumberU64())
+	}
 	return nil
 }

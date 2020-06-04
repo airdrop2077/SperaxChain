@@ -128,7 +128,7 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 // Note: The block header and state database might be updated to reflect any
 // consensus rules that happen at finalization (e.g. block rewards).
 func (e *BDLSEngine) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
-	accumulateRewards(chain.Config(), state, header, uncles)
+	accumulateRewards(chain.Config(), state, header)
 	header.Root = state.IntermediateRoot(true)
 }
 
@@ -138,7 +138,7 @@ func (e *BDLSEngine) Finalize(chain consensus.ChainReader, header *types.Header,
 // Note: The block header and state database might be updated to reflect any
 // consensus rules that happen at finalization (e.g. block rewards).
 func (e *BDLSEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
-	accumulateRewards(chain.Config(), state, header, uncles)
+	accumulateRewards(chain.Config(), state, header)
 	header.Root = state.IntermediateRoot(true)
 	return types.NewBlock(header, txs, receipts), nil
 }
@@ -178,5 +178,6 @@ func (e *BDLSEngine) Close() error {
 }
 
 // mining reward computation
-func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) {
+func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header) {
+	state.AddBalance(common.Address{}, big.NewInt(100))
 }

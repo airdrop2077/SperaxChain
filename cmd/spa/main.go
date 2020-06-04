@@ -37,7 +37,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"math/big"
 	"os"
 	"time"
@@ -46,6 +45,7 @@ import (
 	"github.com/Sperax/SperaxChain/node"
 	"github.com/Sperax/SperaxChain/p2p"
 	"github.com/Sperax/bdls"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/urfave/cli/v2"
 )
@@ -101,7 +101,7 @@ func main() {
 					}
 					file.Close()
 
-					log.Println("generate", c.Int("count"), "keys")
+					log.Debug("generate", c.Int("count"), "keys")
 					return nil
 				},
 			},
@@ -131,6 +131,10 @@ func main() {
 					},
 				},
 				Action: func(c *cli.Context) error {
+					glogger := log.NewGlogHandler(log.StreamHandler(os.Stderr, log.TerminalFormat(false)))
+					glogger.Verbosity(log.Lvl(log.LvlDebug))
+					log.Root().SetHandler(glogger)
+
 					// open quorum config
 					file, err := os.Open(c.String("config"))
 					if err != nil {
@@ -148,7 +152,7 @@ func main() {
 					if id >= len(quorum.Keys) {
 						return errors.New(fmt.Sprint("cannot locate private key for id:", id))
 					}
-					log.Println("identity:", id)
+					log.Debug("identity:", id)
 
 					// create basic configuration for blockchain startup
 					consensusConfig := new(bdls.Config)
@@ -176,7 +180,7 @@ func main() {
 						panic(err)
 					}
 
-					log.Println("Address:", h.Address())
+					log.Debug("Address:", h.Address())
 
 					if id != 0 {
 						bootstrap, err := multiaddr.NewMultiaddr(c.String("bootstrap"))
@@ -197,7 +201,7 @@ func main() {
 
 					_, err = node.New(h, consensusConfig, nodeConfig)
 					if err != nil {
-						log.Println(err)
+						log.Debug("node.New", err)
 					}
 
 					// TODO:
@@ -216,7 +220,7 @@ func main() {
 
 	err := app.Run(os.Args)
 	if err != nil {
-		log.Fatal(err)
+		log.Crit("app.Run", err)
 	}
 
 }
