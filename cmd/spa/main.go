@@ -152,7 +152,7 @@ func main() {
 					if id >= len(quorum.Keys) {
 						return errors.New(fmt.Sprint("cannot locate private key for id:", id))
 					}
-					log.Debug("identity:", id)
+					log.Debug("config loaded", "identity", id)
 
 					// create basic configuration for blockchain startup
 					consensusConfig := new(bdls.Config)
@@ -180,7 +180,7 @@ func main() {
 						panic(err)
 					}
 
-					log.Debug("Address:", h.Address())
+					log.Debug("p2p initialzied", "address", h.Address())
 
 					if id != 0 {
 						bootstrap, err := multiaddr.NewMultiaddr(c.String("bootstrap"))
