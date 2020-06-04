@@ -46,10 +46,9 @@ type Node struct {
 	p2pEntry *p2p.BDLSEntry
 
 	// consensus related
-	consensusConfig *bdls.Config            // the configuration for BDLS consensus algorithm
-	consensus       *bdls.Consensus         // the current working consensus object
-	consensusEngine *bdls_engine.BDLSEngine // the current working consensus engine(for verification)
-	consensusLock   sync.Mutex              // consensus related lock
+	consensusConfig *bdls.Config    // the configuration for BDLS consensus algorithm
+	consensus       *bdls.Consensus // the current working consensus object
+	consensusLock   sync.Mutex      // consensus related lock
 	// consensus in-progress blocks
 	unconfirmedBlocks *lru.Cache
 	proposedBlock     *types.Block
@@ -107,16 +106,8 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 	}
 	log.Println("Initialised chain configuration", "config", chainConfig, genesisHash)
 
-	// init basic consensus to init blockchain
-	basicConsensus, err := bdls.NewConsensus(consensusConfig)
-	if err != nil {
-		panic(err)
-	}
-	basicConsensus.SetLatency(200 * time.Millisecond)
-	engine := bdls_engine.NewBDLSEngine()
-	engine.SetConsensus(basicConsensus)
-	node.consensusEngine = engine
-	node.consensus = basicConsensus
+	// init blockchain & worker verifier engine
+	consensusEngine := bdls_engine.NewBDLSEngine(consensusConfig)
 
 	// cache config
 	cacheConfig := &core.CacheConfig{
@@ -136,7 +127,7 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 	}
 
 	// init blockchain
-	node.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, engine, vmConfig, nil, &config.TxLookupLimit)
+	node.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, consensusEngine, vmConfig, nil, &config.TxLookupLimit)
 	if err != nil {
 		log.Println("new blockchain:", err)
 		return nil, err
@@ -147,7 +138,7 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 	node.txPool = core.NewTxPool(txPoolConfig, chainConfig, node.blockchain)
 
 	// init worker
-	node.worker = worker.New(config.Genesis.Config, node.blockchain, engine)
+	node.worker = worker.New(config.Genesis.Config, node.blockchain, consensusEngine)
 
 	// kick off consensus updater
 	node.consensusUpdater()
@@ -208,7 +199,10 @@ func (node *Node) messenger() {
 			} else {
 				// confirmed block, store to blockchain
 				height := uint64(node.blockchain.CurrentHeader().Number.Int64())
-				node.AddBlock(block)
+				err := node.AddBlock(block)
+				if err != nil {
+					log.Println(err)
+				}
 				newHeight := uint64(node.blockchain.CurrentHeader().Number.Int64())
 
 				// as validator we should propose new block at new height
@@ -350,10 +344,6 @@ func (node *Node) beginConsensus(block *types.Block, height uint64) error {
 	// replace current working consensus object with newer
 	node.consensus, _ = bdls.NewConsensus(newConfig)
 	node.consensus.Join(node.p2pEntry)
-
-	// also update the engine for verification
-	node.consensusEngine.SetConsensus(node.consensus)
-
 	// purge all unconfirmed blocks
 	node.unconfirmedBlocks.Purge()
 

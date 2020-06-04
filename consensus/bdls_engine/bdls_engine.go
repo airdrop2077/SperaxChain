@@ -3,8 +3,8 @@ package bdls_engine
 import (
 	"bytes"
 	"errors"
+	"log"
 	"math/big"
-	"sync"
 
 	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/core/state"
@@ -12,26 +12,18 @@ import (
 	"github.com/Sperax/bdls"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
-	"golang.org/x/crypto/sha3"
+	proto "github.com/gogo/protobuf/proto"
 )
 
 type BDLSEngine struct {
-	consensus  *bdls.Consensus // the related consensus core
-	sync.Mutex                 // the consensus algorithm lock
+	consensusConfig *bdls.Config
 }
 
-func NewBDLSEngine() *BDLSEngine {
+func NewBDLSEngine(consensusConfig *bdls.Config) *BDLSEngine {
 	engine := new(BDLSEngine)
+	engine.consensusConfig = consensusConfig
 	return engine
-}
-
-// SetConsensus sets a new consensus object to engine for validation
-func (e *BDLSEngine) SetConsensus(consensus *bdls.Consensus) {
-	e.Lock()
-	defer e.Unlock()
-	e.consensus = consensus
 }
 
 // Author retrieves the Ethereum address of the account that minted the given
@@ -88,26 +80,36 @@ func (e *BDLSEngine) VerifyUncles(chain consensus.ChainReader, block *types.Bloc
 // VerifySeal checks whether the crypto seal on a header is valid according to
 // the consensus rules of the given engine.
 func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Header) error {
-	e.Lock()
-	defer e.Unlock()
-
 	// step 1. Get the SealHash(without Decision field) of this header
-
 	sealHash := e.SealHash(header).Bytes()
 
-	// step 2. validate decide message integrity
-	err := e.consensus.ValidateDecideMessage(header.Decision)
+	// step 2. create a consensus object to validate this message
+	consensus, err := bdls.NewConsensus(e.consensusConfig)
 	if err != nil {
 		return err
 	}
 
-	// step 3. compute & compare header hash with message field in decide message
-	signed, err := e.consensus.DecodeSignedMessage(header.Decision)
+	// step 3. validate decide message integrity
+	err = consensus.ValidateDecideMessage(header.Decision)
 	if err != nil {
 		return err
 	}
 
-	if !bytes.Equal(signed.Message, sealHash) {
+	// step 4. compare header hash with decide.State
+	signed := new(bdls.SignedProto)
+	err = proto.Unmarshal(header.Decision, signed)
+	if err != nil {
+		return err
+	}
+
+	message := new(bdls.Message)
+	err = proto.Unmarshal(signed.Message, message)
+	if err != nil {
+		return err
+	}
+
+	if !bytes.Equal(message.State, sealHash) {
+		log.Println(message.State, sealHash)
 		return errors.New("mismatched seal hash in decision")
 	}
 
@@ -152,24 +154,9 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 
 // SealHash returns the hash of a block prior to it being sealed.
 func (e *BDLSEngine) SealHash(header *types.Header) (hash common.Hash) {
-	hasher := sha3.NewLegacyKeccak256()
-
-	rlp.Encode(hasher, []interface{}{
-		header.ParentHash,
-		header.Coinbase,
-		header.Root,
-		header.TxHash,
-		header.ReceiptHash,
-		header.Bloom,
-		header.Difficulty,
-		header.Number,
-		header.GasLimit,
-		header.GasUsed,
-		header.Time,
-		header.Extra,
-	})
-	hasher.Sum(hash[:0])
-	return hash
+	copied := types.CopyHeader(header)
+	copied.Decision = nil
+	return copied.Hash()
 }
 
 // CalcDifficulty is the difficulty adjustment algorithm. It returns the difficulty
