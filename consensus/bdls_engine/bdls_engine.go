@@ -3,7 +3,7 @@ package bdls_engine
 import (
 	"bytes"
 	"errors"
-	"log"
+	"fmt"
 	"math/big"
 
 	"github.com/Sperax/SperaxChain/consensus"
@@ -11,6 +11,7 @@ import (
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/bdls"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
 	proto "github.com/gogo/protobuf/proto"
@@ -86,32 +87,44 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 	// step 2. create a consensus object to validate this message
 	consensus, err := bdls.NewConsensus(e.consensusConfig)
 	if err != nil {
+		log.Error("new consensus:", err)
 		return err
 	}
 
-	// step 3. validate decide message integrity
-	err = consensus.ValidateDecideMessage(header.Decision)
-	if err != nil {
-		return err
-	}
-
-	// step 4. compare header hash with decide.State
+	// step 3. compare header hash with decide.State
 	signed := new(bdls.SignedProto)
 	err = proto.Unmarshal(header.Decision, signed)
 	if err != nil {
+		log.Error("proto.Unmarshal SignedProto", err)
 		return err
 	}
 
 	message := new(bdls.Message)
 	err = proto.Unmarshal(signed.Message, message)
 	if err != nil {
+		log.Error("proto.Unmarshal", err)
 		return err
 	}
 
+	fmt.Printf("MSG:%#v", message)
+	fmt.Printf("MSG.Proof:%#v", message.GetProof())
 	if !bytes.Equal(message.State, sealHash) {
-		log.Println(message.State, sealHash)
+		log.Error("seal hash mismatch:", message.State, sealHash)
 		return errors.New("mismatched seal hash in decision")
 	}
+
+	/*
+		// step 4. validate decide message integrity
+		err = consensus.ValidateDecideMessage(header.Decision)
+		if err != nil {
+			log.Error("validate decideMessage", err, header.Decision)
+
+			fmt.Println("########validate:", err, header.Decision)
+			log.Debug("header:", fmt.Sprintf("%#v", header))
+			return err
+		}
+	*/
+	_ = consensus
 
 	return nil
 }
