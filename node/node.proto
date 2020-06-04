@@ -31,19 +31,17 @@
 syntax = "proto3";
 package node;
 
-import "github.com/gogo/protobuf/gogoproto/gogo.proto";
-
 // MessageType defines supported message types
 enum MessageType{
 	// Transaction message
-    Transaction = 0;
-    // Block message
-    Block = 1;
+	Transaction = 0;
+	// Block message
+	Block = 1;
 }
 // Sperax generic message definition 
-message SperaxGeneric  {
-    // Type of this message
-    MessageType Type = 1;
+message SperaxMessage {
+	// Type of this message
+	MessageType Type = 1;
 	// The binary data of this message
-	bytes Data = 2;
+	bytes Message = 2;
 }

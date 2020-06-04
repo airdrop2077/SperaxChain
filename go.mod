@@ -7,6 +7,7 @@ require (
 	github.com/VictoriaMetrics/fastcache v1.5.7
 	github.com/ethereum/go-ethereum v1.9.14
 	github.com/gogo/protobuf v1.3.1
+	github.com/golang/protobuf v1.4.1
 	github.com/golang/snappy v0.0.1
 	github.com/harmony-one/harmony v1.9.0
 	github.com/hashicorp/golang-lru v0.5.4
@@ -24,4 +25,5 @@ require (
 	github.com/steakknife/bloomfilter v0.0.0-20180922174646-6819c0d2a570
 	github.com/urfave/cli/v2 v2.2.0
 	golang.org/x/crypto v0.0.0-20200510223506-06a226fb4e37
+	google.golang.org/protobuf v1.24.0
 )

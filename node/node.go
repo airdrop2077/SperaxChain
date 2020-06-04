@@ -19,6 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
+	proto "github.com/golang/protobuf/proto"
 	lru "github.com/hashicorp/golang-lru"
 	libp2p_pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/minio/blake2b-simd"
@@ -42,7 +43,7 @@ type Node struct {
 	host *p2p.Host
 
 	// the consensus p2p interface for broadcasting
-	p2pEntry *p2p.BDLSPeerAdapter
+	p2pEntry *p2p.BDLSEntry
 
 	// consensus related
 	consensusConfig *bdls.Config            // the configuration for BDLS consensus algorithm
@@ -54,7 +55,7 @@ type Node struct {
 	proposedBlock     *types.Block
 
 	// generic topic to exchange transactions, blocks
-	genericTopic *libp2p_pubsub.Topic
+	speraxTopic *libp2p_pubsub.Topic
 
 	// worker to assemble new block to propose
 	worker *worker.Worker
@@ -80,7 +81,7 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 	if err != nil {
 		return nil, err
 	}
-	node.genericTopic = topic
+	node.speraxTopic = topic
 	cache, err := lru.New(128) // TODO: config
 	if err != nil {
 		panic(err)
@@ -162,9 +163,9 @@ func (node *Node) Close() {
 	})
 }
 
-// genericMessenger is a goroutine to receive all messages required for transactions & blocks
-func (node *Node) genericMessenger() {
-	sub, err := node.genericTopic.Subscribe()
+// messenger is a goroutine to receive all messages required for transactions & blocks
+func (node *Node) messenger() {
+	sub, err := node.speraxTopic.Subscribe()
 	if err != nil {
 		panic(err)
 	}
@@ -173,16 +174,54 @@ func (node *Node) genericMessenger() {
 	for {
 		msg, err := sub.Next(ctx)
 		if err != nil {
-			select {
-			case <-node.die: //  signal messenger exit
-				return
-			default:
-				continue
-			}
+			log.Println(err)
+			continue
 		}
 
-		_ = msg
-		//msg.Data
+		// Unmarshal message
+		message := new(SperaxMessage)
+		proto.Unmarshal(msg.Data, message)
+
+		// handle tx & blocks
+		switch message.Type {
+		case MessageType_Transaction:
+			tx := new(types.Transaction)
+			err := rlp.DecodeBytes(message.Message, tx)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			node.AddRemoteTransaction(tx)
+		case MessageType_Block:
+			block := new(types.Block)
+			err := rlp.DecodeBytes(message.Message, block)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+
+			if block.Decision() == nil { // unconfirmed block, awaiting consensus
+				// validators  may broadcast unconfirmed blocks ahead of consensus.roundchange
+				node.unconfirmedBlocks.Add(block.Hash(), block)
+			} else {
+				// confirmed block, store to blockchain
+				height := uint64(node.blockchain.CurrentHeader().Number.Int64())
+				node.AddBlock(block)
+				newHeight := uint64(node.blockchain.CurrentHeader().Number.Int64())
+
+				// as validator we should propose new block at new height
+				if newHeight > height {
+					newBlock, err := node.proposeNewBlock()
+					if err != nil {
+						panic(err)
+					}
+					node.proposedBlock = newBlock
+					// start consensus
+					log.Println("current height:", newHeight)
+					node.beginConsensus(newBlock, newHeight+1)
+				}
+			}
+		}
 	}
 }
 
@@ -203,12 +242,8 @@ func (node *Node) consensusMessenger() {
 	for {
 		msg, err := sub.Next(ctx)
 		if err != nil {
-			select {
-			case <-node.die: //  signal messenger exit
-				return
-			default:
-				continue
-			}
+			log.Println(err)
+			continue
 		}
 
 		node.consensusLock.Lock()
@@ -218,37 +253,46 @@ func (node *Node) consensusMessenger() {
 		newHeight, newRound, newState := node.consensus.CurrentState()
 		node.consensusLock.Unlock()
 
-		// new height,  propose new block
+		// new height, broadcast confirmed block
 		if newHeight > currentHeight {
 			h := blake2b.Sum256(newState)
 			log.Printf("<decide> at height:%v round:%v hash:%v", newHeight, newRound, hex.EncodeToString(h[:]))
 
-			// assemble and storage block to database
-
-			// TODO:get the block via hash(newState)
 			blkHash := common.BytesToHash(newState)
-			blk, ok := node.unconfirmedBlocks.Get(blkHash)
+			value, ok := node.unconfirmedBlocks.Get(blkHash)
 			if !ok {
 				panic("no block")
 			}
 
-			log.Printf("block:%+v", blk)
+			// seal the block with proof
+			header := value.(*types.Block).Header()
+			header.Decision = msg.Data // store the the proof in block header
+			finalized := value.(*types.Block).WithSeal(header)
 
-			_, err := node.blockchain.InsertChain([]*types.Block{blk.(*types.Block)})
-			if err != nil {
-				panic(err)
-			}
-
-			newBlock, err := node.proposeNewBlock()
-			if err != nil {
-				panic(err)
-			}
-			node.proposedBlock = newBlock
-			// start consensus
-			log.Println("current height:", uint64(node.blockchain.CurrentHeader().Number.Int64()))
-			node.beginConsensus(newBlock, uint64(node.blockchain.CurrentHeader().Number.Int64())+1)
+			// broadcast this block
+			node.broadcastBlock(finalized)
 		}
 	}
+}
+
+// broadcast a given block
+func (node *Node) broadcastBlock(block *types.Block) error {
+	message := new(SperaxMessage)
+	message.Type = MessageType_Block
+	bts, err := rlp.EncodeToBytes(block)
+	if err != nil {
+		return err
+	}
+	message.Message = bts
+
+	// marshal to SperaxMessage
+	bts, err = proto.Marshal(message)
+	if err != nil {
+		return err
+	}
+
+	// wire
+	return node.speraxTopic.Publish(context.Background(), bts)
 }
 
 //  begin Consensus on new height
@@ -281,15 +325,25 @@ func (node *Node) beginConsensus(block *types.Block, height uint64) error {
 	// we register a consensus message watcher here, to send data along with consensus
 	newConfig.MessageCallback = func(m *bdls.Message, sp *bdls.SignedProto) {
 		if m.Type == bdls.MessageType_RoundChange {
-			// TODO: broadcast block
-			// publish this block before consensus
+			message := new(SperaxMessage)
+			message.Type = MessageType_Block
 			bts, err := rlp.EncodeToBytes(block)
 			if err != nil {
-				panic(err)
+				log.Println(err)
+			}
+			message.Message = bts
+
+			// marshal to SperaxMessage
+			bts, err = proto.Marshal(message)
+			if err != nil {
+				log.Println(err)
 			}
 
-			// TODO: block message encapsulation
-			node.genericTopic.Publish(context.Background(), bts)
+			// wire
+			err = node.speraxTopic.Publish(context.Background(), bts)
+			if err != nil {
+				log.Println(err)
+			}
 		}
 	}
 
@@ -348,5 +402,16 @@ func (node *Node) AddRemoteTransaction(tx *types.Transaction) error {
 	}
 	pendingCount, queueCount := node.txPool.Stats()
 	log.Println("addtx:", pendingCount, queueCount)
+	return nil
+}
+
+// AddBlock
+func (node *Node) AddBlock(block *types.Block) error {
+	_, err := node.blockchain.InsertChain([]*types.Block{block})
+	if err != nil {
+		return err
+	}
+
+	log.Println("added new block:", block.NumberU64())
 	return nil
 }
