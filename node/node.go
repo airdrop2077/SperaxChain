@@ -149,8 +149,10 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 	// init worker
 	node.worker = worker.New(config.Genesis.Config, node.blockchain, engine)
 
-	// trigger the consensus updater
+	// kick off consensus updater
 	node.consensusUpdater()
+	// start core messaging loop
+	go node.messenger()
 	// start consensus messaging loop
 	go node.consensusMessenger()
 	return node, nil
