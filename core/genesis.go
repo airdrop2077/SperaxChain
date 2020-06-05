@@ -269,17 +269,21 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 		Extra:      g.ExtraData,
 		GasLimit:   g.GasLimit,
 		GasUsed:    g.GasUsed,
-		Difficulty: g.Difficulty,
-		MixDigest:  g.Mixhash,
-		Coinbase:   g.Coinbase,
-		Root:       root,
+		// NOTE(xtaci): remove difficulty setting
+		// Difficulty: g.Difficulty,
+		MixDigest: g.Mixhash,
+		Coinbase:  g.Coinbase,
+		Root:      root,
 	}
 	if g.GasLimit == 0 {
 		head.GasLimit = params.GenesisGasLimit
 	}
-	if g.Difficulty == nil {
-		head.Difficulty = params.GenesisDifficulty
-	}
+	// NOTE(xtaci): remove difficulty setting
+	/*
+		if g.Difficulty == nil {
+			head.Difficulty = params.GenesisDifficulty
+		}
+	*/
 	statedb.Commit(false)
 	statedb.Database().TrieDB().Commit(root, true)
 
