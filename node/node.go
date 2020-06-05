@@ -252,17 +252,20 @@ func (node *Node) consensusMessenger() {
 
 			blkHash := common.BytesToHash(newState)
 			value, ok := node.unconfirmedBlocks.Get(blkHash)
-			if !ok {
-				panic("no block")
+
+			// if there's still unconfirmed block regarding this consensus object,
+			// the receiver should seal block & broadcast.
+			//
+			// the unconfimredBlocks will be purged for next height
+			if ok {
+				// seal the block with proof
+				header := value.(*types.Block).Header()
+				header.Decision = msg.Data // store the the proof in block header
+				finalized := value.(*types.Block).WithSeal(header)
+
+				// broadcast this block
+				node.broadcastBlock(finalized)
 			}
-
-			// seal the block with proof
-			header := value.(*types.Block).Header()
-			header.Decision = msg.Data // store the the proof in block header
-			finalized := value.(*types.Block).WithSeal(header)
-
-			// broadcast this block
-			node.broadcastBlock(finalized)
 		}
 	}
 }
