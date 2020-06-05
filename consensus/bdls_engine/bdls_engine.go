@@ -147,7 +147,7 @@ func (e *BDLSEngine) SealHash(header *types.Header) (hash common.Hash) {
 // CalcDifficulty is the difficulty adjustment algorithm. It returns the difficulty
 // that a new block should have.
 func (e *BDLSEngine) CalcDifficulty(chain consensus.ChainReader, time uint64, parent *types.Header) *big.Int {
-	return nil
+	return common.Big1
 }
 
 // APIs returns the RPC APIs this consensus engine provides.
