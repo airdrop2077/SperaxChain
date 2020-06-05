@@ -1,7 +1,6 @@
 package bdls_engine
 
 import (
-	"bytes"
 	"errors"
 	"math/big"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
-	proto "github.com/gogo/protobuf/proto"
 )
 
 type BDLSEngine struct {
@@ -93,29 +91,10 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		return err
 	}
 
-	// step 3. compare header hash with decide.State
-	signed := new(bdls.SignedProto)
-	err = proto.Unmarshal(header.Decision, signed)
+	// step 3. validate decide message integrity
+	err = consensus.ValidateDecideMessage(header.Decision, sealHash)
 	if err != nil {
-		log.Error("proto.Unmarshal SignedProto", err)
-		return err
-	}
-
-	message := new(bdls.Message)
-	err = proto.Unmarshal(signed.Message, message)
-	if err != nil {
-		log.Error("proto.Unmarshal", err)
-		return err
-	}
-
-	if !bytes.Equal(message.State, sealHash) {
-		log.Error("seal hash mismatch:", message.State, sealHash)
-	}
-
-	// step 4. validate decide message integrity
-	err = consensus.ValidateDecideMessage(header.Decision)
-	if err != nil {
-		log.Debug("VerifySeal", "ValidateDecideMessage", err, "Message", message)
+		log.Debug("VerifySeal", "ValidateDecideMessage", err)
 		return err
 	}
 
