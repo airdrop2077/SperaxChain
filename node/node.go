@@ -2,9 +2,7 @@ package node
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
-	"log"
 	"sync"
 	"time"
 
@@ -17,12 +15,12 @@ import (
 	"github.com/Sperax/SperaxChain/worker"
 	"github.com/Sperax/bdls"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	proto "github.com/golang/protobuf/proto"
 	lru "github.com/hashicorp/golang-lru"
 	libp2p_pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/minio/blake2b-simd"
 
 	"github.com/Sperax/bdls/timer"
 )
@@ -97,14 +95,14 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 	// init chaindb
 	chainDb, err := rawdb.NewLevelDBDatabaseWithFreezer(config.DatabaseDir+chainDBDir, config.DatabaseCache, config.DatabaseHandles, config.DatabaseDir+freezerDir, namespace)
 	if err != nil {
-		log.Println("new leveldb:", chainDb, err)
+		log.Debug("new node", "rawdb.NewLevelDBDatabaseWithFreezer", err)
 		return nil, err
 	}
 	chainConfig, genesisHash, genesisErr := core.SetupGenesisBlock(chainDb, config.Genesis)
 	if _, ok := genesisErr.(*params.ConfigCompatError); genesisErr != nil && !ok {
 		return nil, genesisErr
 	}
-	log.Println("Initialised chain configuration", "config", chainConfig, genesisHash)
+	log.Debug("setup genensis block", "config", chainConfig, "genesis", genesisHash)
 
 	// init blockchain & worker verifier engine
 	consensusEngine := bdls_engine.NewBDLSEngine(consensusConfig)
@@ -129,7 +127,7 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 	// init blockchain
 	node.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, consensusEngine, vmConfig, nil, &config.TxLookupLimit)
 	if err != nil {
-		log.Println("new blockchain:", err)
+		log.Debug("new node", "core.NewBlockChain", err)
 		return nil, err
 	}
 
@@ -167,7 +165,7 @@ func (node *Node) messenger() {
 	for {
 		msg, err := sub.Next(ctx)
 		if err != nil {
-			log.Println(err)
+			log.Debug("messenger", "sub.Next", err)
 			continue
 		}
 
@@ -181,7 +179,7 @@ func (node *Node) messenger() {
 			tx := new(types.Transaction)
 			err := rlp.DecodeBytes(message.Message, tx)
 			if err != nil {
-				log.Println(err)
+				log.Debug("messenger", "rlp.DecodeBytes", err)
 				continue
 			}
 			node.AddRemoteTransaction(tx)
@@ -189,7 +187,7 @@ func (node *Node) messenger() {
 			block := new(types.Block)
 			err := rlp.DecodeBytes(message.Message, block)
 			if err != nil {
-				log.Println(err)
+				log.Debug("messenger", "rlp.DecodeBytes", err)
 				continue
 			}
 
@@ -201,11 +199,12 @@ func (node *Node) messenger() {
 				height := uint64(node.blockchain.CurrentHeader().Number.Int64())
 				err := node.AddBlock(block)
 				if err != nil {
-					log.Println(err)
+					log.Debug("messenger", "node.AddBlock", err)
+					continue
 				}
 				newHeight := uint64(node.blockchain.CurrentHeader().Number.Int64())
 
-				log.Println("newheight:", newHeight)
+				log.Trace("messenger", "newheight:", newHeight)
 				// as validator we should propose new block at new height
 				if newHeight > height {
 					newBlock, err := node.proposeNewBlock()
@@ -214,7 +213,6 @@ func (node *Node) messenger() {
 					}
 					node.proposedBlock = newBlock
 					// start consensus
-					log.Println("current height:", newHeight)
 					node.beginConsensus(newBlock)
 				}
 			}
@@ -237,7 +235,7 @@ func (node *Node) consensusMessenger() {
 	for {
 		msg, err := sub.Next(ctx)
 		if err != nil {
-			log.Println("sub.Next:", err)
+			log.Debug("consensusMessenger", "sub.Next", err)
 			continue
 		}
 
@@ -250,8 +248,7 @@ func (node *Node) consensusMessenger() {
 
 		// new height, broadcast confirmed block
 		if newHeight > currentHeight {
-			h := blake2b.Sum256(newState)
-			log.Printf("<decide> at height:%v round:%v hash:%v", newHeight, newRound, hex.EncodeToString(h[:]))
+			log.Debug("CONSENSUS <decide>", "height", newHeight, "round", newRound, "hash", newHeight, newRound, common.BytesToHash(newState))
 
 			blkHash := common.BytesToHash(newState)
 			value, ok := node.unconfirmedBlocks.Get(blkHash)
@@ -322,20 +319,23 @@ func (node *Node) beginConsensus(block *types.Block) error {
 			message.Type = MessageType_Block
 			bts, err := rlp.EncodeToBytes(block)
 			if err != nil {
-				log.Println(err)
+				log.Debug("MessageCallback", "rlp.EncodeToBytes", err)
+				return
 			}
 			message.Message = bts
 
 			// marshal to SperaxMessage
 			bts, err = proto.Marshal(message)
 			if err != nil {
-				log.Println(err)
+				log.Debug("MessageCallback", "proto.Marshal", err)
+				return
 			}
 
 			// wire
 			err = node.speraxTopic.Publish(context.Background(), bts)
 			if err != nil {
-				log.Println(err)
+				log.Debug("MessageCallback", "node.speraxTopic.Publish", err)
+				return
 			}
 		}
 	}
@@ -348,7 +348,8 @@ func (node *Node) beginConsensus(block *types.Block) error {
 
 	// propose the block hash to consensus
 	node.consensus.Propose(blockHash.Bytes())
-	log.Println("proposed:", blockHash.Bytes())
+
+	log.Trace("beginConsensus", "blockHash", blockHash)
 	return nil
 }
 
@@ -380,7 +381,6 @@ func (node *Node) proposeNewBlock() (*types.Block, error) {
 		return nil, err
 	}
 
-	log.Println("proposed")
 	return node.worker.FinalizeNewBlock()
 }
 
@@ -391,21 +391,21 @@ func (node *Node) AddRemoteTransaction(tx *types.Transaction) error {
 		return err
 	}
 	pendingCount, queueCount := node.txPool.Stats()
-	log.Println("addtx:", pendingCount, queueCount)
+	log.Debug("AddRemoteTransaction", "pendingCount", pendingCount, "queueCount", queueCount)
 	return nil
 }
 
 // AddBlock
 func (node *Node) AddBlock(block *types.Block) error {
-	log.Printf("%#v", block.Header())
+	log.Debug("AddBlock", "block hash", block.Hash())
+	log.Debug("AddBlock", "parent hash", node.blockchain.GetBlockByHash(block.ParentHash()).Hash())
 	n, err := node.blockchain.InsertChain([]*types.Block{block})
 	if err != nil {
 		return err
 	}
 
 	if n > 0 {
-		log.Printf("Get Pvev:%#v", node.blockchain.GetBlockByHash(block.ParentHash()).Header())
-		log.Println("added new block:", block.NumberU64(), n, "current:", node.blockchain.CurrentBlock().NumberU64())
+		log.Debug("AddBlock", "blockNumber", block.NumberU64(), "num inserted", n, "chain current", node.blockchain.CurrentBlock().NumberU64())
 	}
 	return nil
 }
