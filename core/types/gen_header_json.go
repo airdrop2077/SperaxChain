@@ -19,6 +19,7 @@ func (h Header) MarshalJSON() ([]byte, error) {
 		TxHash      common.Hash    `json:"transactionsRoot" gencodec:"required"`
 		ReceiptHash common.Hash    `json:"receiptsRoot"     gencodec:"required"`
 		Bloom       Bloom          `json:"logsBloom"        gencodec:"required"`
+		Difficulty  *big.Int       `json:"difficulty"       gencodec:"required"`
 		Number      *big.Int       `json:"number"           gencodec:"required"`
 		GasLimit    uint64         `json:"gasLimit"         gencodec:"required"`
 		GasUsed     uint64         `json:"gasUsed"          gencodec:"required"`
@@ -34,6 +35,7 @@ func (h Header) MarshalJSON() ([]byte, error) {
 	enc.TxHash = h.TxHash
 	enc.ReceiptHash = h.ReceiptHash
 	enc.Bloom = h.Bloom
+	enc.Difficulty = h.Difficulty
 	enc.Number = h.Number
 	enc.GasLimit = h.GasLimit
 	enc.GasUsed = h.GasUsed
@@ -53,6 +55,7 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		TxHash      *common.Hash    `json:"transactionsRoot" gencodec:"required"`
 		ReceiptHash *common.Hash    `json:"receiptsRoot"     gencodec:"required"`
 		Bloom       *Bloom          `json:"logsBloom"        gencodec:"required"`
+		Difficulty  *big.Int        `json:"difficulty"       gencodec:"required"`
 		Number      *big.Int        `json:"number"           gencodec:"required"`
 		GasLimit    *uint64         `json:"gasLimit"         gencodec:"required"`
 		GasUsed     *uint64         `json:"gasUsed"          gencodec:"required"`
@@ -89,6 +92,10 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		return errors.New("missing required field 'logsBloom' for Header")
 	}
 	h.Bloom = *dec.Bloom
+	if dec.Difficulty == nil {
+		return errors.New("missing required field 'difficulty' for Header")
+	}
+	h.Difficulty = dec.Difficulty
 	if dec.Number == nil {
 		return errors.New("missing required field 'number' for Header")
 	}

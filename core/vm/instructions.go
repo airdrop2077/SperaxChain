@@ -581,10 +581,7 @@ func opNumber(pc *uint64, interpreter *EVMInterpreter, callContext *callCtx) ([]
 }
 
 func opDifficulty(pc *uint64, interpreter *EVMInterpreter, callContext *callCtx) ([]byte, error) {
-	//callContext.stack.push(math.U256(interpreter.intPool.get().Set(interpreter.evm.Difficulty)))
-	// NOTE(xtaci): set 0 here
-	callContext.stack.push(math.U256(interpreter.intPool.get().Set(big.NewInt(0))))
-
+	callContext.stack.push(math.U256(interpreter.intPool.get().Set(interpreter.evm.Difficulty)))
 	return nil, nil
 }
 

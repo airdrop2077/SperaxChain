@@ -149,16 +149,16 @@ func (hc *HeaderChain) WriteHeader(header *types.Header) (status WriteStatus, er
 	if ptd == nil {
 		return NonStatTy, consensus.ErrUnknownAncestor
 	}
-	//head := hc.CurrentHeader().Number.Uint64()
-	//localTd := hc.GetTd(hc.currentHeaderHash, head)
-	//externTd := new(big.Int).Add(header.Difficulty, ptd)
+	head := hc.CurrentHeader().Number.Uint64()
+	localTd := hc.GetTd(hc.currentHeaderHash, head)
+	externTd := new(big.Int).Add(header.Difficulty, ptd)
 
 	// Irrelevant of the canonical status, write the td and header to the database
 	//
 	// Note all the components of header(td, hash->number index and header) should
 	// be written atomically.
 	headerBatch := hc.chainDb.NewBatch()
-	//rawdb.WriteTd(headerBatch, hash, number, externTd)
+	rawdb.WriteTd(headerBatch, hash, number, externTd)
 	rawdb.WriteHeader(headerBatch, header)
 	if err := headerBatch.Write(); err != nil {
 		log.Crit("Failed to write header into disk", "err", err)
@@ -166,7 +166,6 @@ func (hc *HeaderChain) WriteHeader(header *types.Header) (status WriteStatus, er
 	// If the total difficulty is higher than our known, add it to the canonical chain
 	// Second clause in the if statement reduces the vulnerability to selfish mining.
 	// Please refer to http://www.cs.cornell.edu/~ie53/publications/btcProcFC.pdf
-	/* NOTE(xtaci): remove difficulty
 	reorg := externTd.Cmp(localTd) > 0
 	if !reorg && externTd.Cmp(localTd) == 0 {
 		if header.Number.Uint64() < head {
@@ -175,8 +174,6 @@ func (hc *HeaderChain) WriteHeader(header *types.Header) (status WriteStatus, er
 			reorg = mrand.Float64() < 0.5
 		}
 	}
-	*/
-	reorg := true
 	if reorg {
 		// If the header can be added into canonical chain, adjust the
 		// header chain markers(canonical indexes and head header flag).
@@ -221,7 +218,7 @@ func (hc *HeaderChain) WriteHeader(header *types.Header) (status WriteStatus, er
 	} else {
 		status = SideStatTy
 	}
-	//hc.tdCache.Add(hash, externTd)
+	hc.tdCache.Add(hash, externTd)
 	hc.headerCache.Add(hash, header)
 	hc.numberCache.Add(hash, number)
 	return
