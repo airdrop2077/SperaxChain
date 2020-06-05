@@ -98,11 +98,15 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 		log.Debug("new node", "rawdb.NewLevelDBDatabaseWithFreezer", err)
 		return nil, err
 	}
-	chainConfig, genesisHash, genesisErr := core.SetupGenesisBlock(chainDb, config.Genesis)
-	if _, ok := genesisErr.(*params.ConfigCompatError); genesisErr != nil && !ok {
-		return nil, genesisErr
+
+	// check if it's empty database
+	if rawdb.ReadCanonicalHash(chainDb, 0) == (common.Hash{}) {
+		chainConfig, genesisHash, genesisErr := core.SetupGenesisBlock(chainDb, config.Genesis)
+		if _, ok := genesisErr.(*params.ConfigCompatError); genesisErr != nil && !ok {
+			return nil, genesisErr
+		}
+		log.Debug("setup genensis block", "config", chainConfig, "genesis", genesisHash)
 	}
-	log.Debug("setup genensis block", "config", chainConfig, "genesis", genesisHash)
 
 	// init blockchain & worker verifier engine
 	consensusEngine := bdls_engine.NewBDLSEngine(consensusConfig)
@@ -125,7 +129,7 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 	}
 
 	// init blockchain
-	node.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, consensusEngine, vmConfig, nil, &config.TxLookupLimit)
+	node.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis.Config, consensusEngine, vmConfig, nil, &config.TxLookupLimit)
 	if err != nil {
 		log.Debug("new node", "core.NewBlockChain", err)
 		return nil, err
@@ -133,7 +137,7 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 
 	// init txpool
 	txPoolConfig := core.DefaultTxPoolConfig
-	node.txPool = core.NewTxPool(txPoolConfig, chainConfig, node.blockchain)
+	node.txPool = core.NewTxPool(txPoolConfig, config.Genesis.Config, node.blockchain)
 
 	// init worker
 	node.worker = worker.New(config.Genesis.Config, node.blockchain, consensusEngine)
@@ -151,6 +155,7 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 func (node *Node) Close() {
 	node.dieOnce.Do(func() {
 		close(node.die)
+		node.blockchain.Stop()
 	})
 }
 
@@ -372,6 +377,8 @@ func (node *Node) consensusUpdater() {
 func (node *Node) proposeNewBlock() (*types.Block, error) {
 	// update current header & reset statsdb
 	node.worker.UpdateCurrent()
+
+	log.Debug("proposeNewBlock", "currentBlockHeight", node.blockchain.CurrentBlock().ParentHash())
 
 	// fetch transactions from txpoll
 	pending, err := node.txPool.Pending()

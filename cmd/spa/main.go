@@ -39,6 +39,8 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/Sperax/SperaxChain/core"
@@ -199,15 +201,22 @@ func main() {
 					nodeConfig.Genesis = core.DefaultRopstenGenesisBlock()
 					nodeConfig.DatabaseDir = fmt.Sprintf("data/node%v", id)
 
-					_, err = node.New(h, consensusConfig, nodeConfig)
+					nodeInstance, err := node.New(h, consensusConfig, nodeConfig)
 					if err != nil {
 						log.Debug("node.New", err)
 					}
 
-					// TODO:
-					// tx loop
-
-					select {}
+					// Prepare for graceful shutdown from os signals
+					osSignal := make(chan os.Signal)
+					signal.Notify(osSignal, os.Interrupt, syscall.SIGTERM)
+					for sig := range osSignal {
+						if sig == syscall.SIGTERM || sig == os.Interrupt {
+							log.Debug("Node close", "signal", sig)
+							nodeInstance.Close()
+							return nil
+						}
+					}
+					return nil
 				},
 			},
 		},
