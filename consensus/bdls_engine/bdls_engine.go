@@ -83,7 +83,10 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 	// step 1. Get the SealHash(without Decision field) of this header
 	sealHash := e.SealHash(header).Bytes()
 
-	// step 2. create a consensus object to validate this message
+	// step 2. create a consensus object to validate this message at the correct height
+	config := *e.consensusConfig
+	config.CurrentHeight = header.Number.Uint64()
+
 	consensus, err := bdls.NewConsensus(e.consensusConfig)
 	if err != nil {
 		log.Error("new consensus:", err)
@@ -109,18 +112,12 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		log.Error("seal hash mismatch:", message.State, sealHash)
 	}
 
-	/*
-		// step 4. validate decide message integrity
-		err = consensus.ValidateDecideMessage(header.Decision)
-		if err != nil {
-			log.Error("validate decideMessage", err, header.Decision)
-
-			fmt.Println("########validate:", err, header.Decision)
-			log.Debug("header:", fmt.Sprintf("%#v", header))
-			return err
-		}
-	*/
-	_ = consensus
+	// step 4. validate decide message integrity
+	err = consensus.ValidateDecideMessage(header.Decision)
+	if err != nil {
+		log.Debug("VerifySeal", "ValidateDecideMessage", err, "Message", message)
+		return err
+	}
 
 	return nil
 }

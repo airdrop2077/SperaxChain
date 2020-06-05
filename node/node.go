@@ -265,7 +265,12 @@ func (node *Node) consensusMessenger() {
 			if ok {
 				// seal the block with proof
 				header := value.(*types.Block).Header()
-				header.Decision = msg.Data // store the the proof in block header
+				bts, err := node.consensus.CurrentProof().Marshal()
+				if err != nil {
+					log.Crit("consensusMessenger", "consensus.CurrentProof", err)
+					panic(err)
+				}
+				header.Decision = bts // store the the proof in block header
 				finalized := value.(*types.Block).WithSeal(header)
 
 				// broadcast this block
