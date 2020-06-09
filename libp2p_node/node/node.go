@@ -6,18 +6,18 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus/bdls_engine"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/rawdb"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/core/vm"
-	"github.com/Sperax/SperaxChain/p2p"
-	"github.com/Sperax/SperaxChain/worker"
-	"github.com/Sperax/bdls"
-	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/libp2p_node/p2p"
+	"github.com/Sperax/SperaxChain/libp2p_node/worker"
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/params"
 	"github.com/Sperax/SperaxChain/rlp"
+	"github.com/Sperax/bdls"
 	proto "github.com/golang/protobuf/proto"
 	lru "github.com/hashicorp/golang-lru"
 	libp2p_pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -108,9 +108,6 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 		log.Debug("setup genensis block", "config", chainConfig, "genesis", genesisHash)
 	}
 
-	// init blockchain & worker verifier engine
-	consensusEngine := bdls_engine.NewBDLSEngine(consensusConfig)
-
 	// cache config
 	cacheConfig := &core.CacheConfig{
 		TrieCleanLimit:      config.TrieCleanCache,
@@ -129,7 +126,7 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 	}
 
 	// init blockchain
-	node.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis.Config, consensusEngine, vmConfig, nil, &config.TxLookupLimit)
+	node.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis.Config, bdls_engine.New(), vmConfig, nil, &config.TxLookupLimit)
 	if err != nil {
 		log.Debug("new node", "core.NewBlockChain", err)
 		return nil, err
@@ -140,7 +137,7 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 	node.txPool = core.NewTxPool(txPoolConfig, config.Genesis.Config, node.blockchain)
 
 	// init worker
-	node.worker = worker.New(config.Genesis.Config, node.blockchain, consensusEngine)
+	node.worker = worker.New(config.Genesis.Config, node.blockchain, bdls_engine.New())
 
 	// kick off consensus updater
 	node.consensusUpdater()
