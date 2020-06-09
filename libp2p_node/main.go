@@ -44,10 +44,10 @@ import (
 	"time"
 
 	"github.com/Sperax/SperaxChain/core"
-	"github.com/Sperax/SperaxChain/node"
-	"github.com/Sperax/SperaxChain/p2p"
-	"github.com/Sperax/bdls"
+	"github.com/Sperax/SperaxChain/libp2p_node/node"
+	"github.com/Sperax/SperaxChain/libp2p_node/p2p"
 	"github.com/Sperax/SperaxChain/log"
+	"github.com/Sperax/bdls"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/urfave/cli/v2"
 )

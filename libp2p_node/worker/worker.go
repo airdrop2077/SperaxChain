@@ -4,12 +4,12 @@ import (
 	"log"
 	"time"
 
+	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/core/vm"
-	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/params"
 	"github.com/pkg/errors"
 )
@@ -172,7 +172,7 @@ func (w *Worker) CommitTransactions(pending map[common.Address]types.Transaction
 func (w *Worker) FinalizeNewBlock() (*types.Block, error) {
 	state := w.current.state.Copy()
 	copyHeader := types.CopyHeader(w.current.header)
-	block, err := w.engine.FinalizeAndAssemble(w.chain, copyHeader, state, w.current.txs, nil, w.current.receipts)
+	block, err := w.engine.FinalizeAndAssemble(w.chain, copyHeader, state, w.current.txs, w.current.receipts)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot finalize block")
 	}
