@@ -25,7 +25,7 @@ import (
 	"github.com/Sperax/SperaxChain/core/rawdb"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/common"
-	"github.com/Sperax/SperaxChain/consensus/ethash"
+	""
 	"github.com/Sperax/SperaxChain/crypto"
 	"github.com/Sperax/SperaxChain/params"
 )

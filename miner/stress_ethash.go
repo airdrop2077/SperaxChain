@@ -31,7 +31,7 @@ import (
 	"github.com/Sperax/SperaxChain/accounts/keystore"
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/common/fdlimit"
-	"github.com/Sperax/SperaxChain/consensus/ethash"
+	""
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/crypto"

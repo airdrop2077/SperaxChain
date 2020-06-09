@@ -24,7 +24,7 @@ import (
 	"strings"
 
 	"github.com/Sperax/SperaxChain/cmd/utils"
-	"github.com/Sperax/SperaxChain/consensus/ethash"
+	""
 	"github.com/Sperax/SperaxChain/eth"
 	"github.com/Sperax/SperaxChain/params"
 	"gopkg.in/urfave/cli.v1"

@@ -32,7 +32,7 @@ import (
 	"github.com/Sperax/SperaxChain/accounts/abi/bind/backends"
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/common/mclock"
-	"github.com/Sperax/SperaxChain/consensus/ethash"
+	""
 	"github.com/Sperax/SperaxChain/contracts/checkpointoracle/contract"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/rawdb"

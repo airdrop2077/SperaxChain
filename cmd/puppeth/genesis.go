@@ -25,7 +25,7 @@ import (
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/common/hexutil"
 	math2 "github.com/Sperax/SperaxChain/common/math"
-	"github.com/Sperax/SperaxChain/consensus/ethash"
+	""
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/params"

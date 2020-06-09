@@ -28,7 +28,6 @@ import (
 
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
-	"github.com/Sperax/SperaxChain/consensus/ethash"
 	"github.com/Sperax/SperaxChain/core/rawdb"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
@@ -36,6 +35,7 @@ import (
 	"github.com/Sperax/SperaxChain/crypto"
 	"github.com/Sperax/SperaxChain/ethdb"
 	"github.com/Sperax/SperaxChain/params"
+	"github.com/ethereum/go-ethereum/consensus/ethash"
 )
 
 // So we can deterministically seed different blockchains

@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/Sperax/SperaxChain/common"
-	"github.com/Sperax/SperaxChain/consensus/ethash"
+	""
 	"github.com/Sperax/SperaxChain/console/prompt"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/eth"

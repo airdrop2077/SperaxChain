@@ -20,10 +20,10 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/Sperax/SperaxChain/consensus/ethash"
 	"github.com/Sperax/SperaxChain/core/rawdb"
 	"github.com/Sperax/SperaxChain/core/vm"
 	"github.com/Sperax/SperaxChain/params"
+	"github.com/ethereum/go-ethereum/consensus/ethash"
 )
 
 // Tests that DAO-fork enabled clients can properly filter out fork-commencing

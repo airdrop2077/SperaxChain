@@ -24,7 +24,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	mapset "github.com/deckarep/golang-set"
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/consensus/misc"
@@ -34,6 +33,7 @@ import (
 	"github.com/Sperax/SperaxChain/event"
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/params"
+	mapset "github.com/deckarep/golang-set"
 )
 
 const (
@@ -707,7 +707,6 @@ func (w *worker) updateSnapshot() {
 	w.snapshotBlock = types.NewBlock(
 		w.current.header,
 		w.current.txs,
-		uncles,
 		w.current.receipts,
 	)
 

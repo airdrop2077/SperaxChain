@@ -27,7 +27,6 @@ import (
 
 	ethereum "github.com/Sperax/SperaxChain"
 	"github.com/Sperax/SperaxChain/common"
-	"github.com/Sperax/SperaxChain/consensus/ethash"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/bloombits"
 	"github.com/Sperax/SperaxChain/core/rawdb"
@@ -36,6 +35,7 @@ import (
 	"github.com/Sperax/SperaxChain/event"
 	"github.com/Sperax/SperaxChain/params"
 	"github.com/Sperax/SperaxChain/rpc"
+	"github.com/ethereum/go-ethereum/consensus/ethash"
 )
 
 type testBackend struct {

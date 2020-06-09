@@ -21,7 +21,7 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/Sperax/SperaxChain"
+	ethereum "github.com/Sperax/SperaxChain"
 	"github.com/Sperax/SperaxChain/accounts"
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/common/hexutil"

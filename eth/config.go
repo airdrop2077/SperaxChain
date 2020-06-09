@@ -20,12 +20,9 @@ import (
 	"math/big"
 	"os"
 	"os/user"
-	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/Sperax/SperaxChain/common"
-	"github.com/Sperax/SperaxChain/consensus/ethash"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/eth/downloader"
 	"github.com/Sperax/SperaxChain/eth/gasprice"
@@ -35,16 +32,7 @@ import (
 
 // DefaultConfig contains default settings for use on the Ethereum main net.
 var DefaultConfig = Config{
-	SyncMode: downloader.FastSync,
-	Ethash: ethash.Config{
-		CacheDir:         "ethash",
-		CachesInMem:      2,
-		CachesOnDisk:     3,
-		CachesLockMmap:   false,
-		DatasetsInMem:    1,
-		DatasetsOnDisk:   2,
-		DatasetsLockMmap: false,
-	},
+	SyncMode:           downloader.FastSync,
 	NetworkId:          1,
 	LightPeers:         100,
 	UltraLightFraction: 75,
@@ -72,18 +60,6 @@ func init() {
 		if user, err := user.Current(); err == nil {
 			home = user.HomeDir
 		}
-	}
-	if runtime.GOOS == "darwin" {
-		DefaultConfig.Ethash.DatasetDir = filepath.Join(home, "Library", "Ethash")
-	} else if runtime.GOOS == "windows" {
-		localappdata := os.Getenv("LOCALAPPDATA")
-		if localappdata != "" {
-			DefaultConfig.Ethash.DatasetDir = filepath.Join(localappdata, "Ethash")
-		} else {
-			DefaultConfig.Ethash.DatasetDir = filepath.Join(home, "AppData", "Local", "Ethash")
-		}
-	} else {
-		DefaultConfig.Ethash.DatasetDir = filepath.Join(home, ".ethash")
 	}
 }
 
@@ -134,9 +110,6 @@ type Config struct {
 
 	// Mining options
 	Miner miner.Config
-
-	// Ethash options
-	Ethash ethash.Config
 
 	// Transaction pool options
 	TxPool core.TxPoolConfig
