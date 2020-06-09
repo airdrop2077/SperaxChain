@@ -107,7 +107,8 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		CurrentHeight: header.Number.Uint64() - 1,
 	}
 
-	// TODO: set the participants from previous blocks
+	// TODO: to set the participants from previous blocks?
+	// currently it's fixed
 	config.Participants = e.fixedPj
 
 	consensus, err := bdls.NewConsensus(config)
