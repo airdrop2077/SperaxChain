@@ -21,8 +21,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/mclock"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/common/mclock"
 )
 
 func TestTopicRadius(t *testing.T) {

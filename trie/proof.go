@@ -21,11 +21,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/ethereum/go-ethereum/ethdb/memorydb"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/ethdb"
+	"github.com/Sperax/SperaxChain/ethdb/memorydb"
+	"github.com/Sperax/SperaxChain/log"
+	"github.com/Sperax/SperaxChain/rlp"
 )
 
 // Prove constructs a merkle proof for key. The result contains all encoded nodes

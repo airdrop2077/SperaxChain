@@ -22,7 +22,7 @@ import (
 	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/core/vm"
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/Sperax/SperaxChain/common"
 )
 
 // ChainContext supports retrieving headers and consensus parameters from the

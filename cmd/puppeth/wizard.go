@@ -31,9 +31,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/log"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/core"
+	"github.com/Sperax/SperaxChain/log"
 	"golang.org/x/crypto/ssh/terminal"
 )
 

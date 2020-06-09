@@ -19,15 +19,15 @@ package main
 import (
 	"strconv"
 
-	"github.com/ethereum/go-ethereum/accounts"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/accounts/external"
-	"github.com/ethereum/go-ethereum/cmd/utils"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/contracts/checkpointoracle"
-	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/Sperax/SperaxChain/accounts"
+	"github.com/Sperax/SperaxChain/accounts/abi/bind"
+	"github.com/Sperax/SperaxChain/accounts/external"
+	"github.com/Sperax/SperaxChain/cmd/utils"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/contracts/checkpointoracle"
+	"github.com/Sperax/SperaxChain/ethclient"
+	"github.com/Sperax/SperaxChain/params"
+	"github.com/Sperax/SperaxChain/rpc"
 	"gopkg.in/urfave/cli.v1"
 )
 

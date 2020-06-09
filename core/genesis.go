@@ -28,14 +28,14 @@ import (
 	"github.com/Sperax/SperaxChain/core/rawdb"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/common/math"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/common/hexutil"
+	"github.com/Sperax/SperaxChain/common/math"
+	"github.com/Sperax/SperaxChain/crypto"
+	"github.com/Sperax/SperaxChain/ethdb"
+	"github.com/Sperax/SperaxChain/log"
+	"github.com/Sperax/SperaxChain/params"
+	"github.com/Sperax/SperaxChain/rlp"
 )
 
 //go:generate gencodec -type Genesis -field-override genesisSpecMarshaling -out gen_genesis.go

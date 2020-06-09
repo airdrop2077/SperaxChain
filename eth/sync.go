@@ -22,12 +22,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/rawdb"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/eth/downloader"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/core/rawdb"
+	"github.com/Sperax/SperaxChain/core/types"
+	"github.com/Sperax/SperaxChain/eth/downloader"
+	"github.com/Sperax/SperaxChain/log"
+	"github.com/Sperax/SperaxChain/p2p/enode"
 )
 
 const (

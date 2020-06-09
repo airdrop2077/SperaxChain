@@ -21,10 +21,10 @@ import (
 	"net"
 	"time"
 
-	"github.com/ethereum/go-ethereum/core/forkid"
-	"github.com/ethereum/go-ethereum/p2p/enr"
-	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/Sperax/SperaxChain/core/forkid"
+	"github.com/Sperax/SperaxChain/p2p/enr"
+	"github.com/Sperax/SperaxChain/params"
+	"github.com/Sperax/SperaxChain/rlp"
 	"gopkg.in/urfave/cli.v1"
 )
 

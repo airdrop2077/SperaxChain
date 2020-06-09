@@ -20,9 +20,9 @@ import (
 	"hash"
 	"sync/atomic"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/math"
-	"github.com/ethereum/go-ethereum/log"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/common/math"
+	"github.com/Sperax/SperaxChain/log"
 )
 
 // Config are the configuration options for the Interpreter

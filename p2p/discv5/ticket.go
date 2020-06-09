@@ -24,10 +24,10 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/mclock"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/log"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/common/mclock"
+	"github.com/Sperax/SperaxChain/crypto"
+	"github.com/Sperax/SperaxChain/log"
 )
 
 const (

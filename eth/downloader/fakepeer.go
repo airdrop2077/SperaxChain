@@ -19,11 +19,11 @@ package downloader
 import (
 	"math/big"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/rawdb"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/core"
+	"github.com/Sperax/SperaxChain/core/rawdb"
+	"github.com/Sperax/SperaxChain/core/types"
+	"github.com/Sperax/SperaxChain/ethdb"
 )
 
 // FakePeer is a mock downloader peer that operates on a local database instance

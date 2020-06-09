@@ -23,12 +23,12 @@ import (
 	"encoding/binary"
 	"sync/atomic"
 
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/contracts/checkpointoracle"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/params"
+	"github.com/Sperax/SperaxChain/accounts/abi/bind"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/contracts/checkpointoracle"
+	"github.com/Sperax/SperaxChain/crypto"
+	"github.com/Sperax/SperaxChain/log"
+	"github.com/Sperax/SperaxChain/params"
 )
 
 // CheckpointOracle is responsible for offering the latest stable checkpoint

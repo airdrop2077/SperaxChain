@@ -23,7 +23,7 @@ import (
 	"strings"
 
 	"github.com/Sperax/SperaxChain/core/vm"
-	"github.com/ethereum/go-ethereum/common/math"
+	"github.com/Sperax/SperaxChain/common/math"
 )
 
 // Compiler contains information about the parsed source

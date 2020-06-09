@@ -25,16 +25,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/consensus/ethash"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/rawdb"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/eth"
-	"github.com/ethereum/go-ethereum/node"
-	"github.com/ethereum/go-ethereum/params"
+	"github.com/Sperax/SperaxChain"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/consensus/ethash"
+	"github.com/Sperax/SperaxChain/core"
+	"github.com/Sperax/SperaxChain/core/rawdb"
+	"github.com/Sperax/SperaxChain/core/types"
+	"github.com/Sperax/SperaxChain/crypto"
+	"github.com/Sperax/SperaxChain/eth"
+	"github.com/Sperax/SperaxChain/node"
+	"github.com/Sperax/SperaxChain/params"
 )
 
 // Verify that Client implements the ethereum interfaces.

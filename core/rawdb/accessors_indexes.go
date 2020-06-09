@@ -20,11 +20,11 @@ import (
 	"math/big"
 
 	"github.com/Sperax/SperaxChain/core/types"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/ethdb"
+	"github.com/Sperax/SperaxChain/log"
+	"github.com/Sperax/SperaxChain/params"
+	"github.com/Sperax/SperaxChain/rlp"
 )
 
 // ReadTxLookupEntry retrieves the positional metadata associated with a transaction

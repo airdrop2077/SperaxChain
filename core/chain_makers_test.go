@@ -20,12 +20,12 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/ethereum/go-ethereum/consensus/ethash"
-	"github.com/ethereum/go-ethereum/core/rawdb"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/params"
+	"github.com/Sperax/SperaxChain/consensus/ethash"
+	"github.com/Sperax/SperaxChain/core/rawdb"
+	"github.com/Sperax/SperaxChain/core/types"
+	"github.com/Sperax/SperaxChain/core/vm"
+	"github.com/Sperax/SperaxChain/crypto"
+	"github.com/Sperax/SperaxChain/params"
 )
 
 func ExampleGenerateChain() {

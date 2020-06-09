@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/rpc"
 )
 
 func TestUnmarshalJSONNewFilterArgs(t *testing.T) {

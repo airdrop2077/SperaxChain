@@ -17,12 +17,12 @@
 package eth
 
 import (
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/forkid"
-	"github.com/ethereum/go-ethereum/p2p"
-	"github.com/ethereum/go-ethereum/p2p/dnsdisc"
-	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/Sperax/SperaxChain/core"
+	"github.com/Sperax/SperaxChain/core/forkid"
+	"github.com/Sperax/SperaxChain/p2p"
+	"github.com/Sperax/SperaxChain/p2p/dnsdisc"
+	"github.com/Sperax/SperaxChain/p2p/enode"
+	"github.com/Sperax/SperaxChain/rlp"
 )
 
 // ethEntry is the "eth" ENR entry which advertises eth protocol

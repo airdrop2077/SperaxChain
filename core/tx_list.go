@@ -23,8 +23,8 @@ import (
 	"sort"
 
 	"github.com/Sperax/SperaxChain/core/types"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/log"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/log"
 )
 
 // nonceHeap is a heap.Interface implementation over 64bit unsigned integers for

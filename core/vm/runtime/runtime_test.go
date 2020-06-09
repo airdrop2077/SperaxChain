@@ -21,15 +21,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/consensus"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/rawdb"
-	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/params"
+	"github.com/Sperax/SperaxChain/accounts/abi"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/consensus"
+	"github.com/Sperax/SperaxChain/core"
+	"github.com/Sperax/SperaxChain/core/rawdb"
+	"github.com/Sperax/SperaxChain/core/state"
+	"github.com/Sperax/SperaxChain/core/types"
+	"github.com/Sperax/SperaxChain/core/vm"
+	"github.com/Sperax/SperaxChain/params"
 )
 
 func TestDefaults(t *testing.T) {

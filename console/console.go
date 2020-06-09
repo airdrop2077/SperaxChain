@@ -29,11 +29,11 @@ import (
 	"syscall"
 
 	"github.com/dop251/goja"
-	"github.com/ethereum/go-ethereum/console/prompt"
-	"github.com/ethereum/go-ethereum/internal/jsre"
-	"github.com/ethereum/go-ethereum/internal/jsre/deps"
-	"github.com/ethereum/go-ethereum/internal/web3ext"
-	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/Sperax/SperaxChain/console/prompt"
+	"github.com/Sperax/SperaxChain/internal/jsre"
+	"github.com/Sperax/SperaxChain/internal/jsre/deps"
+	"github.com/Sperax/SperaxChain/internal/web3ext"
+	"github.com/Sperax/SperaxChain/rpc"
 	"github.com/mattn/go-colorable"
 	"github.com/peterh/liner"
 )

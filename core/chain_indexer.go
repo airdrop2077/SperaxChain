@@ -26,10 +26,10 @@ import (
 
 	"github.com/Sperax/SperaxChain/core/rawdb"
 	"github.com/Sperax/SperaxChain/core/types"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/ethereum/go-ethereum/event"
-	"github.com/ethereum/go-ethereum/log"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/ethdb"
+	"github.com/Sperax/SperaxChain/event"
+	"github.com/Sperax/SperaxChain/log"
 )
 
 // ChainIndexerBackend defines the methods needed to process chain segments in

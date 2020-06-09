@@ -19,9 +19,9 @@ package types
 import (
 	"bytes"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/ethereum/go-ethereum/trie"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/rlp"
+	"github.com/Sperax/SperaxChain/trie"
 )
 
 type DerivableList interface {

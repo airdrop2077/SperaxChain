@@ -23,11 +23,11 @@ import (
 	"io"
 	"math/big"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
-	lpc "github.com/ethereum/go-ethereum/les/lespay/client"
-	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/crypto"
+	lpc "github.com/Sperax/SperaxChain/les/lespay/client"
+	"github.com/Sperax/SperaxChain/p2p/enode"
+	"github.com/Sperax/SperaxChain/rlp"
 )
 
 // Constants to match up protocol versions and messages

@@ -20,9 +20,9 @@ import (
 	"math/big"
 
 	"github.com/Sperax/SperaxChain/core/types"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/math"
-	"github.com/ethereum/go-ethereum/params"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/common/math"
+	"github.com/Sperax/SperaxChain/params"
 	"golang.org/x/crypto/sha3"
 )
 

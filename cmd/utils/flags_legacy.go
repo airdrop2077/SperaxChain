@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ethereum/go-ethereum/eth"
-	"github.com/ethereum/go-ethereum/node"
+	"github.com/Sperax/SperaxChain/eth"
+	"github.com/Sperax/SperaxChain/node"
 	"gopkg.in/urfave/cli.v1"
 )
 

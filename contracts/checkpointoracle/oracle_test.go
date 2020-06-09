@@ -27,13 +27,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind/backends"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/contracts/checkpointoracle/contract"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/params"
+	"github.com/Sperax/SperaxChain/accounts/abi/bind"
+	"github.com/Sperax/SperaxChain/accounts/abi/bind/backends"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/contracts/checkpointoracle/contract"
+	"github.com/Sperax/SperaxChain/core"
+	"github.com/Sperax/SperaxChain/crypto"
+	"github.com/Sperax/SperaxChain/params"
 )
 
 var (

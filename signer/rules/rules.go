@@ -23,11 +23,11 @@ import (
 	"strings"
 
 	"github.com/dop251/goja"
-	"github.com/ethereum/go-ethereum/internal/ethapi"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/signer/core"
-	"github.com/ethereum/go-ethereum/signer/rules/deps"
-	"github.com/ethereum/go-ethereum/signer/storage"
+	"github.com/Sperax/SperaxChain/internal/ethapi"
+	"github.com/Sperax/SperaxChain/log"
+	"github.com/Sperax/SperaxChain/signer/core"
+	"github.com/Sperax/SperaxChain/signer/rules/deps"
+	"github.com/Sperax/SperaxChain/signer/storage"
 )
 
 var (

@@ -21,8 +21,8 @@ import (
 	"math/big"
 
 	"github.com/Sperax/SperaxChain/core/vm"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/params"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/params"
 )
 
 /*

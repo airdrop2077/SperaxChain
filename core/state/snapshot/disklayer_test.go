@@ -23,11 +23,11 @@ import (
 	"testing"
 
 	"github.com/VictoriaMetrics/fastcache"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/rawdb"
-	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/ethereum/go-ethereum/ethdb/leveldb"
-	"github.com/ethereum/go-ethereum/ethdb/memorydb"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/core/rawdb"
+	"github.com/Sperax/SperaxChain/ethdb"
+	"github.com/Sperax/SperaxChain/ethdb/leveldb"
+	"github.com/Sperax/SperaxChain/ethdb/memorydb"
 )
 
 // reverse reverses the contents of a byte slice. It's used to update random accs

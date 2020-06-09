@@ -23,9 +23,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ethereum/go-ethereum/accounts"
-	"github.com/ethereum/go-ethereum/event"
-	"github.com/ethereum/go-ethereum/log"
+	"github.com/Sperax/SperaxChain/accounts"
+	"github.com/Sperax/SperaxChain/event"
+	"github.com/Sperax/SperaxChain/log"
 	"github.com/karalabe/usb"
 )
 

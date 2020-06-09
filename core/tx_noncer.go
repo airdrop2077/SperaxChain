@@ -20,7 +20,7 @@ import (
 	"sync"
 
 	"github.com/Sperax/SperaxChain/core/state"
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/Sperax/SperaxChain/common"
 )
 
 // txNoncer is a tiny virtual state database to manage the executable nonces of

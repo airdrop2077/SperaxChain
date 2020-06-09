@@ -19,9 +19,9 @@ package core
 import (
 	"context"
 
-	"github.com/ethereum/go-ethereum/internal/ethapi"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/Sperax/SperaxChain/internal/ethapi"
+	"github.com/Sperax/SperaxChain/log"
+	"github.com/Sperax/SperaxChain/rpc"
 )
 
 type StdIOUI struct {

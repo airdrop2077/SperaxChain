@@ -30,8 +30,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/accounts/keystore"
-	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/Sperax/SperaxChain/accounts/keystore"
+	"github.com/Sperax/SperaxChain/core/types"
 )
 
 // Tests that the account management snippets work correctly.

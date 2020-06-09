@@ -47,7 +47,7 @@ import (
 	"github.com/Sperax/SperaxChain/node"
 	"github.com/Sperax/SperaxChain/p2p"
 	"github.com/Sperax/bdls"
-	"github.com/ethereum/go-ethereum/log"
+	"github.com/Sperax/SperaxChain/log"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/urfave/cli/v2"
 )

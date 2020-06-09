@@ -26,14 +26,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/consensus/ethash"
-	"github.com/ethereum/go-ethereum/console/prompt"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/eth"
-	"github.com/ethereum/go-ethereum/internal/jsre"
-	"github.com/ethereum/go-ethereum/miner"
-	"github.com/ethereum/go-ethereum/node"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/consensus/ethash"
+	"github.com/Sperax/SperaxChain/console/prompt"
+	"github.com/Sperax/SperaxChain/core"
+	"github.com/Sperax/SperaxChain/eth"
+	"github.com/Sperax/SperaxChain/internal/jsre"
+	"github.com/Sperax/SperaxChain/miner"
+	"github.com/Sperax/SperaxChain/node"
 )
 
 const (

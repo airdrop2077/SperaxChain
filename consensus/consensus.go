@@ -22,9 +22,9 @@ import (
 
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/params"
+	"github.com/Sperax/SperaxChain/rpc"
 )
 
 // ChainReader defines a small collection of methods needed to access the local

@@ -20,8 +20,8 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/ethdb"
 )
 
 // Tests that the node iterator indeed walks over the entire database contents.

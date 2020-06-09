@@ -24,13 +24,13 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/consensus/ethash"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/eth/downloader"
-	"github.com/ethereum/go-ethereum/eth/gasprice"
-	"github.com/ethereum/go-ethereum/miner"
-	"github.com/ethereum/go-ethereum/params"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/consensus/ethash"
+	"github.com/Sperax/SperaxChain/core"
+	"github.com/Sperax/SperaxChain/eth/downloader"
+	"github.com/Sperax/SperaxChain/eth/gasprice"
+	"github.com/Sperax/SperaxChain/miner"
+	"github.com/Sperax/SperaxChain/params"
 )
 
 // DefaultConfig contains default settings for use on the Ethereum main net.

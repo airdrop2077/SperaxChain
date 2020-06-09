@@ -22,7 +22,7 @@ import (
 	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
-	"github.com/ethereum/go-ethereum/params"
+	"github.com/Sperax/SperaxChain/params"
 )
 
 // BlockValidator is responsible for validating block headers, uncles and

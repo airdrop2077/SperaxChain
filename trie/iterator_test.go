@@ -22,8 +22,8 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethdb/memorydb"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/ethdb/memorydb"
 )
 
 func TestIterator(t *testing.T) {

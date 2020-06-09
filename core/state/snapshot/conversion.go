@@ -22,11 +22,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethdb/memorydb"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/ethereum/go-ethereum/trie"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/ethdb/memorydb"
+	"github.com/Sperax/SperaxChain/log"
+	"github.com/Sperax/SperaxChain/rlp"
+	"github.com/Sperax/SperaxChain/trie"
 )
 
 // trieKV represents a trie key-value pair

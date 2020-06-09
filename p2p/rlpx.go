@@ -35,11 +35,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common/bitutil"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/crypto/ecies"
-	"github.com/ethereum/go-ethereum/metrics"
-	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/Sperax/SperaxChain/common/bitutil"
+	"github.com/Sperax/SperaxChain/crypto"
+	"github.com/Sperax/SperaxChain/crypto/ecies"
+	"github.com/Sperax/SperaxChain/metrics"
+	"github.com/Sperax/SperaxChain/rlp"
 	"github.com/golang/snappy"
 	"golang.org/x/crypto/sha3"
 )

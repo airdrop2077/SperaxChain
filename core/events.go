@@ -18,7 +18,7 @@ package core
 
 import (
 	"github.com/Sperax/SperaxChain/core/types"
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/Sperax/SperaxChain/common"
 )
 
 // NewTxsEvent is posted when a batch of transactions enter the transaction pool.

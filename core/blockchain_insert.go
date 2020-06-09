@@ -20,9 +20,9 @@ import (
 	"time"
 
 	"github.com/Sperax/SperaxChain/core/types"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/mclock"
-	"github.com/ethereum/go-ethereum/log"
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/common/mclock"
+	"github.com/Sperax/SperaxChain/log"
 )
 
 // insertStats tracks and reports on block insertion.
