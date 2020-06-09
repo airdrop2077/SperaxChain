@@ -2,6 +2,7 @@ package bdls_engine
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"errors"
 	"math/big"
 	"time"
@@ -17,7 +18,8 @@ import (
 )
 
 type BDLSEngine struct {
-	fake bool
+	fake    bool
+	fixedPj []*ecdsa.PublicKey
 }
 
 func New() *BDLSEngine {
@@ -29,6 +31,11 @@ func NewFaker() *BDLSEngine {
 	engine := new(BDLSEngine)
 	engine.fake = true
 	return engine
+}
+
+// SetFixedParticipants for testing
+func (e *BDLSEngine) SetFixedParticipants(participants []*ecdsa.PublicKey) {
+	e.fixedPj = participants
 }
 
 // Author retrieves the Ethereum address of the account that minted the given
@@ -82,16 +89,26 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 	if e.fake {
 		return nil
 	}
+
+	// step 0. Check decision field is not nil
+	if len(header.Decision) == 0 {
+		log.Debug("VerifySeal", "header.Decision", "decision field is nil")
+		return errors.New("decision field is nil")
+	}
 	// step 1. Get the SealHash(without Decision field) of this header
 	sealHash := e.SealHash(header).Bytes()
 
 	// step 2. create a consensus object to validate this message at the correct height
 	config := &bdls.Config{
 		Epoch:         time.Now(),
+		VerifierOnly:  true,
 		StateCompare:  func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
 		StateValidate: func(bdls.State) bool { return true },
 		CurrentHeight: header.Number.Uint64() - 1,
 	}
+
+	// TODO: set the participants from previous blocks
+	config.Participants = e.fixedPj
 
 	consensus, err := bdls.NewConsensus(config)
 	if err != nil {

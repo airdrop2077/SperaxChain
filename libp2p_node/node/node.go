@@ -126,7 +126,11 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 	}
 
 	// init blockchain
-	node.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis.Config, bdls_engine.New(), vmConfig, nil, &config.TxLookupLimit)
+	consensus := bdls_engine.New()
+	// set fixed participants
+	consensus.SetFixedParticipants(consensusConfig.Participants)
+
+	node.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis.Config, consensus, vmConfig, nil, &config.TxLookupLimit)
 	if err != nil {
 		log.Debug("new node", "core.NewBlockChain", err)
 		return nil, err
@@ -137,7 +141,7 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 	node.txPool = core.NewTxPool(txPoolConfig, config.Genesis.Config, node.blockchain)
 
 	// init worker
-	node.worker = worker.New(config.Genesis.Config, node.blockchain, bdls_engine.New())
+	node.worker = worker.New(config.Genesis.Config, node.blockchain, consensus)
 
 	// kick off consensus updater
 	node.consensusUpdater()
