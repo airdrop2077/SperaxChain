@@ -21,8 +21,8 @@ import (
 	"encoding/binary"
 	"math/big"
 
-	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/crypto"
 	"github.com/Sperax/SperaxChain/ethdb"
 	"github.com/Sperax/SperaxChain/log"
@@ -586,7 +586,7 @@ func ReadBlock(db ethdb.Reader, hash common.Hash, number uint64) *types.Block {
 	if body == nil {
 		return nil
 	}
-	return types.NewBlockWithHeader(header).WithBody(body.Transactions, body.Uncles)
+	return types.NewBlockWithHeader(header).WithBody(body.Transactions)
 }
 
 // WriteBlock serializes a block into the database, header and body separately.

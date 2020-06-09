@@ -27,13 +27,13 @@ import (
 	"time"
 
 	"github.com/Sperax/SperaxChain/common"
-	""
 	"github.com/Sperax/SperaxChain/console/prompt"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/eth"
 	"github.com/Sperax/SperaxChain/internal/jsre"
 	"github.com/Sperax/SperaxChain/miner"
 	"github.com/Sperax/SperaxChain/node"
+	"github.com/ethereum/go-ethereum/consensus/ethash"
 )
 
 const (

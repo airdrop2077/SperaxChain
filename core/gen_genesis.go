@@ -31,7 +31,6 @@ func (g Genesis) MarshalJSON() ([]byte, error) {
 	enc.Timestamp = g.Timestamp
 	enc.ExtraData = g.ExtraData
 	enc.GasLimit = g.GasLimit
-	enc.Difficulty = g.Difficulty
 	enc.Mixhash = g.Mixhash
 	enc.Coinbase = g.Coinbase
 	enc.Alloc = g.Alloc
@@ -73,10 +72,6 @@ func (g *Genesis) UnmarshalJSON(input []byte) error {
 		return errors.New("missing required field 'gasLimit' for Genesis")
 	}
 	g.GasLimit = *dec.GasLimit
-	if dec.Difficulty == nil {
-		return errors.New("missing required field 'difficulty' for Genesis")
-	}
-	g.Difficulty = dec.Difficulty
 	if dec.Mixhash != nil {
 		g.Mixhash = *dec.Mixhash
 	}

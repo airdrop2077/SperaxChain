@@ -198,7 +198,7 @@ func (lc *LightChain) ResetWithGenesisBlock(genesis *types.Block) {
 
 	// Prepare the genesis block and reinitialise the chain
 	batch := lc.chainDb.NewBatch()
-	rawdb.WriteTd(batch, genesis.Hash(), genesis.NumberU64(), genesis.Difficulty())
+	rawdb.WriteTd(batch, genesis.Hash(), genesis.NumberU64(), common.Big1)
 	rawdb.WriteBlock(batch, genesis)
 	rawdb.WriteHeadHeaderHash(batch, genesis.Hash())
 	if err := batch.Write(); err != nil {

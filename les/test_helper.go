@@ -32,7 +32,7 @@ import (
 	"github.com/Sperax/SperaxChain/accounts/abi/bind/backends"
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/common/mclock"
-	""
+	"github.com/Sperax/SperaxChain/consensus/bdls_engine"
 	"github.com/Sperax/SperaxChain/contracts/checkpointoracle/contract"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/rawdb"
@@ -171,7 +171,7 @@ func testIndexers(db ethdb.Database, odr light.OdrBackend, config *light.Indexer
 func newTestClientHandler(backend *backends.SimulatedBackend, odr *LesOdr, indexers []*core.ChainIndexer, db ethdb.Database, peers *serverPeerSet, ulcServers []string, ulcFraction int) *clientHandler {
 	var (
 		evmux  = new(event.TypeMux)
-		engine = ethash.NewFaker()
+		engine = bdls_engine.NewBDLSEngine(bdls_engine.FakerConfig)
 		gspec  = core.Genesis{
 			Config:   params.AllEthashProtocolChanges,
 			Alloc:    core.GenesisAlloc{bankAddr: {Balance: bankFunds}},

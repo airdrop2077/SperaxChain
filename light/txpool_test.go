@@ -24,12 +24,12 @@ import (
 	"time"
 
 	"github.com/Sperax/SperaxChain/common"
-	""
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/rawdb"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/core/vm"
 	"github.com/Sperax/SperaxChain/params"
+	"github.com/ethereum/go-ethereum/consensus/ethash"
 )
 
 type testTxRelay struct {

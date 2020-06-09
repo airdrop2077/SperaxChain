@@ -28,7 +28,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/elastic/gosigar"
 	"github.com/Sperax/SperaxChain/accounts"
 	"github.com/Sperax/SperaxChain/accounts/keystore"
 	"github.com/Sperax/SperaxChain/cmd/utils"
@@ -42,6 +41,7 @@ import (
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/metrics"
 	"github.com/Sperax/SperaxChain/node"
+	"github.com/elastic/gosigar"
 	cli "gopkg.in/urfave/cli.v1"
 )
 
@@ -69,14 +69,6 @@ var (
 		utils.ExternalSignerFlag,
 		utils.NoUSBFlag,
 		utils.SmartCardDaemonPathFlag,
-		utils.EthashCacheDirFlag,
-		utils.EthashCachesInMemoryFlag,
-		utils.EthashCachesOnDiskFlag,
-		utils.EthashCachesLockMmapFlag,
-		utils.EthashDatasetDirFlag,
-		utils.EthashDatasetsInMemoryFlag,
-		utils.EthashDatasetsOnDiskFlag,
-		utils.EthashDatasetsLockMmapFlag,
 		utils.TxPoolLocalsFlag,
 		utils.TxPoolNoLocalsFlag,
 		utils.TxPoolJournalFlag,
@@ -232,8 +224,6 @@ func init() {
 		attachCommand,
 		javascriptCommand,
 		// See misccmd.go:
-		makecacheCommand,
-		makedagCommand,
 		versionCommand,
 		licenseCommand,
 		// See config.go

@@ -1,18 +1,26 @@
 package bdls_engine
 
 import (
+	"bytes"
 	"errors"
 	"math/big"
+	"time"
 
+	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
-	"github.com/Sperax/bdls"
-	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/params"
 	"github.com/Sperax/SperaxChain/rpc"
+	"github.com/Sperax/bdls"
 )
+
+var FakerConfig = &bdls.Config{
+	Epoch:         time.Now(),
+	StateCompare:  func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
+	StateValidate: func(bdls.State) bool { return true },
+}
 
 type BDLSEngine struct {
 	consensusConfig *bdls.Config
@@ -112,7 +120,7 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 //
 // Note: The block header and state database might be updated to reflect any
 // consensus rules that happen at finalization (e.g. block rewards).
-func (e *BDLSEngine) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
+func (e *BDLSEngine) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction) {
 	accumulateRewards(chain.Config(), state, header)
 	header.Root = state.IntermediateRoot(true)
 }
@@ -122,7 +130,7 @@ func (e *BDLSEngine) Finalize(chain consensus.ChainReader, header *types.Header,
 //
 // Note: The block header and state database might be updated to reflect any
 // consensus rules that happen at finalization (e.g. block rewards).
-func (e *BDLSEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
+func (e *BDLSEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, receipts []*types.Receipt) (*types.Block, error) {
 	accumulateRewards(chain.Config(), state, header)
 	header.Root = state.IntermediateRoot(true)
 	return types.NewBlock(header, txs, receipts), nil

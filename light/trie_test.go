@@ -22,14 +22,14 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/davecgh/go-spew/spew"
-	""
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/rawdb"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/vm"
 	"github.com/Sperax/SperaxChain/params"
 	"github.com/Sperax/SperaxChain/trie"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/ethereum/go-ethereum/consensus/ethash"
 )
 
 func TestNodeIterator(t *testing.T) {
