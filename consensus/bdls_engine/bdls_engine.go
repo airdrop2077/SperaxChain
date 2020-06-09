@@ -16,19 +16,18 @@ import (
 	"github.com/Sperax/bdls"
 )
 
-var FakerConfig = &bdls.Config{
-	Epoch:         time.Now(),
-	StateCompare:  func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
-	StateValidate: func(bdls.State) bool { return true },
-}
-
 type BDLSEngine struct {
-	consensusConfig *bdls.Config
+	fake bool
 }
 
-func NewBDLSEngine(consensusConfig *bdls.Config) *BDLSEngine {
+func New() *BDLSEngine {
 	engine := new(BDLSEngine)
-	engine.consensusConfig = consensusConfig
+	return engine
+}
+
+func NewFaker() *BDLSEngine {
+	engine := new(BDLSEngine)
+	engine.fake = true
 	return engine
 }
 
@@ -77,12 +76,6 @@ func (e *BDLSEngine) VerifyHeaders(chain consensus.ChainReader, headers []*types
 	return abort, results
 }
 
-// VerifyUncles verifies that the given block's uncles conform to the consensus
-// rules of a given engine.
-func (e *BDLSEngine) VerifyUncles(chain consensus.ChainReader, block *types.Block) error {
-	return nil
-}
-
 // VerifySeal checks whether the crypto seal on a header is valid according to
 // the consensus rules of the given engine.
 func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Header) error {
@@ -90,10 +83,14 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 	sealHash := e.SealHash(header).Bytes()
 
 	// step 2. create a consensus object to validate this message at the correct height
-	config := *e.consensusConfig
-	config.CurrentHeight = header.Number.Uint64()
+	config := &bdls.Config{
+		Epoch:         time.Now(),
+		StateCompare:  func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
+		StateValidate: func(bdls.State) bool { return true },
+		CurrentHeight: header.Number.Uint64() - 1,
+	}
 
-	consensus, err := bdls.NewConsensus(e.consensusConfig)
+	consensus, err := bdls.NewConsensus(config)
 	if err != nil {
 		log.Error("new consensus:", err)
 		return err

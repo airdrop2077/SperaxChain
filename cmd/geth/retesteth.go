@@ -208,10 +208,6 @@ func (e *NoRewardEngine) VerifyHeaders(chain consensus.ChainReader, headers []*t
 	return e.inner.VerifyHeaders(chain, headers, seals)
 }
 
-func (e *NoRewardEngine) VerifyUncles(chain consensus.ChainReader, block *types.Block) error {
-	return e.inner.VerifyUncles(chain, block)
-}
-
 func (e *NoRewardEngine) VerifySeal(chain consensus.ChainReader, header *types.Header) error {
 	return e.inner.VerifySeal(chain, header)
 }
@@ -378,7 +374,7 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 
 	switch chainParams.SealEngine {
 	default:
-		inner = bdls_engine.NewBDLSEngine(bdls_engine.FakerConfig)
+		inner = bdls_engine.NewFaker()
 	}
 	engine := &NoRewardEngine{inner: inner, rewardsOn: chainParams.SealEngine != "NoReward"}
 
