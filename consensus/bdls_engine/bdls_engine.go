@@ -79,6 +79,9 @@ func (e *BDLSEngine) VerifyHeaders(chain consensus.ChainReader, headers []*types
 // VerifySeal checks whether the crypto seal on a header is valid according to
 // the consensus rules of the given engine.
 func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Header) error {
+	if e.fake {
+		return nil
+	}
 	// step 1. Get the SealHash(without Decision field) of this header
 	sealHash := e.SealHash(header).Bytes()
 
