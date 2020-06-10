@@ -70,8 +70,8 @@ const (
 	GetPooledTransactionsMsg      = 0x09
 	PooledTransactionsMsg         = 0x0a
 
-	// Consensus Extensions
-	ConsensusMsg = 0x20
+	// BDLS Consensus Extensions
+	BDLSConsensusMsg = 0x20
 )
 
 type errCode int

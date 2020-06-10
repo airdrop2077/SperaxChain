@@ -803,7 +803,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		pm.txFetcher.Enqueue(p.id, txs, msg.Code == PooledTransactionsMsg)
 
-	case msg.Code == ConsensusMsg: // Sperax Consensus Extension
+	case msg.Code == BDLSConsensusMsg: // Sperax Consensus Extension
 		// get consensus message bytes
 		msgStream := rlp.NewStream(msg.Payload, uint64(msg.Size))
 		bts, err := msgStream.Bytes()

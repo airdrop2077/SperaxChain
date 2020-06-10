@@ -499,7 +499,7 @@ func (p *peer) AsyncSendNewBlock(block *types.Block, td *big.Int) {
 
 // SendConsensus sends consensus messages bytes to the remote peer.
 func (p *peer) SendConsensusMsg(bts []byte) error {
-	return p2p.Send(p.rw, ConsensusMsg, bts)
+	return p2p.Send(p.rw, BDLSConsensusMsg, bts)
 }
 
 // SendBlockHeaders sends a batch of block headers to the remote peer.
