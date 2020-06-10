@@ -126,7 +126,7 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 	}
 
 	// init blockchain
-	consensus := bdls_engine.New(nil)
+	consensus := bdls_engine.New(consensusConfig.PrivateKey, nil)
 	// set fixed participants
 	consensus.SetParticipants(consensusConfig.Participants)
 

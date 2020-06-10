@@ -229,10 +229,13 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 
 	// step 5. create a consensus message subscriber's loop
 	go func() {
-		// subscribe to consensus message input
-		consensusSub := e.mux.Subscribe(ConsensusMessageInput{})
-		defer consensusSub.Unsubscribe()
-		consensusMessageChan := consensusSub.Chan()
+		// subscribe to consensus message input via event mux
+		var consensusMessageChan <-chan *event.TypeMuxEvent
+		if e.mux != nil {
+			consensusSub := e.mux.Subscribe(ConsensusMessageInput{})
+			defer consensusSub.Unsubscribe()
+			consensusMessageChan = consensusSub.Chan()
+		}
 
 		updateTick := time.NewTicker(20 * time.Millisecond)
 		for {
