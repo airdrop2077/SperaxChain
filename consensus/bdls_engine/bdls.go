@@ -1,6 +1,8 @@
 package bdls_engine
 
 import (
+	"errors"
+	"net"
 	"sync"
 	"time"
 
@@ -41,6 +43,67 @@ func (lc *BDLSConsensus) ReceiveMessage(bts []byte, now time.Time) error {
 		return lc.consensus.ReceiveMessage(bts, time.Now())
 	}
 	return nil
+}
+
+func (lc *BDLSConsensus) CurrentProof() *bdls.SignedProto {
+	lc.consensusMu.Lock()
+	defer lc.consensusMu.Unlock()
+	if lc.consensus != nil {
+		return lc.consensus.CurrentProof()
+	}
+	return nil
+}
+
+func (lc *BDLSConsensus) CurrentState() (height uint64, round uint64, data bdls.State) {
+	lc.consensusMu.Lock()
+	defer lc.consensusMu.Unlock()
+	if lc.consensus != nil {
+		return lc.consensus.CurrentState()
+	}
+	return 0, 0, nil
+}
+
+func (lc *BDLSConsensus) Join(p bdls.PeerInterface) bool {
+	lc.consensusMu.Lock()
+	defer lc.consensusMu.Unlock()
+	if lc.consensus != nil {
+		return lc.consensus.Join(p)
+	}
+	return false
+}
+
+func (lc *BDLSConsensus) Leave(addr net.Addr) bool {
+	lc.consensusMu.Lock()
+	defer lc.consensusMu.Unlock()
+	if lc.consensus != nil {
+		return lc.consensus.Leave(addr)
+	}
+	return false
+}
+
+func (lc *BDLSConsensus) Propose(s bdls.State) {
+	lc.consensusMu.Lock()
+	defer lc.consensusMu.Unlock()
+	if lc.consensus != nil {
+		lc.consensus.Propose(s)
+	}
+}
+
+func (lc *BDLSConsensus) SetLatency(latency time.Duration) {
+	lc.consensusMu.Lock()
+	defer lc.consensusMu.Unlock()
+	if lc.consensus != nil {
+		lc.consensus.SetLatency(latency)
+	}
+}
+
+func (lc *BDLSConsensus) ValidateDecideMessage(bts []byte, targetState []byte) error {
+	lc.consensusMu.Lock()
+	defer lc.consensusMu.Unlock()
+	if lc.consensus != nil {
+		return lc.consensus.ValidateDecideMessage(bts, targetState)
+	}
+	return errors.New("consensus not initialized")
 }
 
 func RLPHash(x interface{}) (h common.Hash) {
