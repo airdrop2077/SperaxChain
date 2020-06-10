@@ -86,6 +86,9 @@ type ProtocolManager struct {
 	txsSub        event.Subscription
 	minedBlockSub *event.TypeMuxSubscription
 
+	// consensus message subscription
+	consensusSub *event.TypeMuxSubscription
+
 	whitelist map[uint64]common.Hash
 
 	// channels for fetcher, syncer, txsyncLoop
@@ -98,10 +101,6 @@ type ProtocolManager struct {
 
 	// Test fields or hooks
 	broadcastTxAnnouncesOnly bool // Testing field, disable transaction propagation
-
-	// BDLSConsensus Extension
-	bdls     *bdls_engine.BDLSConsensus
-	bdlsLock sync.Mutex // set/replace lock
 }
 
 // NewProtocolManager returns a new Ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
@@ -268,6 +267,11 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	pm.wg.Add(1)
 	pm.minedBlockSub = pm.eventMux.Subscribe(core.NewMinedBlockEvent{})
 	go pm.minedBroadcastLoop()
+
+	// consensus message exchange
+	pm.wg.Add(1)
+	pm.consensusSub = pm.eventMux.Subscribe(bdls_engine.ConsensusMessageOutput{})
+	go pm.consensusBroadcastLoop()
 
 	// start sync handlers
 	pm.wg.Add(2)
@@ -812,23 +816,12 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		hash := bdls_engine.RLPHash(bts)
 		p.MarkConsensus(hash)
 
-		// receive to consensus core
-		pm.bdlsLock.Lock()
-		if pm.bdls != nil {
-			pm.bdls.ReceiveMessage(bts, time.Now())
-		}
-		pm.bdlsLock.Unlock()
+		// publish event to consensus core
+		pm.eventMux.Post(bdls_engine.ConsensusMessageInput(bts))
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 	}
 	return nil
-}
-
-// Set BDLS Consensus
-func (pm *ProtocolManager) SetBDLSConsensus(bdls *bdls_engine.BDLSConsensus) {
-	pm.bdlsLock.Lock()
-	defer pm.bdlsLock.Unlock()
-	pm.bdls = bdls
 }
 
 // BroadcastConsensusMsg broadcasts a consensus message to peers
@@ -914,6 +907,17 @@ func (pm *ProtocolManager) BroadcastTransactions(txs types.Transactions, propaga
 			peer.AsyncSendPooledTransactionHashes(hashes)
 		} else {
 			peer.AsyncSendTransactions(hashes)
+		}
+	}
+}
+
+// consensusBroadcastLoop sends consensus messages to connected peers.
+func (pm *ProtocolManager) consensusBroadcastLoop() {
+	defer pm.wg.Done()
+
+	for obj := range pm.consensusSub.Chan() {
+		if ev, ok := obj.Data.(bdls_engine.ConsensusMessageOutput); ok {
+			pm.BroadcastConsensusMsg(ev) // broadcast to peers
 		}
 	}
 }

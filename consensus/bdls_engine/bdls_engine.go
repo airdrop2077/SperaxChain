@@ -27,6 +27,10 @@ const (
 	MaxUnconfirmedBlocks = 1024
 )
 
+// For message exchange
+type ConsensusMessageOutput []byte
+type ConsensusMessageInput []byte
+
 // BDLSEngine implements blockchain consensus engine
 type BDLSEngine struct {
 	fake bool
