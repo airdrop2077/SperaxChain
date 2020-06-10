@@ -28,6 +28,7 @@ import (
 
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
+	"github.com/Sperax/SperaxChain/consensus/bdls_engine"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/forkid"
 	"github.com/Sperax/SperaxChain/core/types"
@@ -98,6 +99,9 @@ type ProtocolManager struct {
 	// Test fields or hooks
 	broadcastTxAnnouncesOnly bool // Testing field, disable transaction propagation
 
+	// BDLSConsensus Extension
+	bdls     *bdls_engine.BDLSConsensus
+	bdlsLock sync.Mutex // set/replace lock
 }
 
 // NewProtocolManager returns a new Ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
@@ -795,13 +799,51 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		pm.txFetcher.Enqueue(p.id, txs, msg.Code == PooledTransactionsMsg)
 
-		// Sperax Consensus Exntension
-	case msg.Code == ConsensusMsg:
+	case msg.Code == ConsensusMsg: // Sperax Consensus Extension
+		// get consensus message bytes
+		msgStream := rlp.NewStream(msg.Payload, uint64(msg.Size))
+		bts, err := msgStream.Bytes()
+		if err != nil {
+			log.Debug("Invalid Consensus Message", "msg", msg)
+			return err
+		}
 
+		// mark for propagation
+		hash := bdls_engine.RLPHash(bts)
+		p.MarkConsensus(hash)
+
+		// receive to consensus core
+		pm.bdlsLock.Lock()
+		if pm.bdls != nil {
+			pm.bdls.ReceiveMessage(bts, time.Now())
+		}
+		pm.bdlsLock.Unlock()
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 	}
 	return nil
+}
+
+// Set BDLS Consensus
+func (pm *ProtocolManager) SetBDLSConsensus(bdls *bdls_engine.BDLSConsensus) {
+	pm.bdlsLock.Lock()
+	defer pm.bdlsLock.Unlock()
+	pm.bdls = bdls
+}
+
+// BroadcastConsensusMsg broadcasts a consensus message to peers
+func (pm *ProtocolManager) BroadcastConsensusMsg(bts []byte) {
+	// bytes hash
+	hash := bdls_engine.RLPHash(bts)
+	peers := pm.peers.PeersWithoutConsensus(hash)
+	// Send the consensus to a subset of our peers
+	transfer := peers[:int(math.Sqrt(float64(len(peers))))]
+	for _, peer := range transfer {
+		peer.SendConsensusMsg(bts)
+	}
+	log.Trace("Propagated consensus", "hash", hash, "recipients", len(transfer))
+	return
+
 }
 
 // will only announce its availability (depending what's requested).

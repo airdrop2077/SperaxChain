@@ -23,12 +23,12 @@ import (
 	"sync"
 	"time"
 
-	mapset "github.com/deckarep/golang-set"
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/core/forkid"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/p2p"
 	"github.com/Sperax/SperaxChain/rlp"
+	mapset "github.com/deckarep/golang-set"
 )
 
 var (
@@ -38,8 +38,9 @@ var (
 )
 
 const (
-	maxKnownTxs    = 32768 // Maximum transactions hashes to keep in the known list (prevent DOS)
-	maxKnownBlocks = 1024  // Maximum block hashes to keep in the known list (prevent DOS)
+	maxKnownTxs       = 32768 // Maximum transactions hashes to keep in the known list (prevent DOS)
+	maxKnownBlocks    = 1024  // Maximum block hashes to keep in the known list (prevent DOS)
+	maxKnownConsensus = 1024  // Maximum consensus hashes to keep in the known list (prevent DOS)
 
 	// maxQueuedTxs is the maximum number of transactions to queue up before dropping
 	// older broadcasts.
@@ -101,6 +102,8 @@ type peer struct {
 	queuedBlocks    chan *propEvent   // Queue of blocks to broadcast to the peer
 	queuedBlockAnns chan *types.Block // Queue of blocks to announce to the peer
 
+	knownConsensusMsgs mapset.Set // BDLS Extension to track broadcasted consensus
+
 	knownTxs    mapset.Set                           // Set of transaction hashes known to be known by this peer
 	txBroadcast chan []common.Hash                   // Channel used to queue transaction propagation requests
 	txAnnounce  chan []common.Hash                   // Channel used to queue transaction announcement requests
@@ -111,18 +114,19 @@ type peer struct {
 
 func newPeer(version int, p *p2p.Peer, rw p2p.MsgReadWriter, getPooledTx func(hash common.Hash) *types.Transaction) *peer {
 	return &peer{
-		Peer:            p,
-		rw:              rw,
-		version:         version,
-		id:              fmt.Sprintf("%x", p.ID().Bytes()[:8]),
-		knownTxs:        mapset.NewSet(),
-		knownBlocks:     mapset.NewSet(),
-		queuedBlocks:    make(chan *propEvent, maxQueuedBlocks),
-		queuedBlockAnns: make(chan *types.Block, maxQueuedBlockAnns),
-		txBroadcast:     make(chan []common.Hash),
-		txAnnounce:      make(chan []common.Hash),
-		getPooledTx:     getPooledTx,
-		term:            make(chan struct{}),
+		Peer:               p,
+		rw:                 rw,
+		version:            version,
+		id:                 fmt.Sprintf("%x", p.ID().Bytes()[:8]),
+		knownTxs:           mapset.NewSet(),
+		knownBlocks:        mapset.NewSet(),
+		knownConsensusMsgs: mapset.NewSet(),
+		queuedBlocks:       make(chan *propEvent, maxQueuedBlocks),
+		queuedBlockAnns:    make(chan *types.Block, maxQueuedBlockAnns),
+		txBroadcast:        make(chan []common.Hash),
+		txAnnounce:         make(chan []common.Hash),
+		getPooledTx:        getPooledTx,
+		term:               make(chan struct{}),
 	}
 }
 
@@ -329,6 +333,16 @@ func (p *peer) MarkTransaction(hash common.Hash) {
 	p.knownTxs.Add(hash)
 }
 
+// MarkConsensus marks a consensus message as known for the peer, ensuring that it
+// will never be propagated to this particular peer.
+func (p *peer) MarkConsensus(hash common.Hash) {
+	// If we reached the memory allowance, drop a previously known transaction hash
+	for p.knownConsensusMsgs.Cardinality() >= maxKnownConsensus {
+		p.knownConsensusMsgs.Pop()
+	}
+	p.knownConsensusMsgs.Add(hash)
+}
+
 // SendTransactions64 sends transactions to the peer and includes the hashes
 // in its transaction hash set for future reference.
 //
@@ -481,6 +495,11 @@ func (p *peer) AsyncSendNewBlock(block *types.Block, td *big.Int) {
 	default:
 		p.Log().Debug("Dropping block propagation", "number", block.NumberU64(), "hash", block.Hash())
 	}
+}
+
+// SendConsensus sends consensus messages bytes to the remote peer.
+func (p *peer) SendConsensusMsg(bts []byte) error {
+	return p2p.Send(p.rw, ConsensusMsg, bts)
 }
 
 // SendBlockHeaders sends a batch of block headers to the remote peer.
@@ -756,6 +775,21 @@ func (ps *peerSet) Len() int {
 	defer ps.lock.RUnlock()
 
 	return len(ps.peers)
+}
+
+// PeersWithoutConsensus retrieves a list of peers that do not have a given consensus message in
+// their set of known hashes.
+func (ps *peerSet) PeersWithoutConsensus(hash common.Hash) []*peer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	list := make([]*peer, 0, len(ps.peers))
+	for _, p := range ps.peers {
+		if !p.knownConsensusMsgs.Contains(hash) {
+			list = append(list, p)
+		}
+	}
+	return list
 }
 
 // PeersWithoutBlock retrieves a list of peers that do not have a given block in
