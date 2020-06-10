@@ -69,6 +69,9 @@ const (
 	NewPooledTransactionHashesMsg = 0x08
 	GetPooledTransactionsMsg      = 0x09
 	PooledTransactionsMsg         = 0x0a
+
+	// Consensus Extensions
+	ConsensusMsg = 0x20
 )
 
 type errCode int
