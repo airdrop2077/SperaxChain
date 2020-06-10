@@ -86,7 +86,7 @@ type ProtocolManager struct {
 	txsSub        event.Subscription
 	minedBlockSub *event.TypeMuxSubscription
 
-	// consensus message subscription
+	// consensus output message subscription
 	consensusSub *event.TypeMuxSubscription
 
 	whitelist map[uint64]common.Hash

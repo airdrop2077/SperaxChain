@@ -5,7 +5,6 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"math/big"
-	"net"
 	"sync"
 	"time"
 
@@ -13,12 +12,12 @@ import (
 	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
+	"github.com/Sperax/SperaxChain/event"
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/params"
 	"github.com/Sperax/SperaxChain/rlp"
 	"github.com/Sperax/SperaxChain/rpc"
 	"github.com/Sperax/bdls"
-	"github.com/Sperax/bdls/timer"
 	lru "github.com/hashicorp/golang-lru"
 	"golang.org/x/crypto/sha3"
 )
@@ -28,12 +27,18 @@ const (
 )
 
 // For message exchange
-type ConsensusMessageOutput []byte
-type ConsensusMessageInput []byte
+type (
+	ConsensusMessageOutput []byte
+	ConsensusMessageInput  []byte
+	UnconfirmedBlock       struct{ Block *types.Block }
+)
 
 // BDLSEngine implements blockchain consensus engine
 type BDLSEngine struct {
 	fake bool
+
+	// event mux to send consensus message as events
+	mux *event.TypeMux
 
 	// private key to sign mesasges
 	privateKey *ecdsa.PrivateKey
@@ -41,125 +46,31 @@ type BDLSEngine struct {
 	// parameters adjustable at each height
 	participants []*ecdsa.PublicKey
 
-	// Currently working consensus
-	consensus   *bdls.Consensus
-	consensusMu sync.Mutex
-	// in-progress unconfirmed blocks
+	// consensus in-progress blocks
 	unconfirmedBlocks *lru.Cache
-	// local proposed block
-	proposedBlock *types.Block
 
-	// global lock
-	mu sync.Mutex
+	// Currently working consensus
+	consensusMu sync.Mutex
 }
 
-func New(privateKey *ecdsa.PrivateKey) *BDLSEngine {
+func New(privateKey *ecdsa.PrivateKey, mux *event.TypeMux) *BDLSEngine {
 	engine := new(BDLSEngine)
-	unconfirmed, err := lru.New(MaxUnconfirmedBlocks)
+	engine.mux = mux
+	engine.privateKey = privateKey
+
+	cache, err := lru.New(MaxUnconfirmedBlocks)
 	if err != nil {
 		panic(err)
 	}
+	engine.unconfirmedBlocks = cache
 
-	engine.unconfirmedBlocks = unconfirmed
-	engine.privateKey = privateKey
-
-	// trigger updater
-	engine.updater()
 	return engine
 }
 
 func NewFaker() *BDLSEngine {
-	engine := New(nil)
+	engine := New(nil, nil)
 	engine.fake = true
 	return engine
-}
-
-// consensus updater
-func (e *BDLSEngine) updater() {
-	e.consensusMu.Lock()
-	if e.consensus != nil {
-		e.consensus.Update(time.Now())
-	}
-	e.consensusMu.Unlock()
-	timer.SystemTimedSched.Put(e.updater, time.Now().Add(20*time.Millisecond))
-}
-
-// Add an unconfirmed block to engine
-func (e *BDLSEngine) AddUnconfirmedBlock(block *types.Block) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.unconfirmedBlocks.Add(block.Hash(), block)
-}
-
-// ReceiveMessage wraps the ReceiveMessage function in consensus
-func (e *BDLSEngine) ReceiveMessage(bts []byte, now time.Time) error {
-	e.consensusMu.Lock()
-	defer e.consensusMu.Unlock()
-	if e.consensus != nil {
-		return e.consensus.ReceiveMessage(bts, time.Now())
-	}
-	return nil
-}
-
-func (e *BDLSEngine) CurrentProof() *bdls.SignedProto {
-	e.consensusMu.Lock()
-	defer e.consensusMu.Unlock()
-	if e.consensus != nil {
-		return e.consensus.CurrentProof()
-	}
-	return nil
-}
-
-func (e *BDLSEngine) CurrentState() (height uint64, round uint64, data bdls.State) {
-	e.consensusMu.Lock()
-	defer e.consensusMu.Unlock()
-	if e.consensus != nil {
-		return e.consensus.CurrentState()
-	}
-	return 0, 0, nil
-}
-
-func (e *BDLSEngine) Join(p bdls.PeerInterface) bool {
-	e.consensusMu.Lock()
-	defer e.consensusMu.Unlock()
-	if e.consensus != nil {
-		return e.consensus.Join(p)
-	}
-	return false
-}
-
-func (e *BDLSEngine) Leave(addr net.Addr) bool {
-	e.consensusMu.Lock()
-	defer e.consensusMu.Unlock()
-	if e.consensus != nil {
-		return e.consensus.Leave(addr)
-	}
-	return false
-}
-
-func (e *BDLSEngine) Propose(s bdls.State) {
-	e.consensusMu.Lock()
-	defer e.consensusMu.Unlock()
-	if e.consensus != nil {
-		e.consensus.Propose(s)
-	}
-}
-
-func (e *BDLSEngine) SetLatency(latency time.Duration) {
-	e.consensusMu.Lock()
-	defer e.consensusMu.Unlock()
-	if e.consensus != nil {
-		e.consensus.SetLatency(latency)
-	}
-}
-
-func (e *BDLSEngine) ValidateDecideMessage(bts []byte, targetState []byte) error {
-	e.consensusMu.Lock()
-	defer e.consensusMu.Unlock()
-	if e.consensus != nil {
-		return e.consensus.ValidateDecideMessage(bts, targetState)
-	}
-	return errors.New("consensus not initialized")
 }
 
 func RLPHash(x interface{}) (h common.Hash) {
@@ -171,8 +82,8 @@ func RLPHash(x interface{}) (h common.Hash) {
 
 // SetParticipants for next height
 func (e *BDLSEngine) SetParticipants(participants []*ecdsa.PublicKey) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	e.consensusMu.Lock()
+	defer e.consensusMu.Unlock()
 	e.participants = participants
 }
 
@@ -299,7 +210,128 @@ func (e *BDLSEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *ty
 // Note, the method returns immediately and will send the result async. More
 // than one result may also be returned depending on the consensus algorithm.
 func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
+	// preparation
+	e.unconfirmedBlocks.Purge()
+
+	// start new consensus round
+	// step 1. Get the SealHash(without Decision field) of this header
+	e.consensusMu.Lock()
+	sealHash := e.SealHash(block.Header())
+
+	// step 2. setup consensus config at given height
+	config := &bdls.Config{
+		Epoch:         time.Now(),
+		CurrentHeight: block.NumberU64() - 1,
+		PrivateKey:    e.privateKey,
+		Participants:  e.participants, // TODO: set participants correctly
+		StateCompare:  func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
+		StateValidate: func(s bdls.State) bool {
+			h := common.BytesToHash(s)
+			// check if it's a known proposed block
+			if _, ok := e.unconfirmedBlocks.Get(h); ok {
+				return true
+			}
+			return false
+		},
+
+		// consensus message will be routed through engine
+		MessageCallback: e.messageCallback,
+	}
+	e.consensusMu.Unlock()
+
+	// step 3. create the consensus object
+	consensus, err := bdls.NewConsensus(config)
+	if err != nil {
+		log.Error("new consensus:", err)
+		return err
+	}
+
+	// step 4. start propose the seal hash
+	consensus.Propose(sealHash.Bytes())
+
+	// step 5. create a consensus message subscriber's loop
+	go func() {
+		// subscribe to consensus message input
+		consensusSub := e.mux.Subscribe(ConsensusMessageInput{})
+		defer consensusSub.Unsubscribe()
+		consensusMessageChan := consensusSub.Chan()
+
+		// subscribe to pre-exchanged unmined blocks
+		unconfirmedSub := e.mux.Subscribe(UnconfirmedBlock{})
+		defer unconfirmedSub.Unsubscribe()
+		unconfirmedBlockChan := unconfirmedSub.Chan()
+
+		updateTick := time.NewTicker(20 * time.Millisecond)
+		for {
+			select {
+			case obj, ok := <-consensusMessageChan:
+				if !ok {
+					return
+				}
+
+				if ev, ok := obj.Data.(ConsensusMessageInput); ok {
+					consensus.ReceiveMessage(ev, time.Now()) // input to core
+					newHeight, newRound, newState := consensus.CurrentState()
+
+					// height confirmed, should broadcast this mined block if it's my proposal
+					if newHeight == block.NumberU64() {
+						log.Debug("CONSENSUS <decide>", "height", newHeight, "round", newRound, "hash", newHeight, newRound, common.BytesToHash(newState))
+						blkHash := common.BytesToHash(newState)
+						value, ok := e.unconfirmedBlocks.Get(blkHash)
+
+						if ok {
+							// seal the block with proof
+							header := value.(*types.Block).Header()
+							bts, err := consensus.CurrentProof().Marshal()
+							if err != nil {
+								log.Crit("consensusMessenger", "consensus.CurrentProof", err)
+								panic(err)
+							}
+							header.Decision = bts // store the the proof in block header
+
+							// the mined block
+							mined := value.(*types.Block).WithSeal(header)
+
+							// broadcast this block
+							results <- mined
+							return
+						}
+					}
+				}
+			case obj, ok := <-unconfirmedBlockChan:
+				if !ok {
+					return
+				}
+
+				if ev, ok := obj.Data.(UnconfirmedBlock); ok {
+					e.unconfirmedBlocks.Add(ev.Block.Hash(), ev.Block)
+					log.Debug("unconfirmed block", "hash", ev.Block.Hash())
+				}
+
+			case <-updateTick.C:
+				consensus.Update(time.Now())
+			case <-stop:
+				return
+			}
+		}
+	}()
 	return nil
+}
+
+// the message callback to redirect the message to p2p
+func (e *BDLSEngine) messageCallback(m *bdls.Message, signed *bdls.SignedProto) {
+	bts, err := signed.Marshal()
+	if err != nil {
+		log.Error("messageCallback", "signed.Marshal", err)
+		return
+	}
+
+	// broadcast the message out
+	err = e.mux.Post(ConsensusMessageOutput(bts))
+	if err != nil {
+		log.Error("messageCallback", "mux.Post", err)
+		return
+	}
 }
 
 // SealHash returns the hash of a block prior to it being sealed.
