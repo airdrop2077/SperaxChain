@@ -18,7 +18,6 @@ import (
 	"github.com/Sperax/SperaxChain/rlp"
 	"github.com/Sperax/SperaxChain/rpc"
 	"github.com/Sperax/bdls"
-	lru "github.com/hashicorp/golang-lru"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -26,11 +25,10 @@ const (
 	MaxUnconfirmedBlocks = 1024
 )
 
-// For message exchange
+// For consensus message I/O
 type (
 	ConsensusMessageOutput []byte
 	ConsensusMessageInput  []byte
-	UnconfirmedBlock       struct{ Block *types.Block }
 )
 
 // BDLSEngine implements blockchain consensus engine
@@ -46,9 +44,6 @@ type BDLSEngine struct {
 	// parameters adjustable at each height
 	participants []*ecdsa.PublicKey
 
-	// consensus in-progress blocks
-	unconfirmedBlocks *lru.Cache
-
 	// Currently working consensus
 	consensusMu sync.Mutex
 }
@@ -57,13 +52,6 @@ func New(privateKey *ecdsa.PrivateKey, mux *event.TypeMux) *BDLSEngine {
 	engine := new(BDLSEngine)
 	engine.mux = mux
 	engine.privateKey = privateKey
-
-	cache, err := lru.New(MaxUnconfirmedBlocks)
-	if err != nil {
-		panic(err)
-	}
-	engine.unconfirmedBlocks = cache
-
 	return engine
 }
 
@@ -210,9 +198,6 @@ func (e *BDLSEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *ty
 // Note, the method returns immediately and will send the result async. More
 // than one result may also be returned depending on the consensus algorithm.
 func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
-	// preparation
-	e.unconfirmedBlocks.Purge()
-
 	// start new consensus round
 	// step 1. Get the SealHash(without Decision field) of this header
 	e.consensusMu.Lock()
@@ -225,14 +210,7 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 		PrivateKey:    e.privateKey,
 		Participants:  e.participants, // TODO: set participants correctly
 		StateCompare:  func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
-		StateValidate: func(s bdls.State) bool {
-			h := common.BytesToHash(s)
-			// check if it's a known proposed block
-			if _, ok := e.unconfirmedBlocks.Get(h); ok {
-				return true
-			}
-			return false
-		},
+		StateValidate: func(s bdls.State) bool { return true }, // we postpone the state check after a block has mined
 
 		// consensus message will be routed through engine
 		MessageCallback: e.messageCallback,
@@ -256,11 +234,6 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 		defer consensusSub.Unsubscribe()
 		consensusMessageChan := consensusSub.Chan()
 
-		// subscribe to pre-exchanged unmined blocks
-		unconfirmedSub := e.mux.Subscribe(UnconfirmedBlock{})
-		defer unconfirmedSub.Unsubscribe()
-		unconfirmedBlockChan := unconfirmedSub.Chan()
-
 		updateTick := time.NewTicker(20 * time.Millisecond)
 		for {
 			select {
@@ -277,35 +250,25 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 					if newHeight == block.NumberU64() {
 						log.Debug("CONSENSUS <decide>", "height", newHeight, "round", newRound, "hash", newHeight, newRound, common.BytesToHash(newState))
 						blkHash := common.BytesToHash(newState)
-						value, ok := e.unconfirmedBlocks.Get(blkHash)
-
-						if ok {
-							// seal the block with proof
-							header := value.(*types.Block).Header()
+						if blkHash == sealHash {
+							// the proposer will seal the block with proof and broadcast
+							header := block.Header()
 							bts, err := consensus.CurrentProof().Marshal()
 							if err != nil {
 								log.Crit("consensusMessenger", "consensus.CurrentProof", err)
 								panic(err)
 							}
-							header.Decision = bts // store the the proof in block header
+
+							// store the the proof in block header
+							header.Decision = bts
 
 							// the mined block
-							mined := value.(*types.Block).WithSeal(header)
-
+							mined := block.WithSeal(header)
 							// broadcast this block
 							results <- mined
 							return
 						}
 					}
-				}
-			case obj, ok := <-unconfirmedBlockChan:
-				if !ok {
-					return
-				}
-
-				if ev, ok := obj.Data.(UnconfirmedBlock); ok {
-					e.unconfirmedBlocks.Add(ev.Block.Hash(), ev.Block)
-					log.Debug("unconfirmed block", "hash", ev.Block.Hash())
 				}
 
 			case <-updateTick.C:
