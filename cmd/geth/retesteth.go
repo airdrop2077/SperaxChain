@@ -162,7 +162,6 @@ type CParamsAccount struct {
 	Precompiled *CPAccountPrecompiled `json:"precompiled"`
 	Code        hexutil.Bytes         `json:"code"`
 	Storage     map[string]string     `json:"storage"`
-	Nonce       *math.HexOrDecimal64  `json:"nonce"`
 }
 
 type CPAccountPrecompiled struct {
@@ -281,10 +280,6 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 		if account.Balance != nil {
 			balance.Set((*big.Int)(account.Balance))
 		}
-		var nonce uint64
-		if account.Nonce != nil {
-			nonce = uint64(*account.Nonce)
-		}
 		if account.Precompiled == nil || account.Balance != nil {
 			storage := make(map[common.Hash]common.Hash)
 			for k, v := range account.Storage {
@@ -293,7 +288,6 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 			accounts[address] = core.GenesisAccount{
 				Balance: balance,
 				Code:    account.Code,
-				Nonce:   nonce,
 				Storage: storage,
 			}
 		}
