@@ -5,6 +5,8 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"math/big"
+	"net"
+	"sync"
 	"time"
 
 	"github.com/Sperax/SperaxChain/common"
@@ -13,31 +15,164 @@ import (
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/params"
+	"github.com/Sperax/SperaxChain/rlp"
 	"github.com/Sperax/SperaxChain/rpc"
 	"github.com/Sperax/bdls"
+	"github.com/Sperax/bdls/timer"
+	lru "github.com/hashicorp/golang-lru"
+	"golang.org/x/crypto/sha3"
 )
 
+const (
+	MaxUnconfirmedBlocks = 1024
+)
+
+// BDLSEngine implements blockchain consensus engine
 type BDLSEngine struct {
-	fake    bool
-	fixedPj []*ecdsa.PublicKey
+	fake bool
+
+	// private key to sign mesasges
+	privateKey *ecdsa.PrivateKey
+
+	// parameters adjustable at each height
+	participants []*ecdsa.PublicKey
+
+	// Currently working consensus
+	consensus   *bdls.Consensus
+	consensusMu sync.Mutex
+	// in-progress unconfirmed blocks
+	unconfirmedBlocks *lru.Cache
+	// local proposed block
+	proposedBlock *types.Block
+
+	// global lock
+	mu sync.Mutex
 }
 
-func New() *BDLSEngine {
+func New(privateKey *ecdsa.PrivateKey) *BDLSEngine {
 	engine := new(BDLSEngine)
+	unconfirmed, err := lru.New(MaxUnconfirmedBlocks)
+	if err != nil {
+		panic(err)
+	}
+
+	engine.unconfirmedBlocks = unconfirmed
+	engine.privateKey = privateKey
+
+	// trigger updater
+	engine.updater()
 	return engine
 }
 
 func NewFaker() *BDLSEngine {
-	engine := new(BDLSEngine)
+	engine := New(nil)
 	engine.fake = true
 	return engine
 }
 
-// SetFixedParticipants for testing
-func (e *BDLSEngine) SetFixedParticipants(participants []*ecdsa.PublicKey) {
-	e.fixedPj = participants
+// consensus updater
+func (e *BDLSEngine) updater() {
+	e.consensusMu.Lock()
+	if e.consensus != nil {
+		e.consensus.Update(time.Now())
+	}
+	e.consensusMu.Unlock()
+	timer.SystemTimedSched.Put(e.updater, time.Now().Add(20*time.Millisecond))
 }
 
+// Add an unconfirmed block to engine
+func (e *BDLSEngine) AddUnconfirmedBlock(block *types.Block) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.unconfirmedBlocks.Add(block.Hash(), block)
+}
+
+// ReceiveMessage wraps the ReceiveMessage function in consensus
+func (e *BDLSEngine) ReceiveMessage(bts []byte, now time.Time) error {
+	e.consensusMu.Lock()
+	defer e.consensusMu.Unlock()
+	if e.consensus != nil {
+		return e.consensus.ReceiveMessage(bts, time.Now())
+	}
+	return nil
+}
+
+func (e *BDLSEngine) CurrentProof() *bdls.SignedProto {
+	e.consensusMu.Lock()
+	defer e.consensusMu.Unlock()
+	if e.consensus != nil {
+		return e.consensus.CurrentProof()
+	}
+	return nil
+}
+
+func (e *BDLSEngine) CurrentState() (height uint64, round uint64, data bdls.State) {
+	e.consensusMu.Lock()
+	defer e.consensusMu.Unlock()
+	if e.consensus != nil {
+		return e.consensus.CurrentState()
+	}
+	return 0, 0, nil
+}
+
+func (e *BDLSEngine) Join(p bdls.PeerInterface) bool {
+	e.consensusMu.Lock()
+	defer e.consensusMu.Unlock()
+	if e.consensus != nil {
+		return e.consensus.Join(p)
+	}
+	return false
+}
+
+func (e *BDLSEngine) Leave(addr net.Addr) bool {
+	e.consensusMu.Lock()
+	defer e.consensusMu.Unlock()
+	if e.consensus != nil {
+		return e.consensus.Leave(addr)
+	}
+	return false
+}
+
+func (e *BDLSEngine) Propose(s bdls.State) {
+	e.consensusMu.Lock()
+	defer e.consensusMu.Unlock()
+	if e.consensus != nil {
+		e.consensus.Propose(s)
+	}
+}
+
+func (e *BDLSEngine) SetLatency(latency time.Duration) {
+	e.consensusMu.Lock()
+	defer e.consensusMu.Unlock()
+	if e.consensus != nil {
+		e.consensus.SetLatency(latency)
+	}
+}
+
+func (e *BDLSEngine) ValidateDecideMessage(bts []byte, targetState []byte) error {
+	e.consensusMu.Lock()
+	defer e.consensusMu.Unlock()
+	if e.consensus != nil {
+		return e.consensus.ValidateDecideMessage(bts, targetState)
+	}
+	return errors.New("consensus not initialized")
+}
+
+func RLPHash(x interface{}) (h common.Hash) {
+	hw := sha3.NewLegacyKeccak256()
+	rlp.Encode(hw, x)
+	hw.Sum(h[:0])
+	return h
+}
+
+// SetParticipants for next height
+func (e *BDLSEngine) SetParticipants(participants []*ecdsa.PublicKey) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.participants = participants
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Author retrieves the Ethereum address of the account that minted the given
 // block, which may be different from the header's coinbase if a consensus
 // engine is based on signatures.
@@ -109,7 +244,7 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 
 	// TODO: to set the participants from previous blocks?
 	// currently it's fixed
-	config.Participants = e.fixedPj
+	config.Participants = e.participants
 
 	consensus, err := bdls.NewConsensus(config)
 	if err != nil {

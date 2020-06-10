@@ -126,9 +126,9 @@ func New(host *p2p.Host, consensusConfig *bdls.Config, config *Config) (*Node, e
 	}
 
 	// init blockchain
-	consensus := bdls_engine.New()
+	consensus := bdls_engine.New(nil)
 	// set fixed participants
-	consensus.SetFixedParticipants(consensusConfig.Participants)
+	consensus.SetParticipants(consensusConfig.Participants)
 
 	node.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis.Config, consensus, vmConfig, nil, &config.TxLookupLimit)
 	if err != nil {
