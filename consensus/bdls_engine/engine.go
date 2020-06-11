@@ -104,7 +104,12 @@ func (e *BDLSEngine) SetBlockValidator(hasBadBlock func(common.Hash) bool,
 // block, which may be different from the header's coinbase if a consensus
 // engine is based on signatures.
 func (e *BDLSEngine) Author(header *types.Header) (common.Address, error) {
-	if header.Decision == nil {
+	return header.Coinbase, nil
+}
+
+// Signer returns the signer of this header
+func (e *BDLSEngine) Signer(header *types.Header) (common.Address, error) {
+	if header.Decision != nil {
 		sp, err := bdls.DecodeSignedMessage(header.Decision)
 		if err != nil {
 			return common.Address{}, err
@@ -112,8 +117,7 @@ func (e *BDLSEngine) Author(header *types.Header) (common.Address, error) {
 		pubkey := &ecdsa.PublicKey{Curve: bdls.DefaultCurve, X: big.NewInt(0).SetBytes(sp.X[:]), Y: big.NewInt(0).SetBytes(sp.Y[:])}
 		return crypto.PubkeyToAddress(*pubkey), nil
 	}
-
-	return common.Address{}, nil
+	return common.Address{}, errors.New("cannot retrieve signer")
 }
 
 // VerifyHeader checks whether a header conforms to the consensus rules of a
@@ -383,13 +387,14 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 
 // VerifyProposal implements blockchain specific block validator
 func (e *BDLSEngine) VerifyProposal(block *types.Block) bool {
-	// The author should be the person who signed the block
-	addr, err := e.Author(block.Header())
+	// for <roundchange> message
+	// The coinbase should be the person who signed the block
+	addr, err := e.Signer(block.Header())
 	if err != nil {
-		log.Error("Could not recover orignal author of the block", "e.Author()", err)
+		log.Error("Could not recover signer of the block", "e.Signer()", err)
 		return false
 	} else if addr != block.Header().Coinbase {
-		log.Error("Original author of the block does not match the coinbase", "addr", addr, "coinbase", block.Header().Coinbase, "func", "Verify")
+		log.Error("The signer of this block does not match the coinbase", "addr", addr, "coinbase", block.Header().Coinbase, "func", "Verify")
 		return false
 	}
 
