@@ -286,10 +286,7 @@ func (w *worker) pendingBlock() *types.Block {
 
 // start sets the running status as 1 and triggers new work submitting.
 func (w *worker) start() {
-	atomic.StoreInt32(&w.running, 1)
-	w.startCh <- struct{}{}
-
-	// NOTE(xtaci): BDLS specific block validator
+	// NOTE(xtaci): set BDLS specific block validator
 	if bdls, ok := w.engine.(*bdls_engine.BDLSEngine); ok {
 		bdls.SetBlockValidator(w.chain.HasBadBlock,
 			func(block *types.Block, state *state.StateDB) (types.Receipts, []*types.Log, uint64, error) {
@@ -303,6 +300,9 @@ func (w *worker) start() {
 				return w.chain.StateAt(stateRoot)
 			})
 	}
+
+	atomic.StoreInt32(&w.running, 1)
+	w.startCh <- struct{}{}
 }
 
 // stop sets the running status as 0.
