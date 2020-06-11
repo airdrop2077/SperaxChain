@@ -12,6 +12,7 @@ import (
 	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
+	"github.com/Sperax/SperaxChain/crypto"
 	"github.com/Sperax/SperaxChain/event"
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/params"
@@ -80,6 +81,15 @@ func (e *BDLSEngine) SetParticipants(participants []*ecdsa.PublicKey) {
 // block, which may be different from the header's coinbase if a consensus
 // engine is based on signatures.
 func (e *BDLSEngine) Author(header *types.Header) (common.Address, error) {
+	if header.Decision == nil {
+		sp, err := bdls.DecodeSignedMessage(header.Decision)
+		if err != nil {
+			return common.Address{}, err
+		}
+		pubkey := &ecdsa.PublicKey{Curve: bdls.DefaultCurve, X: big.NewInt(0).SetBytes(sp.X[:]), Y: big.NewInt(0).SetBytes(sp.Y[:])}
+		return crypto.PubkeyToAddress(*pubkey), nil
+	}
+
 	return common.Address{}, nil
 }
 
@@ -213,7 +223,7 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 		StateValidate: func(s bdls.State) bool { return true }, // we postpone the state check after a block has mined
 
 		// consensus message will be routed through engine
-		MessageCallback: e.messageCallback,
+		MessageOutCallback: e.messageOutCallback,
 	}
 	e.consensusMu.Unlock()
 
@@ -284,18 +294,18 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 	return nil
 }
 
-// the message callback to redirect the message to p2p
-func (e *BDLSEngine) messageCallback(m *bdls.Message, signed *bdls.SignedProto) {
+// the outgoing message callback
+func (e *BDLSEngine) messageOutCallback(m *bdls.Message, signed *bdls.SignedProto) {
 	bts, err := signed.Marshal()
 	if err != nil {
-		log.Error("messageCallback", "signed.Marshal", err)
+		log.Error("messageOutCallback", "signed.Marshal", err)
 		return
 	}
 
 	// broadcast the message out
 	err = e.mux.Post(ConsensusMessageOutput(bts))
 	if err != nil {
-		log.Error("messageCallback", "mux.Post", err)
+		log.Error("messageOutCallback", "mux.Post", err)
 		return
 	}
 }
