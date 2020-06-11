@@ -213,17 +213,69 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 	e.consensusMu.Lock()
 	sealHash := e.SealHash(block.Header())
 
+	// mesasge out call back to handle auxcilliary messages along with the consensus message
+	messageOutCallback := func(m *bdls.Message, signed *bdls.SignedProto) {
+		// for <roundchange> message, we need to append the types.Block to the message
+		switch m.Type {
+		case bdls.MessageType_RoundChange:
+			blockData, err := rlp.EncodeToBytes(block)
+			if err != nil {
+				log.Error("messageOutCallBack", "rlp.EncodeToBytes", err)
+			}
+			signed.AuxData = blockData
+		}
+
+		bts, err := signed.Marshal()
+		if err != nil {
+			log.Error("messageOutCallback", "signed.Marshal", err)
+			return
+		}
+
+		// broadcast the message out
+		err = e.mux.Post(ConsensusMessageOutput(bts))
+		if err != nil {
+			log.Error("messageOutCallback", "mux.Post", err)
+			return
+		}
+	}
+
+	// message validator for incoming messages which has correctly signed
+	messageValidator := func(m *bdls.Message, signed *bdls.SignedProto) bool {
+		// for roundchange message, we need to verify the block integrity in auxdata
+		switch m.Type {
+		case bdls.MessageType_RoundChange:
+			var blk types.Block
+			err := rlp.DecodeBytes(signed.AuxData, &blk)
+			if err != nil {
+				log.Debug("messageValidator", "rlp.DecodeBytes", err)
+				return false
+			}
+
+			// step 1. compare hash with block in auxdata
+			if blk.Hash() != common.BytesToHash(m.State) {
+				return false
+			}
+			// step 2. validate this message
+
+			// step 3. for a valid <roundchange> message,  clear the auxdata before consensus processing
+			signed.AuxData = nil
+			return true
+		}
+
+		return true
+	}
+
 	// step 2. setup consensus config at given height
 	config := &bdls.Config{
-		Epoch:         time.Now(),
-		CurrentHeight: block.NumberU64() - 1,
-		PrivateKey:    e.privateKey,
-		Participants:  e.participants, // TODO: set participants correctly
-		StateCompare:  func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
-		StateValidate: func(s bdls.State) bool { return true }, // we postpone the state check after a block has mined
-
+		Epoch:            time.Now(),
+		CurrentHeight:    block.NumberU64() - 1,
+		PrivateKey:       e.privateKey,
+		Participants:     e.participants, // TODO: set participants correctly
+		StateCompare:     func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
+		StateValidate:    func(s bdls.State) bool { return true }, // we postpone the state check after a block has mined
+		MessageValidator: messageValidator,
 		// consensus message will be routed through engine
-		MessageOutCallback: e.messageOutCallback,
+		MessageOutCallback: messageOutCallback,
 	}
 	e.consensusMu.Unlock()
 
@@ -259,7 +311,7 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 					consensus.ReceiveMessage(ev, time.Now()) // input to core
 					newHeight, newRound, newState := consensus.CurrentState()
 
-					// height confirmed, should broadcast this mined block if it's my proposal
+					// new height confirmed, only proposer broadcast this mined block
 					if newHeight == block.NumberU64() {
 						log.Debug("CONSENSUS <decide>", "height", newHeight, "round", newRound, "hash", newHeight, newRound, common.BytesToHash(newState))
 						blkHash := common.BytesToHash(newState)
@@ -292,22 +344,6 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 		}
 	}()
 	return nil
-}
-
-// the outgoing message callback
-func (e *BDLSEngine) messageOutCallback(m *bdls.Message, signed *bdls.SignedProto) {
-	bts, err := signed.Marshal()
-	if err != nil {
-		log.Error("messageOutCallback", "signed.Marshal", err)
-		return
-	}
-
-	// broadcast the message out
-	err = e.mux.Post(ConsensusMessageOutput(bts))
-	if err != nil {
-		log.Error("messageOutCallback", "mux.Post", err)
-		return
-	}
 }
 
 // SealHash returns the hash of a block prior to it being sealed.
