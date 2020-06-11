@@ -43,6 +43,9 @@ type BDLSEngine struct {
 	// parameters adjustable at each height
 	participants []*ecdsa.PublicKey
 
+	// participants address
+	addresses []common.Address
+
 	// pre-validator for <roundchange> message
 	stateAt       func(hash common.Hash) (*state.StateDB, error)
 	hasBadBlock   func(hash common.Hash) bool
@@ -79,6 +82,10 @@ func (e *BDLSEngine) SetParticipants(participants []*ecdsa.PublicKey) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.participants = participants
+	e.addresses = nil
+	for k := range participants {
+		e.addresses = append(e.addresses, crypto.PubkeyToAddress(*e.participants[k]))
+	}
 }
 
 // SetBlockValidator starts the validating engine
@@ -238,6 +245,20 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 	e.mu.Lock()
 	sealHash := e.SealHash(block.Header())
 
+	// known blocks from <roundchange> messages
+	knownBlocks := make(map[common.Address]*types.Block)
+
+	// to lookup the block for current consensus height
+	lookupBlock := func(hash common.Hash) *types.Block {
+		// loop to find the block
+		for _, v := range knownBlocks {
+			if v.Hash() == hash {
+				return v
+			}
+		}
+		return nil
+	}
+
 	// mesasge out call back to handle auxcilliary messages along with the consensus message
 	messageOutCallback := func(m *bdls.Message, signed *bdls.SignedProto) {
 		// for <roundchange> message, we need to append the types.Block to the message
@@ -248,10 +269,6 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 				log.Error("messageOutCallBack", "rlp.EncodeToBytes", err)
 			}
 			signed.AuxData = blockData
-		case bdls.MessageType_Decide:
-			// ignore outgoing <decide> message,
-			// using minedBlock notification
-			return
 		}
 
 		bts, err := signed.Marshal()
@@ -270,6 +287,11 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 
 	// message validator for incoming messages which has correctly signed
 	messageValidator := func(m *bdls.Message, signed *bdls.SignedProto) bool {
+		// clear all auxdata before consensus processing
+		defer func() {
+			signed.AuxData = nil
+		}()
+
 		switch m.Type {
 		case bdls.MessageType_RoundChange:
 			// For incoming <roundchange> message(proposal), we should validate the block sent
@@ -291,12 +313,13 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 				return false
 			}
 
-			// step 3. for a valid <roundchange> proposal, clear the auxdata before consensus continues
-			signed.AuxData = nil
-			return true
-		case bdls.MessageType_Decide:
-			// simply reject the decide message and wait for block confirmation via p2p
-			// message exchanging, this also keeps consensus working and RE-proposing blocks
+			// step 3. record or replace this block, the coinbase has verified against signature in VerifyProposal
+			for k := range e.addresses {
+				if e.addresses[k] == blk.Coinbase() {
+					knownBlocks[blk.Coinbase()] = &blk
+					return true
+				}
+			}
 			return false
 		}
 
@@ -305,12 +328,20 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 
 	// step 2. setup consensus config at given height
 	config := &bdls.Config{
-		Epoch:            time.Now(),
-		CurrentHeight:    block.NumberU64() - 1,
-		PrivateKey:       e.privateKey,
-		Participants:     e.participants, // TODO: set participants correctly
-		StateCompare:     func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
-		StateValidate:    func(s bdls.State) bool { return true }, // we postpone the state check after a block has mined
+		Epoch:         time.Now(),
+		CurrentHeight: block.NumberU64() - 1,
+		PrivateKey:    e.privateKey,
+		// TODO(xtaci): (shuffle and set participants sequence based on some random number)
+		Participants: e.participants,
+		StateCompare: func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
+		StateValidate: func(s bdls.State) bool {
+			// make sure all states are known from <roundchange> exchanging
+			hash := common.BytesToHash(s)
+			if lookupBlock(hash) != nil {
+				return true
+			}
+			return false
+		},
 		MessageValidator: messageValidator,
 		// consensus message will be routed through engine
 		MessageOutCallback: messageOutCallback,
@@ -352,10 +383,10 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 					// new height confirmed, only proposer broadcast this mined block
 					if newHeight == block.NumberU64() {
 						log.Debug("CONSENSUS <decide>", "height", newHeight, "round", newRound, "hash", newHeight, newRound, common.BytesToHash(newState))
-						blkHash := common.BytesToHash(newState)
-						if blkHash == sealHash {
-							// the proposer will seal the block with proof and broadcast
-							header := block.Header()
+						hash := common.BytesToHash(newState)
+						if newblock := lookupBlock(hash); newblock != nil {
+							// found the block, then we can seal the block with the proof
+							header := newblock.Header()
 							bts, err := consensus.CurrentProof().Marshal()
 							if err != nil {
 								log.Crit("consensusMessenger", "consensus.CurrentProof", err)
@@ -366,7 +397,7 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 							header.Decision = bts
 
 							// the mined block
-							mined := block.WithSeal(header)
+							mined := newblock.WithSeal(header)
 							// broadcast this block
 							results <- mined
 							return
