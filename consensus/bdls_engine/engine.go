@@ -49,8 +49,8 @@ type BDLSEngine struct {
 	processBlock  func(block *types.Block, statedb *state.StateDB) (types.Receipts, []*types.Log, uint64, error)
 	validateState func(block *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64) error
 
-	// Currently working consensus
-	consensusMu sync.Mutex
+	// mutex for BDLSEngine
+	mu sync.Mutex
 }
 
 func New(privateKey *ecdsa.PrivateKey, mux *event.TypeMux) *BDLSEngine {
@@ -76,8 +76,8 @@ func BytesHash(bts []byte) (h common.Hash) {
 
 // SetParticipants for next height
 func (e *BDLSEngine) SetParticipants(participants []*ecdsa.PublicKey) {
-	e.consensusMu.Lock()
-	defer e.consensusMu.Unlock()
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	e.participants = participants
 }
 
@@ -88,8 +88,8 @@ func (e *BDLSEngine) SetBlockValidator(hasBadBlock func(common.Hash) bool,
 	validateState func(*types.Block, *state.StateDB, types.Receipts, uint64) error,
 	stateAt func(hash common.Hash) (*state.StateDB, error)) {
 
-	e.consensusMu.Lock()
-	defer e.consensusMu.Unlock()
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
 	e.hasBadBlock = hasBadBlock
 	e.processBlock = processBlock
@@ -235,7 +235,7 @@ func (e *BDLSEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *ty
 func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
 	// start new consensus round
 	// step 1. Get the SealHash(without Decision field) of this header
-	e.consensusMu.Lock()
+	e.mu.Lock()
 	sealHash := e.SealHash(block.Header())
 
 	// mesasge out call back to handle auxcilliary messages along with the consensus message
@@ -314,7 +314,7 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 		// consensus message will be routed through engine
 		MessageOutCallback: messageOutCallback,
 	}
-	e.consensusMu.Unlock()
+	e.mu.Unlock()
 
 	// step 3. create the consensus object
 	consensus, err := bdls.NewConsensus(config)
@@ -465,5 +465,5 @@ func (e *BDLSEngine) Close() error {
 
 // mining reward computation
 func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header) {
-	state.AddBalance(common.Address{}, big.NewInt(100))
+	state.AddBalance(header.Coinbase, big.NewInt(100))
 }
