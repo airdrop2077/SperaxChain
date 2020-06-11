@@ -270,9 +270,10 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 
 	// message validator for incoming messages which has correctly signed
 	messageValidator := func(m *bdls.Message, signed *bdls.SignedProto) bool {
-		// for roundchange message, we need to verify the block integrity in auxdata
 		switch m.Type {
 		case bdls.MessageType_RoundChange:
+			// For incoming <roundchange> message(proposal), we should validate the block sent
+			// via sp.AuxData field,  ahead of consensus processing.
 			var blk types.Block
 			err := rlp.DecodeBytes(signed.AuxData, &blk)
 			if err != nil {
@@ -281,16 +282,16 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 			}
 
 			// step 1. compare hash with block in auxdata
-			if blk.Hash() != common.BytesToHash(m.State) {
+			if e.SealHash(blk.Header()) != common.BytesToHash(m.State) {
 				return false
 			}
 
-			// step 2. validate this block
+			// step 2. validate the proposed block
 			if !e.VerifyProposal(&blk) {
 				return false
 			}
 
-			// step 3. for a valid <roundchange> message, clear the auxdata before consensus continues
+			// step 3. for a valid <roundchange> proposal, clear the auxdata before consensus continues
 			signed.AuxData = nil
 			return true
 		case bdls.MessageType_Decide:
