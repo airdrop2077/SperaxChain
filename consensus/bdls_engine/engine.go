@@ -88,6 +88,9 @@ func (e *BDLSEngine) SetBlockValidator(hasBadBlock func(common.Hash) bool,
 	validateState func(*types.Block, *state.StateDB, types.Receipts, uint64) error,
 	stateAt func(hash common.Hash) (*state.StateDB, error)) {
 
+	e.consensusMu.Lock()
+	defer e.consensusMu.Unlock()
+
 	e.hasBadBlock = hasBadBlock
 	e.processBlock = processBlock
 	e.validateState = validateState
