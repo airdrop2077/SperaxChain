@@ -22,14 +22,12 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
-const (
-	MaxUnconfirmedBlocks = 1024
-)
-
-// For consensus message I/O
+// For consensus message event I/O
 type (
+	// protocol manager will subscribe to this consensus message
 	ConsensusMessageOutput []byte
-	ConsensusMessageInput  []byte
+	// protocol manager will deliver this consensus message type
+	ConsensusMessageInput []byte
 )
 
 // BDLSEngine implements blockchain consensus engine
