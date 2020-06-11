@@ -327,7 +327,7 @@ func (node *Node) beginConsensus(block *types.Block) error {
 	}
 
 	// we register a consensus message watcher here, to send data along with consensus
-	newConfig.MessageCallback = func(m *bdls.Message, sp *bdls.SignedProto) {
+	newConfig.MessageOutCallback = func(m *bdls.Message, sp *bdls.SignedProto) {
 		if m.Type == bdls.MessageType_RoundChange {
 			message := new(SperaxMessage)
 			message.Type = MessageType_Block
