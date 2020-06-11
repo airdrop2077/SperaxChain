@@ -813,7 +813,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 
 		// mark for propagation
-		hash := bdls_engine.RLPHash(bts)
+		hash := bdls_engine.BytesHash(bts)
 		p.MarkConsensus(hash)
 
 		// publish event to consensus core
@@ -827,7 +827,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 // BroadcastConsensusMsg broadcasts a consensus message to peers
 func (pm *ProtocolManager) BroadcastConsensusMsg(bts []byte) {
 	// bytes hash
-	hash := bdls_engine.RLPHash(bts)
+	hash := bdls_engine.BytesHash(bts)
 	peers := pm.peers.PeersWithoutConsensus(hash)
 	// Send the consensus to a subset of our peers
 	transfer := peers[:int(math.Sqrt(float64(len(peers))))]

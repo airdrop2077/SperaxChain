@@ -68,9 +68,10 @@ func NewFaker() *BDLSEngine {
 	return engine
 }
 
-func RLPHash(x interface{}) (h common.Hash) {
+// BytesHash computes keccak256 hash for a slice
+func BytesHash(bts []byte) (h common.Hash) {
 	hw := sha3.NewLegacyKeccak256()
-	rlp.Encode(hw, x)
+	rlp.Encode(hw, bts)
 	hw.Sum(h[:0])
 	return h
 }
@@ -83,6 +84,7 @@ func (e *BDLSEngine) SetParticipants(participants []*ecdsa.PublicKey) {
 }
 
 // SetBlockValidator starts the validating engine
+// NOTE(xtaci): this must be set before Seal operations
 func (e *BDLSEngine) SetBlockValidator(hasBadBlock func(common.Hash) bool,
 	processBlock func(*types.Block, *state.StateDB) (types.Receipts, []*types.Log, uint64, error),
 	validateState func(*types.Block, *state.StateDB, types.Receipts, uint64) error,
