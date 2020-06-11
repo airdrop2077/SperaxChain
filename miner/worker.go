@@ -26,6 +26,7 @@ import (
 
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
+	"github.com/Sperax/SperaxChain/consensus/bdls_engine"
 	"github.com/Sperax/SperaxChain/consensus/misc"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/state"
@@ -287,6 +288,21 @@ func (w *worker) pendingBlock() *types.Block {
 func (w *worker) start() {
 	atomic.StoreInt32(&w.running, 1)
 	w.startCh <- struct{}{}
+
+	// NOTE(xtaci): BDLS specific block validator
+	if bdls, ok := w.engine.(bdls_engine.BDLSEngine); ok {
+		bdls.SetBlockValidator(w.chain.HasBadBlock,
+			func(block *types.Block, state *state.StateDB) (types.Receipts, []*types.Log, uint64, error) {
+				return w.chain.Processor().Process(block, state, *w.chain.GetVMConfig())
+			},
+			func(block *types.Block, state *state.StateDB, receipts types.Receipts, usedGas uint64) error {
+				return w.chain.Validator().ValidateState(block, state, receipts, usedGas)
+			},
+			func(hash common.Hash) (*state.StateDB, error) {
+                stateRoot := w.chain.GetHeaderByHash(hash).Root
+                return w.chain.StateAt(stateRoot)
+            }),
+	}
 }
 
 // stop sets the running status as 0.
@@ -307,7 +323,7 @@ func (w *worker) close() {
 
 // newWorkLoop is a standalone goroutine to submit new mining work upon received events.
 func (w *worker) newWorkLoop(recommit time.Duration) {
-	var (
+	(
 		interrupt   *int32
 		minRecommit = recommit // minimal resubmit interval specified by user.
 		timestamp   int64      // timestamp for each round of mining.

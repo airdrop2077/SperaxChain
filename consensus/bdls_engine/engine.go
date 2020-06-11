@@ -45,6 +45,12 @@ type BDLSEngine struct {
 	// parameters adjustable at each height
 	participants []*ecdsa.PublicKey
 
+	// pre-validator for <roundchange> message
+	stateAt       func(hash common.Hash) (*state.StateDB, error)
+	hasBadBlock   func(hash common.Hash) bool
+	processBlock  func(block *types.Block, statedb *state.StateDB) (types.Receipts, []*types.Log, uint64, error)
+	validateState func(block *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64) error
+
 	// Currently working consensus
 	consensusMu sync.Mutex
 }
@@ -74,6 +80,18 @@ func (e *BDLSEngine) SetParticipants(participants []*ecdsa.PublicKey) {
 	e.consensusMu.Lock()
 	defer e.consensusMu.Unlock()
 	e.participants = participants
+}
+
+// SetBlockValidator starts the validating engine
+func (e *BDLSEngine) SetBlockValidator(hasBadBlock func(common.Hash) bool,
+	processBlock func(*types.Block, *state.StateDB) (types.Receipts, []*types.Log, uint64, error),
+	validateState func(*types.Block, *state.StateDB, types.Receipts, uint64) error,
+	stateAt func(hash common.Hash) (*state.StateDB, error)) {
+
+	e.hasBadBlock = hasBadBlock
+	e.processBlock = processBlock
+	e.validateState = validateState
+	e.stateAt = stateAt
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -223,6 +241,10 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 				log.Error("messageOutCallBack", "rlp.EncodeToBytes", err)
 			}
 			signed.AuxData = blockData
+		case bdls.MessageType_Decide:
+			// ignore outgoing <decide> message,
+			// using minedBlock notification
+			return
 		}
 
 		bts, err := signed.Marshal()
@@ -247,7 +269,7 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 			var blk types.Block
 			err := rlp.DecodeBytes(signed.AuxData, &blk)
 			if err != nil {
-				log.Debug("messageValidator", "rlp.DecodeBytes", err)
+				log.Error("messageValidator", "rlp.DecodeBytes", err)
 				return false
 			}
 
@@ -255,11 +277,19 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 			if blk.Hash() != common.BytesToHash(m.State) {
 				return false
 			}
-			// step 2. validate this message
 
-			// step 3. for a valid <roundchange> message,  clear the auxdata before consensus processing
+			// step 2. validate this block
+			if !e.VerifyProposal(&blk) {
+				return false
+			}
+
+			// step 3. for a valid <roundchange> message, clear the auxdata before consensus continues
 			signed.AuxData = nil
 			return true
+		case bdls.MessageType_Decide:
+			// simply reject the decide message and wait for block confirmation via p2p
+			// message exchanging, this also keeps consensus working and RE-proposing blocks
+			return false
 		}
 
 		return true
@@ -344,6 +374,60 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 		}
 	}()
 	return nil
+}
+
+// VerifyProposal implements blockchain specific block validator
+func (e *BDLSEngine) VerifyProposal(block *types.Block) bool {
+	// The author should be the first person to propose the block to ensure that randomness matches up.
+	addr, err := e.Author(block.Header())
+	if err != nil {
+		log.Error("Could not recover orignal author of the block", "e.Author()", err)
+		return false
+	} else if addr != block.Header().Coinbase {
+		log.Error("Original author of the block does not match the coinbase", "addr", addr, "coinbase", block.Header().Coinbase, "func", "Verify")
+		return false
+	}
+
+	// 2a: check bad block
+	if e.hasBadBlock != nil {
+		if e.hasBadBlock(block.Hash()) {
+			log.Error("messageValidator", "e.hasBadBlock", block.Hash())
+			return false
+		}
+	}
+
+	// 2b: check block body
+	txnHash := types.DeriveSha(block.Transactions())
+	if txnHash != block.Header().TxHash {
+		log.Error("messageValidator validate transactions", "txnHash", txnHash, "Header().TxHash", block.Header().TxHash)
+		return false
+	}
+
+	// Process the block to verify that the transactions are valid and to retrieve the resulting state and receipts
+	// Get the state from this block's parent.
+	state, err := e.stateAt(block.Header().ParentHash)
+	if err != nil {
+		log.Error("verify - Error in getting the block's parent's state", "parentHash", block.Header().ParentHash.Hex(), "err", err)
+		return false
+	}
+
+	// Make a copy of the state
+	state = state.Copy()
+
+	// Apply this block's transactions to update the state
+	receipts, _, usedGas, err := e.processBlock(block, state)
+	if err != nil {
+		log.Error("verify - Error in processing the block", "err", err)
+		return false
+	}
+
+	// Validate the block
+	if err := e.validateState(block, state, receipts, usedGas); err != nil {
+		log.Error("verify - Error in validating the block", "err", err)
+		return false
+	}
+
+	return true
 }
 
 // SealHash returns the hash of a block prior to it being sealed.
