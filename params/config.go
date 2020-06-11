@@ -288,8 +288,13 @@ type ChainConfig struct {
 	BDLS *BDLSConfig `json:"bdls,omitempty"`
 }
 
-// TODO(xtaci): fill in fields
+// TODO(xtaci): fill in fields, initial validator
 type BDLSConfig struct{}
+
+// String implements the stringer interface, returning the consensus engine details.
+func (c *BDLSConfig) String() string {
+	return "bdls"
+}
 
 // EthashConfig is the consensus engine configs for proof-of-work based sealing.
 type EthashConfig struct{}

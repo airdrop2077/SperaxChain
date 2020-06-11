@@ -86,13 +86,12 @@ type GenesisAccount struct {
 
 // field type overrides for gencodec
 type genesisSpecMarshaling struct {
-	Timestamp  math.HexOrDecimal64
-	ExtraData  hexutil.Bytes
-	GasLimit   math.HexOrDecimal64
-	GasUsed    math.HexOrDecimal64
-	Number     math.HexOrDecimal64
-	Difficulty *math.HexOrDecimal256
-	Alloc      map[common.UnprefixedAddress]GenesisAccount
+	Timestamp math.HexOrDecimal64
+	ExtraData hexutil.Bytes
+	GasLimit  math.HexOrDecimal64
+	GasUsed   math.HexOrDecimal64
+	Number    math.HexOrDecimal64
+	Alloc     map[common.UnprefixedAddress]GenesisAccount
 }
 
 type genesisAccountMarshaling struct {

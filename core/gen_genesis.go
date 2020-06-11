@@ -5,37 +5,44 @@ package core
 import (
 	"encoding/json"
 	"errors"
-	"math/big"
 
 	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/common/hexutil"
+	"github.com/Sperax/SperaxChain/common/math"
 	"github.com/Sperax/SperaxChain/params"
 )
+
+var _ = (*genesisSpecMarshaling)(nil)
 
 // MarshalJSON marshals as JSON.
 func (g Genesis) MarshalJSON() ([]byte, error) {
 	type Genesis struct {
-		Config     *params.ChainConfig `json:"config"`
-		Timestamp  uint64              `json:"timestamp"`
-		ExtraData  []byte              `json:"extraData"`
-		GasLimit   uint64              `json:"gasLimit"   gencodec:"required"`
-		Difficulty *big.Int            `json:"difficulty" gencodec:"required"`
-		Mixhash    common.Hash         `json:"mixHash"`
-		Coinbase   common.Address      `json:"coinbase"`
-		Alloc      GenesisAlloc        `json:"alloc"      gencodec:"required"`
-		Number     uint64              `json:"number"`
-		GasUsed    uint64              `json:"gasUsed"`
-		ParentHash common.Hash         `json:"parentHash"`
+		Config     *params.ChainConfig                         `json:"config"`
+		Timestamp  math.HexOrDecimal64                         `json:"timestamp"`
+		ExtraData  hexutil.Bytes                               `json:"extraData"`
+		GasLimit   math.HexOrDecimal64                         `json:"gasLimit"   gencodec:"required"`
+		Mixhash    common.Hash                                 `json:"mixHash"`
+		Coinbase   common.Address                              `json:"coinbase"`
+		Alloc      map[common.UnprefixedAddress]GenesisAccount `json:"alloc"      gencodec:"required"`
+		Number     math.HexOrDecimal64                         `json:"number"`
+		GasUsed    math.HexOrDecimal64                         `json:"gasUsed"`
+		ParentHash common.Hash                                 `json:"parentHash"`
 	}
 	var enc Genesis
 	enc.Config = g.Config
-	enc.Timestamp = g.Timestamp
+	enc.Timestamp = math.HexOrDecimal64(g.Timestamp)
 	enc.ExtraData = g.ExtraData
-	enc.GasLimit = g.GasLimit
+	enc.GasLimit = math.HexOrDecimal64(g.GasLimit)
 	enc.Mixhash = g.Mixhash
 	enc.Coinbase = g.Coinbase
-	enc.Alloc = g.Alloc
-	enc.Number = g.Number
-	enc.GasUsed = g.GasUsed
+	if g.Alloc != nil {
+		enc.Alloc = make(map[common.UnprefixedAddress]GenesisAccount, len(g.Alloc))
+		for k, v := range g.Alloc {
+			enc.Alloc[common.UnprefixedAddress(k)] = v
+		}
+	}
+	enc.Number = math.HexOrDecimal64(g.Number)
+	enc.GasUsed = math.HexOrDecimal64(g.GasUsed)
 	enc.ParentHash = g.ParentHash
 	return json.Marshal(&enc)
 }
@@ -43,17 +50,16 @@ func (g Genesis) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON unmarshals from JSON.
 func (g *Genesis) UnmarshalJSON(input []byte) error {
 	type Genesis struct {
-		Config     *params.ChainConfig `json:"config"`
-		Timestamp  *uint64             `json:"timestamp"`
-		ExtraData  []byte              `json:"extraData"`
-		GasLimit   *uint64             `json:"gasLimit"   gencodec:"required"`
-		Difficulty *big.Int            `json:"difficulty" gencodec:"required"`
-		Mixhash    *common.Hash        `json:"mixHash"`
-		Coinbase   *common.Address     `json:"coinbase"`
-		Alloc      *GenesisAlloc       `json:"alloc"      gencodec:"required"`
-		Number     *uint64             `json:"number"`
-		GasUsed    *uint64             `json:"gasUsed"`
-		ParentHash *common.Hash        `json:"parentHash"`
+		Config     *params.ChainConfig                         `json:"config"`
+		Timestamp  *math.HexOrDecimal64                        `json:"timestamp"`
+		ExtraData  *hexutil.Bytes                              `json:"extraData"`
+		GasLimit   *math.HexOrDecimal64                        `json:"gasLimit"   gencodec:"required"`
+		Mixhash    *common.Hash                                `json:"mixHash"`
+		Coinbase   *common.Address                             `json:"coinbase"`
+		Alloc      map[common.UnprefixedAddress]GenesisAccount `json:"alloc"      gencodec:"required"`
+		Number     *math.HexOrDecimal64                        `json:"number"`
+		GasUsed    *math.HexOrDecimal64                        `json:"gasUsed"`
+		ParentHash *common.Hash                                `json:"parentHash"`
 	}
 	var dec Genesis
 	if err := json.Unmarshal(input, &dec); err != nil {
@@ -63,15 +69,15 @@ func (g *Genesis) UnmarshalJSON(input []byte) error {
 		g.Config = dec.Config
 	}
 	if dec.Timestamp != nil {
-		g.Timestamp = *dec.Timestamp
+		g.Timestamp = uint64(*dec.Timestamp)
 	}
 	if dec.ExtraData != nil {
-		g.ExtraData = dec.ExtraData
+		g.ExtraData = *dec.ExtraData
 	}
 	if dec.GasLimit == nil {
 		return errors.New("missing required field 'gasLimit' for Genesis")
 	}
-	g.GasLimit = *dec.GasLimit
+	g.GasLimit = uint64(*dec.GasLimit)
 	if dec.Mixhash != nil {
 		g.Mixhash = *dec.Mixhash
 	}
@@ -81,12 +87,15 @@ func (g *Genesis) UnmarshalJSON(input []byte) error {
 	if dec.Alloc == nil {
 		return errors.New("missing required field 'alloc' for Genesis")
 	}
-	g.Alloc = *dec.Alloc
+	g.Alloc = make(GenesisAlloc, len(dec.Alloc))
+	for k, v := range dec.Alloc {
+		g.Alloc[common.Address(k)] = v
+	}
 	if dec.Number != nil {
-		g.Number = *dec.Number
+		g.Number = uint64(*dec.Number)
 	}
 	if dec.GasUsed != nil {
-		g.GasUsed = *dec.GasUsed
+		g.GasUsed = uint64(*dec.GasUsed)
 	}
 	if dec.ParentHash != nil {
 		g.ParentHash = *dec.ParentHash
