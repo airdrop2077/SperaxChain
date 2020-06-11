@@ -1719,9 +1719,11 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		// its header and body was already in the database).
 		if err == ErrKnownBlock {
 			logger := log.Debug
+			/* NOTE(xtaci): removed clique
 			if bc.chainConfig.Clique == nil {
 				logger = log.Warn
 			}
+			*/
 			logger("Inserted known block", "number", block.Number(), "hash", block.Hash(),
 				"txs", len(block.Transactions()), "gas", block.GasUsed(),
 				"root", block.Root())
