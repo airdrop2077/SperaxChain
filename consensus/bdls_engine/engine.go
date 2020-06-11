@@ -309,7 +309,7 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 			}
 
 			// step 2. validate the proposed block
-			if !e.VerifyProposal(&blk) {
+			if !e.verifyProposal(&blk) {
 				return false
 			}
 
@@ -355,7 +355,7 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 		return err
 	}
 
-	// step 4. start propose the seal hash
+	// step 4. propose the block hash
 	consensus.Propose(sealHash.Bytes())
 
 	// step 5. create a consensus message subscriber's loop
@@ -368,10 +368,14 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 			consensusMessageChan = consensusSub.Chan()
 		}
 
+		// the consensus updater ticker
 		updateTick := time.NewTicker(20 * time.Millisecond)
+		defer updateTick.Stop()
+
+		// the core consensus message loop
 		for {
 			select {
-			case obj, ok := <-consensusMessageChan:
+			case obj, ok := <-consensusMessageChan: // from p2p
 				if !ok {
 					return
 				}
@@ -384,6 +388,8 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 					if newHeight == block.NumberU64() {
 						log.Debug("CONSENSUS <decide>", "height", newHeight, "round", newRound, "hash", newHeight, newRound, common.BytesToHash(newState))
 						hash := common.BytesToHash(newState)
+
+						// assemble the block with proof
 						if newblock := lookupBlock(hash); newblock != nil {
 							// found the block, then we can seal the block with the proof
 							header := newblock.Header()
@@ -400,6 +406,9 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 							mined := newblock.WithSeal(header)
 							// broadcast this block
 							results <- mined
+
+							// as block integrity is verified ahead in <roundchange> message,
+							// it's safe to stop the consensus loop now
 							return
 						}
 					}
@@ -416,7 +425,7 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 }
 
 // VerifyProposal implements blockchain specific block validator
-func (e *BDLSEngine) VerifyProposal(block *types.Block) bool {
+func (e *BDLSEngine) verifyProposal(block *types.Block) bool {
 	// for <roundchange> message
 	// The coinbase should be the person who signed the block
 	addr, err := e.Signer(block.Header())
