@@ -381,17 +381,7 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 
 // VerifyProposal implements blockchain specific block validator
 func (e *BDLSEngine) VerifyProposal(block *types.Block) bool {
-	// The author should be the first person to propose the block to ensure that randomness matches up.
-	addr, err := e.Author(block.Header())
-	if err != nil {
-		log.Error("Could not recover orignal author of the block", "e.Author()", err)
-		return false
-	} else if addr != block.Header().Coinbase {
-		log.Error("Original author of the block does not match the coinbase", "addr", addr, "coinbase", block.Header().Coinbase, "func", "Verify")
-		return false
-	}
-
-	// 2a: check bad block
+	// check bad block
 	if e.hasBadBlock != nil {
 		if e.hasBadBlock(block.Hash()) {
 			log.Error("messageValidator", "e.hasBadBlock", block.Hash())
@@ -399,7 +389,7 @@ func (e *BDLSEngine) VerifyProposal(block *types.Block) bool {
 		}
 	}
 
-	// 2b: check block body
+	// check transaction trie
 	txnHash := types.DeriveSha(block.Transactions())
 	if txnHash != block.Header().TxHash {
 		log.Error("messageValidator validate transactions", "txnHash", txnHash, "Header().TxHash", block.Header().TxHash)
