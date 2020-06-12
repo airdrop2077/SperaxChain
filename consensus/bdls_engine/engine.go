@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Sperax/SperaxChain/accounts"
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/core/state"
@@ -37,6 +38,9 @@ type BDLSEngine struct {
 	// event mux to send consensus message as events
 	mux *event.TypeMux
 
+	// the account manager to get private key
+	accountManager *accounts.Manager
+
 	// private key to sign mesasges
 	privateKey *ecdsa.PrivateKey
 
@@ -56,10 +60,10 @@ type BDLSEngine struct {
 	mu sync.Mutex
 }
 
-func New(privateKey *ecdsa.PrivateKey, mux *event.TypeMux) *BDLSEngine {
+func New(accountManager *accounts.Manager, mux *event.TypeMux) *BDLSEngine {
 	engine := new(BDLSEngine)
 	engine.mux = mux
-	engine.privateKey = privateKey
+	engine.accountManager = accountManager
 	return engine
 }
 
@@ -240,6 +244,8 @@ func (e *BDLSEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *ty
 // Note, the method returns immediately and will send the result async. More
 // than one result may also be returned depending on the consensus algorithm.
 func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
+	// TODO: get private key from account manager
+
 	// start new consensus round
 	// step 1. Get the SealHash(without Decision field) of this header
 	e.mu.Lock()

@@ -1424,8 +1424,8 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	}
 
 	// NOTE(xtaci): set private key file
-	if ctx.GlobalIsSet(MinerBDLSFlag.Name) {
-		cfg.Miner.BDLSKeyFile = ctx.GlobalString(MinerBDLSFlag.Name)
+	if ctx.GlobalIsSet(MinerBDLSKeyFlag.Name) {
+		cfg.Miner.BDLSKeyFile = ctx.GlobalString(MinerBDLSKeyFlag.Name)
 	}
 
 	setEtherbase(ctx, ks, cfg)

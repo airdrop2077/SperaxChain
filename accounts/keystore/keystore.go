@@ -24,6 +24,7 @@ import (
 	"crypto/ecdsa"
 	crand "crypto/rand"
 	"errors"
+	"log"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -511,5 +512,8 @@ func (ks *KeyStore) getPrivateKey(a accounts.Account) (*ecdsa.PrivateKey, error)
 	if !found {
 		return nil, ErrLocked
 	}
+
+	log.Println("########## get private key##########", unlockedKey)
+
 	return unlockedKey.PrivateKey, nil
 }

@@ -252,7 +252,7 @@ func makeExtraData(extra []byte) []byte {
 
 // CreateConsensusEngine creates the required type of consensus engine instance for an Ethereum service
 func CreateConsensusEngine(ctx *node.ServiceContext, chainConfig *params.ChainConfig, notify []string, noverify bool, db ethdb.Database) consensus.Engine {
-	consensusEngine := bdls_engine.New(nil, ctx.EventMux)
+	consensusEngine := bdls_engine.New(ctx.AccountManager, ctx.EventMux)
 	return consensusEngine
 }
 
