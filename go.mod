@@ -4,7 +4,7 @@ go 1.14
 
 require (
 	github.com/Azure/azure-storage-blob-go v0.7.0
-	github.com/Sperax/bdls v1.2.7-0.20200611071845-cd28a63b1343
+	github.com/Sperax/bdls v1.3.0
 	github.com/VictoriaMetrics/fastcache v1.5.7
 	github.com/allegro/bigcache v1.2.1 // indirect
 	github.com/aristanetworks/goarista v0.0.0-20190607111240-52c2a7864a08

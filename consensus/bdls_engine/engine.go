@@ -31,6 +31,15 @@ type (
 	ConsensusMessageInput []byte
 )
 
+// PublicKey to Coordinate conversion, for use in BDLS
+func PubKeyToCoordinate(pubkey *ecdsa.PublicKey) (ret bdls.Coordinate) {
+	// for a publickey first we convert to ethereum common.Address
+	commonAddress := crypto.PubkeyToAddress(*pubkey)
+	// then we just byte copy to Coordiante struct
+	copy(ret[:], commonAddress[:])
+	return
+}
+
 // BDLSEngine implements blockchain consensus engine
 type BDLSEngine struct {
 	fake bool
@@ -41,11 +50,8 @@ type BDLSEngine struct {
 	// the account manager to get private key
 	accountManager *accounts.Manager
 
-	// parameters adjustable at each height
-	participants []*ecdsa.PublicKey
-
 	// participants address
-	addresses []common.Address
+	participants []common.Address
 
 	// pre-validator for <roundchange> message
 	stateAt       func(hash common.Hash) (*state.StateDB, error)
@@ -79,14 +85,10 @@ func BytesHash(bts []byte) (h common.Hash) {
 }
 
 // SetParticipants for next height
-func (e *BDLSEngine) SetParticipants(participants []*ecdsa.PublicKey) {
+func (e *BDLSEngine) SetParticipants(participants []common.Address) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.participants = participants
-	e.addresses = nil
-	for k := range participants {
-		e.addresses = append(e.addresses, crypto.PubkeyToAddress(*e.participants[k]))
-	}
 }
 
 // SetBlockValidator starts the validating engine
@@ -181,16 +183,21 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 
 	// step 2. create a consensus object to validate this message at the correct height
 	config := &bdls.Config{
-		Epoch:         time.Now(),
-		VerifierOnly:  true,
-		StateCompare:  func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
-		StateValidate: func(bdls.State) bool { return true },
-		CurrentHeight: header.Number.Uint64() - 1,
+		Epoch:              time.Now(),
+		VerifierOnly:       true,
+		StateCompare:       func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
+		StateValidate:      func(bdls.State) bool { return true },
+		CurrentHeight:      header.Number.Uint64() - 1,
+		PubKeyToCoordinate: PubKeyToCoordinate,
 	}
 
 	// TODO: to set the participants from previous blocks?
 	// currently it's fixed
-	config.Participants = e.participants
+	for k := range e.participants {
+		var coord bdls.Coordinate
+		copy(coord[:], e.participants[k][:])
+		config.Participants = append(config.Participants, coord)
+	}
 
 	consensus, err := bdls.NewConsensus(config)
 	if err != nil {
@@ -354,8 +361,8 @@ WAIT_FOR_PRIVATEKEY:
 			}
 
 			// step 3. record or replace this block, the coinbase has verified against signature in VerifyProposal
-			for k := range e.addresses {
-				if e.addresses[k] == blk.Coinbase() {
+			for k := range e.participants {
+				if e.participants[k] == blk.Coinbase() {
 					knownBlocks[blk.Coinbase()] = &blk
 					return true
 				}
@@ -372,7 +379,6 @@ WAIT_FOR_PRIVATEKEY:
 		CurrentHeight: block.NumberU64() - 1,
 		PrivateKey:    privateKey,
 		// TODO(xtaci): (shuffle and set participants sequence based on some random number)
-		Participants: e.participants,
 		StateCompare: func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
 		StateValidate: func(s bdls.State) bool {
 			// make sure all states are known from <roundchange> exchanging
@@ -382,10 +388,19 @@ WAIT_FOR_PRIVATEKEY:
 			}
 			return false
 		},
-		MessageValidator: messageValidator,
+		PubKeyToCoordinate: PubKeyToCoordinate,
+		MessageValidator:   messageValidator,
 		// consensus message will be routed through engine
 		MessageOutCallback: messageOutCallback,
 	}
+
+	// coordinate conversion from common.Address
+	for k := range e.participants {
+		var coord bdls.Coordinate
+		copy(coord[:], e.participants[k][:])
+		config.Participants = append(config.Participants, coord)
+	}
+
 	e.mu.Unlock()
 
 	// step 3. create the consensus object
