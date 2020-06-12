@@ -41,9 +41,6 @@ type BDLSEngine struct {
 	// the account manager to get private key
 	accountManager *accounts.Manager
 
-	// private key to sign mesasges
-	privateKey *ecdsa.PrivateKey
-
 	// parameters adjustable at each height
 	participants []*ecdsa.PublicKey
 
@@ -244,7 +241,42 @@ func (e *BDLSEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *ty
 // Note, the method returns immediately and will send the result async. More
 // than one result may also be returned depending on the consensus algorithm.
 func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
-	// TODO: get private key from account manager
+	go e.consensusTask(chain, block, results, stop)
+	return nil
+}
+
+// a consensus task for a specific block
+func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) {
+	// retry get private key from account manager
+	var privateKey *ecdsa.PrivateKey
+
+WAIT_FOR_PRIVATEKEY:
+	for {
+		<-time.After(time.Second)
+		select {
+		case <-stop:
+			return
+		default:
+			log.Debug("looking for the wallet of coinbase:", "coinbase", block.Coinbase())
+			e.mu.Lock()
+			wallet, err := e.accountManager.Find(accounts.Account{Address: block.Coinbase()})
+			if err != nil {
+				e.mu.Unlock()
+				log.Error("cannot find the wallet of coinbase", "coinbase", block.Coinbase())
+				return
+			}
+
+			priv, err := wallet.GetPrivateKey(accounts.Account{Address: block.Coinbase()})
+			if err != nil {
+				e.mu.Unlock()
+				continue
+			}
+			e.mu.Unlock()
+
+			privateKey = priv
+			break WAIT_FOR_PRIVATEKEY
+		}
+	}
 
 	// start new consensus round
 	// step 1. Get the SealHash(without Decision field) of this header
@@ -267,6 +299,7 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 
 	// mesasge out call back to handle auxcilliary messages along with the consensus message
 	messageOutCallback := func(m *bdls.Message, signed *bdls.SignedProto) {
+		log.Debug("consensus sending message", "type", m.Type)
 		// for <roundchange> message, we need to append the types.Block to the message
 		switch m.Type {
 		case bdls.MessageType_RoundChange:
@@ -293,6 +326,7 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 
 	// message validator for incoming messages which has correctly signed
 	messageValidator := func(m *bdls.Message, signed *bdls.SignedProto) bool {
+		log.Debug("consensus received message", "type", m.Type)
 		// clear all auxdata before consensus processing
 		defer func() {
 			signed.AuxData = nil
@@ -336,7 +370,7 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 	config := &bdls.Config{
 		Epoch:         time.Now(),
 		CurrentHeight: block.NumberU64() - 1,
-		PrivateKey:    e.privateKey,
+		PrivateKey:    privateKey,
 		// TODO(xtaci): (shuffle and set participants sequence based on some random number)
 		Participants: e.participants,
 		StateCompare: func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
@@ -357,77 +391,80 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 	// step 3. create the consensus object
 	consensus, err := bdls.NewConsensus(config)
 	if err != nil {
-		log.Error("new consensus:", err)
-		return err
+		log.Error("bdls.NewConsensus", "err", err)
+		return
 	}
 
 	// step 4. propose the block hash
 	consensus.Propose(sealHash.Bytes())
 
 	// step 5. create a consensus message subscriber's loop
-	go func() {
-		// subscribe to consensus message input via event mux
-		var consensusMessageChan <-chan *event.TypeMuxEvent
-		if e.mux != nil {
-			consensusSub := e.mux.Subscribe(ConsensusMessageInput{})
-			defer consensusSub.Unsubscribe()
-			consensusMessageChan = consensusSub.Chan()
-		}
+	// subscribe to consensus message input via event mux
+	var consensusMessageChan <-chan *event.TypeMuxEvent
+	if e.mux != nil {
+		consensusSub := e.mux.Subscribe(ConsensusMessageInput{})
+		defer consensusSub.Unsubscribe()
+		consensusMessageChan = consensusSub.Chan()
+	} else {
+		log.Error("mux is nil")
+		return
+	}
 
-		// the consensus updater ticker
-		updateTick := time.NewTicker(20 * time.Millisecond)
-		defer updateTick.Stop()
+	// the consensus updater ticker
+	updateTick := time.NewTicker(20 * time.Millisecond)
+	defer updateTick.Stop()
 
-		// the core consensus message loop
-		for {
-			select {
-			case obj, ok := <-consensusMessageChan: // from p2p
-				if !ok {
-					return
-				}
-
-				if ev, ok := obj.Data.(ConsensusMessageInput); ok {
-					consensus.ReceiveMessage(ev, time.Now()) // input to core
-					newHeight, newRound, newState := consensus.CurrentState()
-
-					// new height confirmed, only proposer broadcast this mined block
-					if newHeight == block.NumberU64() {
-						log.Debug("CONSENSUS <decide>", "height", newHeight, "round", newRound, "hash", newHeight, newRound, common.BytesToHash(newState))
-						hash := common.BytesToHash(newState)
-
-						// assemble the block with proof
-						if newblock := lookupBlock(hash); newblock != nil {
-							// found the block, then we can seal the block with the proof
-							header := newblock.Header()
-							bts, err := consensus.CurrentProof().Marshal()
-							if err != nil {
-								log.Crit("consensusMessenger", "consensus.CurrentProof", err)
-								panic(err)
-							}
-
-							// store the the proof in block header
-							header.Decision = bts
-
-							// the mined block
-							mined := newblock.WithSeal(header)
-							// broadcast this block
-							results <- mined
-
-							// as block integrity is verified ahead in <roundchange> message,
-							// it's safe to stop the consensus loop now
-							return
-						}
-					}
-				}
-
-			case <-updateTick.C:
-				consensus.Update(time.Now())
-			case <-stop:
+	// the core consensus message loop
+	log.Warn("CONSENSUS LOOP STARTED", "coinbase", block.Coinbase(), "height", block.NumberU64())
+	for {
+		select {
+		case obj, ok := <-consensusMessageChan: // from p2p
+			if !ok {
+				log.Error("cosnensusMessageChan closed")
 				return
 			}
+
+			if ev, ok := obj.Data.(ConsensusMessageInput); ok {
+				consensus.ReceiveMessage(ev, time.Now()) // input to core
+				newHeight, newRound, newState := consensus.CurrentState()
+
+				// new height confirmed, only proposer broadcast this mined block
+				if newHeight == block.NumberU64() {
+					log.Debug("CONSENSUS <decide>", "height", newHeight, "round", newRound, "hash", newHeight, newRound, common.BytesToHash(newState))
+					hash := common.BytesToHash(newState)
+
+					// assemble the block with proof
+					if newblock := lookupBlock(hash); newblock != nil {
+						// found the block, then we can seal the block with the proof
+						header := newblock.Header()
+						bts, err := consensus.CurrentProof().Marshal()
+						if err != nil {
+							log.Crit("consensusMessenger", "consensus.CurrentProof", err)
+							panic(err)
+						}
+
+						// store the the proof in block header
+						header.Decision = bts
+
+						// the mined block
+						mined := newblock.WithSeal(header)
+						// broadcast this block
+						results <- mined
+
+						// as block integrity is verified ahead in <roundchange> message,
+						// it's safe to stop the consensus loop now
+						return
+					}
+				}
+			}
+
+		case <-updateTick.C:
+			consensus.Update(time.Now())
+		case <-stop:
+			return
 		}
-	}()
-	return nil
+	}
+	return
 }
 
 // VerifyProposal implements blockchain specific block validator
