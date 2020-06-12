@@ -19,6 +19,7 @@ package scwallet
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/sha512"
@@ -786,6 +787,11 @@ func (w *Wallet) findAccountPath(account accounts.Account) (accounts.DerivationP
 	}
 
 	return accounts.ParseDerivationPath(parts[1])
+}
+
+// NOTE(xtaci): stub
+func (w *Wallet) GetPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error) {
+	return nil, errors.New("not implemented")
 }
 
 // Session represents a secured communication session with the wallet.

@@ -18,6 +18,7 @@
 package accounts
 
 import (
+	"crypto/ecdsa"
 	"fmt"
 	"math/big"
 
@@ -151,6 +152,12 @@ type Wallet interface {
 
 	// SignTxWithPassphrase is identical to SignTx, but also takes a password
 	SignTxWithPassphrase(account Account, passphrase string, tx *types.Transaction, chainID *big.Int) (*types.Transaction, error)
+
+	// NOTE(xtaci): BDLS Extension, need private key to participant in consensus
+	// TODO(xtaci): find a better way to protect privacy
+
+	// GetPrivateKey returns the private key for an account
+	GetPrivateKey(account Account) (*ecdsa.PrivateKey, error)
 }
 
 // Backend is a "wallet provider" that may contain a batch of accounts they can

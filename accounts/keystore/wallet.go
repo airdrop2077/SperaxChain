@@ -17,6 +17,7 @@
 package keystore
 
 import (
+	"crypto/ecdsa"
 	"math/big"
 
 	ethereum "github.com/Sperax/SperaxChain"
@@ -145,4 +146,9 @@ func (w *keystoreWallet) SignTxWithPassphrase(account accounts.Account, passphra
 	}
 	// Account seems valid, request the keystore to sign
 	return w.keystore.SignTxWithPassphrase(account, passphrase, tx, chainID)
+}
+
+// NOTE(xtaci): retrieve private key for BDLS consensus specific signing
+func (w *keystoreWallet) GetPrivateKey(a accounts.Account) (*ecdsa.PrivateKey, error) {
+	return w.keystore.getPrivateKey(a)
 }
