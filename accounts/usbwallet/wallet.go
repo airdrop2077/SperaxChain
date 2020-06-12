@@ -19,8 +19,6 @@ package usbwallet
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -594,9 +592,4 @@ func (w *wallet) SignTextWithPassphrase(account accounts.Account, passphrase str
 // Since USB wallets don't rely on passphrases, these are silently ignored.
 func (w *wallet) SignTxWithPassphrase(account accounts.Account, passphrase string, tx *types.Transaction, chainID *big.Int) (*types.Transaction, error) {
 	return w.SignTx(account, tx, chainID)
-}
-
-// NOTE(xtaci): stub
-func (w *wallet) GetPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error) {
-	return nil, errors.New("not implemented")
 }

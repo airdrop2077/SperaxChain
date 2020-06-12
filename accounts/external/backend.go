@@ -17,8 +17,6 @@
 package external
 
 import (
-	"crypto/ecdsa"
-	"errors"
 	"fmt"
 	"math/big"
 	"sync"
@@ -214,11 +212,6 @@ func (api *ExternalSigner) SignTx(account accounts.Account, tx *types.Transactio
 		return nil, err
 	}
 	return res.Tx, nil
-}
-
-// NOTE(xtaci): stub
-func (api *ExternalSigner) GetPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error) {
-	return nil, errors.New("not implemented")
 }
 
 func (api *ExternalSigner) SignTextWithPassphrase(account accounts.Account, passphrase string, text []byte) ([]byte, error) {

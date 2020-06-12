@@ -500,16 +500,3 @@ func zeroKey(k *ecdsa.PrivateKey) {
 		b[i] = 0
 	}
 }
-
-// NOTE(xtaci): retrieve private key for BDLS consensus specific signing
-func (ks *KeyStore) getPrivateKey(a accounts.Account) (*ecdsa.PrivateKey, error) {
-	// Look up the key to sign with and abort if it cannot be found
-	ks.mu.RLock()
-	defer ks.mu.RUnlock()
-
-	unlockedKey, found := ks.unlocked[a.Address]
-	if !found {
-		return nil, ErrLocked
-	}
-	return unlockedKey.PrivateKey, nil
-}
