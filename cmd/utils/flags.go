@@ -394,6 +394,11 @@ var (
 		Usage: "Public address for block mining rewards (default = first account)",
 		Value: "0",
 	}
+	MinerBDLSKeyFlag = cli.StringFlag{
+		Name:  "miner.bdlskey",
+		Usage: "Private key file for signing BDLS consensus message",
+		Value: "0",
+	}
 	MinerExtraDataFlag = cli.StringFlag{
 		Name:  "miner.extradata",
 		Usage: "Block extra data set by the miner (default = client version)",
@@ -1417,6 +1422,12 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	if keystores := stack.AccountManager().Backends(keystore.KeyStoreType); len(keystores) > 0 {
 		ks = keystores[0].(*keystore.KeyStore)
 	}
+
+	// NOTE(xtaci): set private key file
+	if ctx.GlobalIsSet(MinerBDLSFlag.Name) {
+		cfg.Miner.BDLSKeyFile = ctx.GlobalString(MinerBDLSFlag.Name)
+	}
+
 	setEtherbase(ctx, ks, cfg)
 	setGPO(ctx, &cfg.GPO)
 	setTxPool(ctx, &cfg.TxPool)
