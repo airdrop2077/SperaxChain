@@ -31,8 +31,8 @@ type (
 	ConsensusMessageInput []byte
 )
 
-// PublicKey to Coordinate conversion, for use in BDLS
-func PubKeyToCoordinate(pubkey *ecdsa.PublicKey) (ret bdls.Coordinate) {
+// PublicKey to Identity conversion, for use in BDLS
+func PubKeyToIdentity(pubkey *ecdsa.PublicKey) (ret bdls.Identity) {
 	// for a publickey first we convert to ethereum common.Address
 	commonAddress := crypto.PubkeyToAddress(*pubkey)
 	// then we just byte copy to Coordiante struct
@@ -43,6 +43,9 @@ func PubKeyToCoordinate(pubkey *ecdsa.PublicKey) (ret bdls.Coordinate) {
 // BDLSEngine implements blockchain consensus engine
 type BDLSEngine struct {
 	fake bool
+
+	// ephermal private key for verification
+	ephermalKey *ecdsa.PrivateKey
 
 	// event mux to send consensus message as events
 	mux *event.TypeMux
@@ -67,6 +70,11 @@ func New(accountManager *accounts.Manager, mux *event.TypeMux) *BDLSEngine {
 	engine := new(BDLSEngine)
 	engine.mux = mux
 	engine.accountManager = accountManager
+	priv, err := crypto.GenerateKey()
+	if err != nil {
+		log.Crit("BDLS generate ephermal key", "err", err)
+	}
+	engine.ephermalKey = priv
 	return engine
 }
 
@@ -122,7 +130,7 @@ func (e *BDLSEngine) Signer(header *types.Header) (common.Address, error) {
 		if err != nil {
 			return common.Address{}, err
 		}
-		pubkey := &ecdsa.PublicKey{Curve: bdls.DefaultCurve, X: big.NewInt(0).SetBytes(sp.X[:]), Y: big.NewInt(0).SetBytes(sp.Y[:])}
+		pubkey := &ecdsa.PublicKey{Curve: e.ephermalKey.Curve, X: big.NewInt(0).SetBytes(sp.X[:]), Y: big.NewInt(0).SetBytes(sp.Y[:])}
 		return crypto.PubkeyToAddress(*pubkey), nil
 	}
 	return common.Address{}, errors.New("cannot retrieve signer")
@@ -183,20 +191,20 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 
 	// step 2. create a consensus object to validate this message at the correct height
 	config := &bdls.Config{
-		Epoch:              time.Now(),
-		VerifierOnly:       true,
-		StateCompare:       func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
-		StateValidate:      func(bdls.State) bool { return true },
-		CurrentHeight:      header.Number.Uint64() - 1,
-		PubKeyToCoordinate: PubKeyToCoordinate,
+		Epoch:            time.Now(),
+		PrivateKey:       e.ephermalKey,
+		StateCompare:     func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
+		StateValidate:    func(bdls.State) bool { return true },
+		CurrentHeight:    header.Number.Uint64() - 1,
+		PubKeyToIdentity: PubKeyToIdentity,
 	}
 
 	// TODO: to set the participants from previous blocks?
 	// currently it's fixed
 	for k := range e.participants {
-		var coord bdls.Coordinate
-		copy(coord[:], e.participants[k][:])
-		config.Participants = append(config.Participants, coord)
+		var identity bdls.Identity
+		copy(identity[:], e.participants[k][:])
+		config.Participants = append(config.Participants, identity)
 	}
 
 	consensus, err := bdls.NewConsensus(config)
@@ -388,17 +396,17 @@ WAIT_FOR_PRIVATEKEY:
 			}
 			return false
 		},
-		PubKeyToCoordinate: PubKeyToCoordinate,
-		MessageValidator:   messageValidator,
+		PubKeyToIdentity: PubKeyToIdentity,
+		MessageValidator: messageValidator,
 		// consensus message will be routed through engine
 		MessageOutCallback: messageOutCallback,
 	}
 
-	// coordinate conversion from common.Address
+	// identity conversion from common.Address
 	for k := range e.participants {
-		var coord bdls.Coordinate
-		copy(coord[:], e.participants[k][:])
-		config.Participants = append(config.Participants, coord)
+		var identity bdls.Identity
+		copy(identity[:], e.participants[k][:])
+		config.Participants = append(config.Participants, identity)
 	}
 
 	e.mu.Unlock()
