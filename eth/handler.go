@@ -282,6 +282,7 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 func (pm *ProtocolManager) Stop() {
 	pm.txsSub.Unsubscribe()        // quits txBroadcastLoop
 	pm.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
+	pm.consensusSub.Unsubscribe()  // quit consensusBroadcastLoop
 
 	// Quit chainSync and txsync64.
 	// After this is done, no new peers will be accepted.
@@ -392,6 +393,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 	if err != nil {
 		return err
 	}
+
 	if msg.Size > protocolMaxMsgSize {
 		return errResp(ErrMsgTooLarge, "%v > %v", msg.Size, protocolMaxMsgSize)
 	}
@@ -818,6 +820,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 		// publish event to consensus core
 		pm.eventMux.Post(bdls_engine.ConsensusMessageInput(bts))
+
+		// propagate this message
+		pm.BroadcastConsensusMsg(bts)
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 	}
@@ -830,13 +835,12 @@ func (pm *ProtocolManager) BroadcastConsensusMsg(bts []byte) {
 	hash := bdls_engine.BytesHash(bts)
 	peers := pm.peers.PeersWithoutConsensus(hash)
 	// Send the consensus to a subset of our peers
-	transfer := peers[:int(math.Sqrt(float64(len(peers))))]
-	for _, peer := range transfer {
+	log.Warn("BroadcastConsensusMsg", "num peers", len(peers))
+	for _, peer := range peers {
 		peer.SendConsensusMsg(bts)
 	}
-	log.Trace("Propagated consensus", "hash", hash, "recipients", len(transfer))
+	log.Warn("Propagated consensus", "hash", hash, "recipients", len(peers))
 	return
-
 }
 
 // will only announce its availability (depending what's requested).

@@ -43,7 +43,7 @@ const protocolName = "eth"
 var ProtocolVersions = []uint{eth65, eth64, eth63}
 
 // protocolLengths are the number of implemented message corresponding to different protocol versions.
-var protocolLengths = map[uint]uint64{eth65: 17, eth64: 17, eth63: 17}
+var protocolLengths = map[uint]uint64{eth65: 18, eth64: 18, eth63: 18}
 
 const protocolMaxMsgSize = 10 * 1024 * 1024 // Maximum cap on the size of a protocol message
 
@@ -71,7 +71,7 @@ const (
 	PooledTransactionsMsg         = 0x0a
 
 	// BDLS Consensus Extensions
-	BDLSConsensusMsg = 0x20
+	BDLSConsensusMsg = 0x11
 )
 
 type errCode int

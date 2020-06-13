@@ -11,6 +11,7 @@ import (
 	"github.com/Sperax/SperaxChain/accounts"
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
+	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/crypto"
@@ -132,7 +133,6 @@ func (e *BDLSEngine) Signer(header *types.Header) (common.Address, error) {
 		}
 
 		pubkey := &ecdsa.PublicKey{Curve: e.ephermalKey.Curve, X: big.NewInt(0).SetBytes(sp.X[:]), Y: big.NewInt(0).SetBytes(sp.Y[:])}
-		log.Warn("public of signer", "x", pubkey.X, "y", pubkey.Y, "rawx", sp.X, "rawy", sp.Y, "R", sp.R, "S", sp.S)
 		return crypto.PubkeyToAddress(*pubkey), nil
 	}
 	return common.Address{}, errors.New("cannot retrieve signer")
@@ -317,17 +317,32 @@ WAIT_FOR_PRIVATEKEY:
 	// mesasge out call back to handle auxcilliary messages along with the consensus message
 	messageOutCallback := func(m *bdls.Message, signed *bdls.SignedProto) {
 		log.Debug("consensus sending message", "type", m.Type)
-		// for <roundchange> message, we need to append the types.Block to the message
+		// for <roundchange> message, we need to append the corresponding types.Block to the message
 		switch m.Type {
 		case bdls.MessageType_RoundChange:
-			blockData, err := rlp.EncodeToBytes(block)
+			blockHash := common.BytesToHash(m.State)
+			var outblock *types.Block
+
+			// find blocks & assembly to auxdata
+			if blockHash == e.SealHash(block.Header()) {
+				// locally proposed block
+				outblock = block
+			} else {
+				// externally proposed block
+				outblock = lookupBlock(blockHash)
+			}
+
+			if outblock == nil {
+				log.Warn("cannot find block", "hash", blockHash)
+				return
+			}
+
+			blockData, err := rlp.EncodeToBytes(outblock)
 			if err != nil {
 				log.Error("messageOutCallBack", "rlp.EncodeToBytes", err)
 			}
 			signed.AuxData = blockData
 		}
-
-		log.Warn("message outcallback", "X", signed.X, "Y", signed.Y)
 
 		bts, err := signed.Marshal()
 		if err != nil {
@@ -351,6 +366,8 @@ WAIT_FOR_PRIVATEKEY:
 			signed.AuxData = nil
 		}()
 
+		log.Warn("validator", "message type:", m.Type)
+
 		switch m.Type {
 		case bdls.MessageType_RoundChange:
 			// For incoming <roundchange> message(proposal), we should validate the block sent
@@ -364,34 +381,34 @@ WAIT_FOR_PRIVATEKEY:
 
 			// step 1. compare hash with block in auxdata
 			if e.SealHash(blk.Header()) != common.BytesToHash(m.State) {
+				log.Error("messageValidator auxdata hash", "seal hash", e.SealHash(blk.Header()), "state hash", common.BytesToHash(m.State))
 				return false
 			}
 
-			// step 2. for <roundchange> message
-			// The coinbase should be the person who signed the block
+			//  step 2
+			parentHeader := chain.GetHeader(blk.ParentHash(), blk.NumberU64()-1)
+			if parentHeader == nil {
+				log.Error("unknown ancestor", "parenthash", blk.ParentHash(), "number", blk.NumberU64()-1)
+				return false
+			}
+
+			// step 2. validate the proposed block
+			if !e.verifyProposalBlock(&blk) {
+				log.Error("verify Proposal block failed")
+				return false
+			}
+
+			// step 3. record or replace this block, the coinbase has verified against signature in VerifyProposal
 			pubkey := &ecdsa.PublicKey{Curve: e.ephermalKey.Curve, X: big.NewInt(0).SetBytes(signed.X[:]), Y: big.NewInt(0).SetBytes(signed.Y[:])}
 			signerAddr := crypto.PubkeyToAddress(*pubkey)
-
-			if err != nil {
-				log.Error("Could not recover signer of the block", "e.Signer()", err)
-				return false
-			} else if signerAddr != block.Header().Coinbase {
-				log.Error("The signer of this block does not match the coinbase", "signer address", signerAddr, "coinbase", block.Header().Coinbase, "height", block.NumberU64())
-				return false
-			}
-
-			// step 3. validate the proposed block
-			if !e.verifyProposalBlock(&blk) {
-				return false
-			}
-
-			// step 4. record or replace this block, the coinbase has verified against signature in VerifyProposal
 			for k := range e.participants {
-				if e.participants[k] == blk.Coinbase() {
-					knownBlocks[blk.Coinbase()] = &blk
+				if e.participants[k] == signerAddr {
+					knownBlocks[signerAddr] = &blk
 					return true
 				}
 			}
+
+			log.Error("cannot find signer in participant", "addr", signerAddr)
 			return false
 		}
 
@@ -411,6 +428,7 @@ WAIT_FOR_PRIVATEKEY:
 			if lookupBlock(hash) != nil {
 				return true
 			}
+
 			return false
 		},
 		PubKeyToIdentity: PubKeyToIdentity,
@@ -428,7 +446,6 @@ WAIT_FOR_PRIVATEKEY:
 
 	e.mu.Unlock()
 
-	log.Warn("miner publickey ", "x", privateKey.X, "y", privateKey.Y)
 	// step 3. create the consensus object
 	consensus, err := bdls.NewConsensus(config)
 	if err != nil {
@@ -466,12 +483,15 @@ WAIT_FOR_PRIVATEKEY:
 			}
 
 			if ev, ok := obj.Data.(ConsensusMessageInput); ok {
-				consensus.ReceiveMessage(ev, time.Now()) // input to core
+				err := consensus.ReceiveMessage(ev, time.Now()) // input to core
+				if err != nil {
+					log.Warn("consensus receive:", "err", err)
+				}
 				newHeight, newRound, newState := consensus.CurrentState()
 
 				// new height confirmed, only proposer broadcast this mined block
 				if newHeight == block.NumberU64() {
-					log.Debug("CONSENSUS <decide>", "height", newHeight, "round", newRound, "hash", newHeight, newRound, common.BytesToHash(newState))
+					log.Warn("CONSENSUS <decide>", "height", newHeight, "round", newRound, "hash", newHeight, newRound, common.BytesToHash(newState))
 					hash := common.BytesToHash(newState)
 
 					// assemble the block with proof
@@ -489,9 +509,8 @@ WAIT_FOR_PRIVATEKEY:
 
 						// the mined block
 						mined := newblock.WithSeal(header)
-						// broadcast this block
-						results <- mined
-
+						// Broadcast the block and announce chain insertion event
+						e.mux.Post(core.NewMinedBlockEvent{Block: mined})
 						// as block integrity is verified ahead in <roundchange> message,
 						// it's safe to stop the consensus loop now
 						return
