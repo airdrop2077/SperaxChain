@@ -115,7 +115,7 @@ var (
 		utils.MinerGasPriceFlag,
 		utils.LegacyMinerGasPriceFlag,
 		utils.MinerEtherbaseFlag,
-		utils.MinerBDLSKeyFlag, // BDLS private key file
+		utils.MinerBDLSGroup, // BDLS consensus group
 		utils.LegacyMinerEtherbaseFlag,
 		utils.MinerExtraDataFlag,
 		utils.LegacyMinerExtraDataFlag,

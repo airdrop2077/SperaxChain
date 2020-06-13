@@ -159,6 +159,12 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		bloomIndexer:      NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms),
 	}
 
+	// set consensus group for BDLS
+	if bdls, ok := eth.engine.(*bdls_engine.BDLSEngine); ok {
+		bdls.SetParticipants(config.Miner.BDLSConsensusGroup)
+		log.Debug("Set consensus group to bdls engine", "group", config.Miner.BDLSConsensusGroup)
+	}
+
 	bcVersion := rawdb.ReadDatabaseVersion(chainDb)
 	var dbVer = "<nil>"
 	if bcVersion != nil {

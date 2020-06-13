@@ -19,6 +19,7 @@ package utils
 
 import (
 	"crypto/ecdsa"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -394,9 +395,9 @@ var (
 		Usage: "Public address for block mining rewards (default = first account)",
 		Value: "0",
 	}
-	MinerBDLSKeyFlag = cli.StringFlag{
-		Name:  "miner.bdlskey",
-		Usage: "Private key file for signing BDLS consensus message",
+	MinerBDLSGroup = cli.StringFlag{
+		Name:  "miner.bdlsgroup",
+		Usage: "miner's address list in BDLS consensus group",
 		Value: "0",
 	}
 	MinerExtraDataFlag = cli.StringFlag{
@@ -1423,9 +1424,25 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 		ks = keystores[0].(*keystore.KeyStore)
 	}
 
-	// NOTE(xtaci): set private key file
-	if ctx.GlobalIsSet(MinerBDLSKeyFlag.Name) {
-		cfg.Miner.BDLSKeyFile = ctx.GlobalString(MinerBDLSKeyFlag.Name)
+	// NOTE(xtaci): load bdls participants group
+	if ctx.GlobalIsSet(MinerBDLSGroup.Name) {
+		file, err := os.Open(ctx.GlobalString(MinerBDLSGroup.Name))
+		if err != nil {
+			log.Crit("open BDLS group file:", err)
+		}
+		dec := json.NewDecoder(file)
+
+		var quorum []string
+		err = dec.Decode(&quorum)
+		if err != nil {
+			log.Crit("bdls file json decode", "err", err)
+		}
+
+		log.Debug("quorum", "list", quorum)
+
+		for k := range quorum {
+			cfg.Miner.BDLSConsensusGroup = append(cfg.Miner.BDLSConsensusGroup, common.HexToAddress(quorum[k]))
+		}
 	}
 
 	setEtherbase(ctx, ks, cfg)

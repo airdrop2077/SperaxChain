@@ -125,12 +125,14 @@ func (e *BDLSEngine) Author(header *types.Header) (common.Address, error) {
 
 // Signer returns the signer of this header
 func (e *BDLSEngine) Signer(header *types.Header) (common.Address, error) {
-	if header.Decision != nil {
+	if len(header.Decision) > 0 {
 		sp, err := bdls.DecodeSignedMessage(header.Decision)
 		if err != nil {
 			return common.Address{}, err
 		}
+
 		pubkey := &ecdsa.PublicKey{Curve: e.ephermalKey.Curve, X: big.NewInt(0).SetBytes(sp.X[:]), Y: big.NewInt(0).SetBytes(sp.Y[:])}
+		log.Warn("public of signer", "x", pubkey.X, "y", pubkey.Y, "rawx", sp.X, "rawy", sp.Y, "R", sp.R, "S", sp.S)
 		return crypto.PubkeyToAddress(*pubkey), nil
 	}
 	return common.Address{}, errors.New("cannot retrieve signer")
@@ -325,6 +327,8 @@ WAIT_FOR_PRIVATEKEY:
 			signed.AuxData = blockData
 		}
 
+		log.Warn("message outcallback", "X", signed.X, "Y", signed.Y)
+
 		bts, err := signed.Marshal()
 		if err != nil {
 			log.Error("messageOutCallback", "signed.Marshal", err)
@@ -363,12 +367,25 @@ WAIT_FOR_PRIVATEKEY:
 				return false
 			}
 
-			// step 2. validate the proposed block
-			if !e.verifyProposal(&blk) {
+			// step 2. for <roundchange> message
+			// The coinbase should be the person who signed the block
+			pubkey := &ecdsa.PublicKey{Curve: e.ephermalKey.Curve, X: big.NewInt(0).SetBytes(signed.X[:]), Y: big.NewInt(0).SetBytes(signed.Y[:])}
+			signerAddr := crypto.PubkeyToAddress(*pubkey)
+
+			if err != nil {
+				log.Error("Could not recover signer of the block", "e.Signer()", err)
+				return false
+			} else if signerAddr != block.Header().Coinbase {
+				log.Error("The signer of this block does not match the coinbase", "signer address", signerAddr, "coinbase", block.Header().Coinbase, "height", block.NumberU64())
 				return false
 			}
 
-			// step 3. record or replace this block, the coinbase has verified against signature in VerifyProposal
+			// step 3. validate the proposed block
+			if !e.verifyProposalBlock(&blk) {
+				return false
+			}
+
+			// step 4. record or replace this block, the coinbase has verified against signature in VerifyProposal
 			for k := range e.participants {
 				if e.participants[k] == blk.Coinbase() {
 					knownBlocks[blk.Coinbase()] = &blk
@@ -411,6 +428,7 @@ WAIT_FOR_PRIVATEKEY:
 
 	e.mu.Unlock()
 
+	log.Warn("miner publickey ", "x", privateKey.X, "y", privateKey.Y)
 	// step 3. create the consensus object
 	consensus, err := bdls.NewConsensus(config)
 	if err != nil {
@@ -490,19 +508,8 @@ WAIT_FOR_PRIVATEKEY:
 	return
 }
 
-// VerifyProposal implements blockchain specific block validator
-func (e *BDLSEngine) verifyProposal(block *types.Block) bool {
-	// for <roundchange> message
-	// The coinbase should be the person who signed the block
-	addr, err := e.Signer(block.Header())
-	if err != nil {
-		log.Error("Could not recover signer of the block", "e.Signer()", err)
-		return false
-	} else if addr != block.Header().Coinbase {
-		log.Error("The signer of this block does not match the coinbase", "addr", addr, "coinbase", block.Header().Coinbase, "func", "Verify")
-		return false
-	}
-
+// VerifyProposalBlock implements blockchain specific block validator
+func (e *BDLSEngine) verifyProposalBlock(block *types.Block) bool {
 	// check bad block
 	if e.hasBadBlock != nil {
 		if e.hasBadBlock(block.Hash()) {
