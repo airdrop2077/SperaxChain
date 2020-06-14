@@ -109,7 +109,7 @@ var headerSize = common.StorageSize(reflect.TypeOf(Header{}).Size())
 // Size returns the approximate memory used by all internal contents. It is used
 // to approximate and limit the memory consumption of various caches.
 func (h *Header) Size() common.StorageSize {
-	return headerSize + common.StorageSize(len(h.Extra)+(h.Difficulty.BitLen()+h.Number.BitLen())/8)
+	return headerSize + common.StorageSize(len(h.Decision)+len(h.Extra)+(h.Difficulty.BitLen()+h.Number.BitLen())/8)
 }
 
 // SanityCheck checks a few basic things -- these checks are way beyond what
@@ -128,6 +128,10 @@ func (h *Header) SanityCheck() error {
 	if eLen := len(h.Extra); eLen > 100*1024 {
 		return fmt.Errorf("too large block extradata: size %d", eLen)
 	}
+	if eLen := len(h.Decision); eLen > 1024*1024 {
+		return fmt.Errorf("too large block decision: size %d", eLen)
+	}
+
 	return nil
 }
 
@@ -253,6 +257,10 @@ func CopyHeader(h *Header) *Header {
 	if len(h.Extra) > 0 {
 		cpy.Extra = make([]byte, len(h.Extra))
 		copy(cpy.Extra, h.Extra)
+	}
+	if len(h.Decision) > 0 {
+		cpy.Decision = make([]byte, len(h.Decision))
+		copy(cpy.Decision, h.Decision)
 	}
 	return &cpy
 }
