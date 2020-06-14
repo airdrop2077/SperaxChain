@@ -118,12 +118,6 @@ var AppHelpFlagGroups = []flagGroup{
 		},
 	},
 	{
-		Name: "BDLS",
-		Flags: []cli.Flag{
-			utils.BDLSParticipants,
-		},
-	},
-	{
 		Name: "TRANSACTION POOL",
 		Flags: []cli.Flag{
 			utils.TxPoolLocalsFlag,

@@ -19,7 +19,6 @@ package utils
 
 import (
 	"crypto/ecdsa"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -315,11 +314,6 @@ var (
 	EthashDatasetsLockMmapFlag = cli.BoolFlag{
 		Name:  "ethash.dagslockmmap",
 		Usage: "Lock memory maps for recent ethash mining DAGs",
-	}
-	BDLSParticipants = cli.StringFlag{
-		Name:  "bdls.bdlsgroup",
-		Usage: "bdls's address list file name in BDLS consensus group",
-		Value: "0",
 	}
 	// Transaction pool settings
 	TxPoolLocalsFlag = cli.StringFlag{
@@ -1361,29 +1355,6 @@ func setEthash(ctx *cli.Context, cfg *eth.Config) {
 	}
 }
 
-func setBDLS(ctx *cli.Context, cfg *eth.Config) {
-	// NOTE(xtaci): load bdls participants group
-	if ctx.GlobalIsSet(BDLSParticipants.Name) {
-		file, err := os.Open(ctx.GlobalString(BDLSParticipants.Name))
-		if err != nil {
-			log.Crit("open BDLS group file:", err)
-		}
-		dec := json.NewDecoder(file)
-
-		var quorum []string
-		err = dec.Decode(&quorum)
-		if err != nil {
-			log.Crit("bdls file json decode", "err", err)
-		}
-
-		log.Debug("quorum", "list", quorum)
-
-		for k := range quorum {
-			cfg.BDLS.Participants = append(cfg.BDLS.Participants, common.HexToAddress(quorum[k]))
-		}
-	}
-}
-
 func setMiner(ctx *cli.Context, cfg *miner.Config) {
 	if ctx.GlobalIsSet(MinerNotifyFlag.Name) {
 		cfg.Notify = strings.Split(ctx.GlobalString(MinerNotifyFlag.Name), ",")
@@ -1516,7 +1487,6 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	setGPO(ctx, &cfg.GPO)
 	setTxPool(ctx, &cfg.TxPool)
 	setEthash(ctx, cfg)
-	setBDLS(ctx, cfg)
 	setMiner(ctx, &cfg.Miner)
 	setWhitelist(ctx, cfg)
 	setLes(ctx, cfg)
