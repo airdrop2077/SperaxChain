@@ -151,12 +151,29 @@ func (e *BDLSEngine) Signer(header *types.Header) (common.Address, error) {
 // given engine. Verifying the seal may be done optionally here, or explicitly
 // via the VerifySeal method.
 func (e *BDLSEngine) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool) error {
-
-	parentHeader := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
-	if parentHeader == nil {
-		log.Error("verify header", "parentHash", header.ParentHash, "root", chain.GetHeaderByNumber(0).Hash())
-		return errors.New("unknown ancestor")
+	// Short circuit if the header is known, or its parent not
+	number := header.Number.Uint64()
+	if chain.GetHeader(header.Hash(), number) != nil {
+		return nil
 	}
+	parent := chain.GetHeader(header.ParentHash, number-1)
+	if parent == nil {
+		return consensus.ErrUnknownAncestor
+	}
+
+	// Ensure that the coinbase is valid
+	if header.Nonce != (emptyNonce) {
+		return errInvalidNonce
+	}
+	// Ensure that the block doesn't contain any uncles which are meaningless in Istanbul
+	if header.UncleHash != nilUncleHash {
+		return errInvalidUncleHash
+	}
+	// Ensure that the block's difficulty is meaningful (may not be correct at this point)
+	if header.Difficulty == nil || header.Difficulty.Cmp(defaultDifficulty) != 0 {
+		return errInvalidDifficulty
+	}
+
 	if seal {
 		if err := e.VerifySeal(chain, header); err != nil {
 			return err
@@ -194,22 +211,6 @@ func (e *BDLSEngine) VerifyUncles(chain consensus.ChainReader, block *types.Bloc
 // VerifySeal checks whether the crypto seal on a header is valid according to
 // the consensus rules of the given engine.
 func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Header) error {
-	// basic header field checks
-	if header.Number == nil {
-		return errUnknownBlock
-	}
-	// Ensure that the coinbase is valid
-	if header.Nonce != (emptyNonce) {
-		return errInvalidNonce
-	}
-	// Ensure that the block doesn't contain any uncles which are meaningless in Istanbul
-	if header.UncleHash != nilUncleHash {
-		return errInvalidUncleHash
-	}
-	// Ensure that the block's difficulty is meaningful (may not be correct at this point)
-	if header.Difficulty == nil || header.Difficulty.Cmp(defaultDifficulty) != 0 {
-		return errInvalidDifficulty
-	}
 
 	// step 0. Check decision field is not nil
 	if len(header.Decision) == 0 {
