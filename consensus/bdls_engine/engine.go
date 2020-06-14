@@ -11,7 +11,6 @@ import (
 	"github.com/Sperax/SperaxChain/accounts"
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
-	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/crypto"
@@ -22,6 +21,24 @@ import (
 	"github.com/Sperax/SperaxChain/rpc"
 	"github.com/Sperax/bdls"
 	"golang.org/x/crypto/sha3"
+)
+
+var (
+	// errUnknownBlock is returned when the list of validators is requested for a block
+	// that is not part of the local blockchain.
+	errUnknownBlock = errors.New("unknown block")
+	// errInvalidDifficulty is returned if the difficulty of a block is not 1
+	errInvalidDifficulty = errors.New("invalid difficulty")
+	// errInvalidUncleHash is returned if a block contains an non-empty uncle list.
+	errInvalidUncleHash = errors.New("non empty uncle hash")
+	// errInvalidNonce is returned if a block's nonce is invalid
+	errInvalidNonce = errors.New("invalid nonce")
+)
+
+var (
+	defaultDifficulty = big.NewInt(1)
+	nilUncleHash      = types.CalcUncleHash(nil) // Always Keccak256(RLP([])) as uncles are meaningless outside of PoW.
+	emptyNonce        = types.BlockNonce{}
 )
 
 // For consensus message event I/O
@@ -48,8 +65,6 @@ func PubKeyToIdentity(pubkey *ecdsa.PublicKey) (ret bdls.Identity) {
 
 // BDLSEngine implements blockchain consensus engine
 type BDLSEngine struct {
-	fake bool
-
 	// ephermal private key for verification
 	ephermalKey *ecdsa.PrivateKey
 
@@ -136,6 +151,7 @@ func (e *BDLSEngine) Signer(header *types.Header) (common.Address, error) {
 // given engine. Verifying the seal may be done optionally here, or explicitly
 // via the VerifySeal method.
 func (e *BDLSEngine) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool) error {
+
 	parentHeader := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
 	if parentHeader == nil {
 		return errors.New("unknown ancestor")
@@ -177,8 +193,21 @@ func (e *BDLSEngine) VerifyUncles(chain consensus.ChainReader, block *types.Bloc
 // VerifySeal checks whether the crypto seal on a header is valid according to
 // the consensus rules of the given engine.
 func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Header) error {
-	if e.fake {
-		return nil
+	// basic header field checks
+	if header.Number == nil {
+		return errUnknownBlock
+	}
+	// Ensure that the coinbase is valid
+	if header.Nonce != (emptyNonce) {
+		return errInvalidNonce
+	}
+	// Ensure that the block doesn't contain any uncles which are meaningless in Istanbul
+	if header.UncleHash != nilUncleHash {
+		return errInvalidUncleHash
+	}
+	// Ensure that the block's difficulty is meaningful (may not be correct at this point)
+	if header.Difficulty == nil || header.Difficulty.Cmp(defaultDifficulty) != 0 {
+		return errInvalidDifficulty
 	}
 
 	// step 0. Check decision field is not nil
@@ -186,6 +215,7 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		log.Debug("VerifySeal", "header.Decision", "decision field is nil")
 		return errors.New("decision field is nil")
 	}
+
 	// step 1. Get the SealHash(without Decision field) of this header
 	sealHash := e.SealHash(header).Bytes()
 
@@ -226,6 +256,10 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 // Prepare initializes the consensus fields of a block header according to the
 // rules of a particular engine. The changes are executed inline.
 func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) error {
+	header.Nonce = emptyNonce
+	// use the same difficulty for all blocks
+	header.Difficulty = defaultDifficulty
+
 	return nil
 }
 
@@ -454,6 +488,9 @@ WAIT_FOR_PRIVATEKEY:
 	// step 4. propose the block hash
 	consensus.Propose(sealHash.Bytes())
 
+	// step 5: step delay by last block timestamp
+	consensus.SetLatency(time.Second)
+
 	// step 5. create a consensus message subscriber's loop
 	// subscribe to consensus message input via event mux
 	var consensusMessageChan <-chan *event.TypeMuxEvent
@@ -492,10 +529,10 @@ WAIT_FOR_PRIVATEKEY:
 					log.Warn("CONSENSUS <decide>", "height", newHeight, "round", newRound, "hash", newHeight, newRound, common.BytesToHash(newState))
 					hash := common.BytesToHash(newState)
 
-					// assemble the block with proof
-					if newblock := lookupBlock(hash); newblock != nil {
+					// the block proposer assemble the block with proof
+					if hash == e.SealHash(block.Header()) {
 						// found the block, then we can seal the block with the proof
-						header := newblock.Header()
+						header := block.Header()
 						bts, err := consensus.CurrentProof().Marshal()
 						if err != nil {
 							log.Crit("consensusMessenger", "consensus.CurrentProof", err)
@@ -506,11 +543,10 @@ WAIT_FOR_PRIVATEKEY:
 						header.Decision = bts
 
 						// the mined block
-						mined := newblock.WithSeal(header)
-						// Broadcast the block and announce chain insertion event
-						e.mux.Post(core.NewMinedBlockEvent{Block: mined})
+						mined := block.WithSeal(header)
 						// as block integrity is verified ahead in <roundchange> message,
 						// it's safe to stop the consensus loop now
+						results <- mined
 						return
 					}
 				}
@@ -519,6 +555,7 @@ WAIT_FOR_PRIVATEKEY:
 		case <-updateTick.C:
 			consensus.Update(time.Now())
 		case <-stop:
+			results <- nil
 			return
 		}
 	}
