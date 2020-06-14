@@ -154,6 +154,7 @@ func (e *BDLSEngine) VerifyHeader(chain consensus.ChainReader, header *types.Hea
 
 	parentHeader := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
 	if parentHeader == nil {
+		log.Error("verify header", "parentHash", header.ParentHash, "root", chain.GetHeaderByNumber(0).Hash())
 		return errors.New("unknown ancestor")
 	}
 	if seal {
