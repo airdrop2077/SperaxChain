@@ -390,7 +390,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 		case <-timer.C:
 			// If mining is running resubmit a new work cycle periodically to pull in
 			// higher priced transactions. Disable this overhead for pending blocks.
-			if w.isRunning() && w.chainConfig.BDLS == nil {
+			if w.isRunning() && (w.chainConfig.Clique == nil || w.chainConfig.Clique.Period > 0) && w.chainConfig.BDLS == nil {
 				// Short circuit if no new transaction arrives.
 				if atomic.LoadInt32(&w.newTxs) == 0 {
 					timer.Reset(recommit)
@@ -480,7 +480,7 @@ func (w *worker) mainLoop() {
 						uncles = append(uncles, uncle.Header())
 						return false
 					})
-					w.commit(nil, true, start)
+					w.commit(uncles, nil, true, start)
 				}
 			}
 
@@ -511,6 +511,13 @@ func (w *worker) mainLoop() {
 				// to the pending block
 				if tcount != w.current.tcount {
 					w.updateSnapshot()
+				}
+			} else {
+				// Special case, if the consensus engine is 0 period clique(dev mode),
+				// submit mining work here since all empty submission will be rejected
+				// by clique. Of course the advance sealing(empty submission) is disabled.
+				if w.chainConfig.Clique != nil && w.chainConfig.Clique.Period == 0 {
+					w.commitNewWork(nil, true, time.Now().Unix())
 				}
 			}
 			atomic.AddInt32(&w.newTxs, int32(len(ev.Txs)))
@@ -658,6 +665,9 @@ func (w *worker) makeCurrent(parent *types.Block, header *types.Header) error {
 
 	// when 08 is processed ancestors contain 07 (quick block)
 	for _, ancestor := range w.chain.GetBlocksFromHash(parent.Hash(), 7) {
+		for _, uncle := range ancestor.Uncles() {
+			env.family.Add(uncle.Hash())
+		}
 		env.family.Add(ancestor.Hash())
 		env.ancestors.Add(ancestor.Hash())
 	}
@@ -713,6 +723,7 @@ func (w *worker) updateSnapshot() {
 	w.snapshotBlock = types.NewBlock(
 		w.current.header,
 		w.current.txs,
+		uncles,
 		w.current.receipts,
 	)
 
@@ -936,7 +947,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	// Create an empty block based on temporary copied state for
 	// sealing in advance without waiting block execution finished.
 	if !noempty && atomic.LoadUint32(&w.noempty) == 0 {
-		w.commit(nil, false, tstart)
+		w.commit(uncles, nil, false, tstart)
 	}
 
 	// Fill the block with all available pending transactions.
@@ -972,12 +983,12 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			return
 		}
 	}
-	w.commit(w.fullTaskHook, true, tstart)
+	w.commit(uncles, w.fullTaskHook, true, tstart)
 }
 
 // commit runs any post-transaction state modifications, assembles the final block
 // and commits new work if consensus engine is running.
-func (w *worker) commit(interval func(), update bool, start time.Time) error {
+func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
 	// Deep copy receipts here to avoid interaction between different tasks.
 	receipts := make([]*types.Receipt, len(w.current.receipts))
 	for i, l := range w.current.receipts {
@@ -985,7 +996,7 @@ func (w *worker) commit(interval func(), update bool, start time.Time) error {
 		*receipts[i] = *l
 	}
 	s := w.current.state.Copy()
-	block, err := w.engine.FinalizeAndAssemble(w.chain, w.current.header, s, w.current.txs, w.current.receipts)
+	block, err := w.engine.FinalizeAndAssemble(w.chain, w.current.header, s, w.current.txs, uncles, w.current.receipts)
 	if err != nil {
 		return err
 	}
@@ -1004,7 +1015,7 @@ func (w *worker) commit(interval func(), update bool, start time.Time) error {
 			feesEth := new(big.Float).Quo(new(big.Float).SetInt(feesWei), new(big.Float).SetInt(big.NewInt(params.Ether)))
 
 			log.Info("Commit new mining work", "number", block.Number(), "sealhash", w.engine.SealHash(block.Header()),
-				"txs", w.current.tcount, "gas", block.GasUsed(), "fees", feesEth, "elapsed", common.PrettyDuration(time.Since(start)))
+				"uncles", len(uncles), "txs", w.current.tcount, "gas", block.GasUsed(), "fees", feesEth, "elapsed", common.PrettyDuration(time.Since(start)))
 
 		case <-w.exitCh:
 			log.Info("Worker has exited")

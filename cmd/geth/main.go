@@ -32,7 +32,7 @@ import (
 	"github.com/Sperax/SperaxChain/accounts/keystore"
 	"github.com/Sperax/SperaxChain/cmd/utils"
 	"github.com/Sperax/SperaxChain/common"
-	"github.com/Sperax/SperaxChain/console/prompt"
+	"github.com/Sperax/SperaxChain/console"
 	"github.com/Sperax/SperaxChain/eth"
 	"github.com/Sperax/SperaxChain/eth/downloader"
 	"github.com/Sperax/SperaxChain/ethclient"
@@ -69,6 +69,15 @@ var (
 		utils.ExternalSignerFlag,
 		utils.NoUSBFlag,
 		utils.SmartCardDaemonPathFlag,
+		utils.EthashCacheDirFlag,
+		utils.EthashCachesInMemoryFlag,
+		utils.EthashCachesOnDiskFlag,
+		utils.EthashCachesLockMmapFlag,
+		utils.EthashDatasetDirFlag,
+		utils.EthashDatasetsInMemoryFlag,
+		utils.EthashDatasetsOnDiskFlag,
+		utils.EthashDatasetsLockMmapFlag,
+		utils.BDLSParticipants,
 		utils.TxPoolLocalsFlag,
 		utils.TxPoolNoLocalsFlag,
 		utils.TxPoolJournalFlag,
@@ -115,7 +124,6 @@ var (
 		utils.MinerGasPriceFlag,
 		utils.LegacyMinerGasPriceFlag,
 		utils.MinerEtherbaseFlag,
-		utils.MinerBDLSGroup, // BDLS consensus group
 		utils.LegacyMinerEtherbaseFlag,
 		utils.MinerExtraDataFlag,
 		utils.LegacyMinerExtraDataFlag,
@@ -225,6 +233,8 @@ func init() {
 		attachCommand,
 		javascriptCommand,
 		// See misccmd.go:
+		makecacheCommand,
+		makedagCommand,
 		versionCommand,
 		licenseCommand,
 		// See config.go
@@ -249,7 +259,7 @@ func init() {
 	}
 	app.After = func(ctx *cli.Context) error {
 		debug.Exit()
-		prompt.Stdin.Close() // Resets terminal mode.
+		console.Stdin.Close() // Resets terminal mode.
 		return nil
 	}
 }

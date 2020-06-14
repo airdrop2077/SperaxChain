@@ -19,8 +19,8 @@ package vm
 import (
 	"math/big"
 
-	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/core/types"
 )
 
 // StateDB is an EVM database for full state querying.

@@ -24,10 +24,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sperax/SperaxChain/core/state"
-	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/common/prque"
+	"github.com/Sperax/SperaxChain/core/state"
+	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/event"
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/metrics"
@@ -71,7 +71,7 @@ var (
 	// maximum allowance of the current block.
 	ErrGasLimit = errors.New("exceeds block gas limit")
 
-	// ErrNegativeValue is a sanity error to ensure no one is able to specify a
+	// ErrNegativeValue is a sanity error to ensure noone is able to specify a
 	// transaction with a negative value.
 	ErrNegativeValue = errors.New("negative value")
 

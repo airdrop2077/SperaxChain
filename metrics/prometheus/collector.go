@@ -30,7 +30,7 @@ var (
 	typeCounterTpl         = "# TYPE %s counter\n"
 	typeSummaryTpl         = "# TYPE %s summary\n"
 	keyValueTpl            = "%s %v\n\n"
-	keyQuantileTagValueTpl = "%s {quantile=\"%s\"} %v\n"
+	keyQuantileTagValueTpl = "%s {quantile=\"%s\"} %v\n\n"
 )
 
 // collector is a collection of byte buffers that aggregate Prometheus reports
@@ -39,7 +39,7 @@ type collector struct {
 	buff *bytes.Buffer
 }
 
-// newCollector creates a new Prometheus metric aggregator.
+// newCollector createa a new Prometheus metric aggregator.
 func newCollector() *collector {
 	return &collector{
 		buff: &bytes.Buffer{},
@@ -62,11 +62,9 @@ func (c *collector) addHistogram(name string, m metrics.Histogram) {
 	pv := []float64{0.5, 0.75, 0.95, 0.99, 0.999, 0.9999}
 	ps := m.Percentiles(pv)
 	c.writeSummaryCounter(name, m.Count())
-	c.buff.WriteString(fmt.Sprintf(typeSummaryTpl, mutateKey(name)))
 	for i := range pv {
 		c.writeSummaryPercentile(name, strconv.FormatFloat(pv[i], 'f', -1, 64), ps[i])
 	}
-	c.buff.WriteRune('\n')
 }
 
 func (c *collector) addMeter(name string, m metrics.Meter) {
@@ -77,11 +75,9 @@ func (c *collector) addTimer(name string, m metrics.Timer) {
 	pv := []float64{0.5, 0.75, 0.95, 0.99, 0.999, 0.9999}
 	ps := m.Percentiles(pv)
 	c.writeSummaryCounter(name, m.Count())
-	c.buff.WriteString(fmt.Sprintf(typeSummaryTpl, mutateKey(name)))
 	for i := range pv {
 		c.writeSummaryPercentile(name, strconv.FormatFloat(pv[i], 'f', -1, 64), ps[i])
 	}
-	c.buff.WriteRune('\n')
 }
 
 func (c *collector) addResettingTimer(name string, m metrics.ResettingTimer) {
@@ -91,11 +87,9 @@ func (c *collector) addResettingTimer(name string, m metrics.ResettingTimer) {
 	ps := m.Percentiles([]float64{50, 95, 99})
 	val := m.Values()
 	c.writeSummaryCounter(name, len(val))
-	c.buff.WriteString(fmt.Sprintf(typeSummaryTpl, mutateKey(name)))
 	c.writeSummaryPercentile(name, "0.50", ps[0])
 	c.writeSummaryPercentile(name, "0.95", ps[1])
 	c.writeSummaryPercentile(name, "0.99", ps[2])
-	c.buff.WriteRune('\n')
 }
 
 func (c *collector) writeGaugeCounter(name string, value interface{}) {
@@ -112,6 +106,7 @@ func (c *collector) writeSummaryCounter(name string, value interface{}) {
 
 func (c *collector) writeSummaryPercentile(name, p string, value interface{}) {
 	name = mutateKey(name)
+	c.buff.WriteString(fmt.Sprintf(typeSummaryTpl, name))
 	c.buff.WriteString(fmt.Sprintf(keyQuantileTagValueTpl, name, p, value))
 }
 

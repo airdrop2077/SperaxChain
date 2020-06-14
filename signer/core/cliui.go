@@ -25,9 +25,9 @@ import (
 	"sync"
 
 	"github.com/Sperax/SperaxChain/common/hexutil"
-	"github.com/Sperax/SperaxChain/console/prompt"
 	"github.com/Sperax/SperaxChain/internal/ethapi"
 	"github.com/Sperax/SperaxChain/log"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 type CommandlineUI struct {
@@ -61,16 +61,17 @@ func (ui *CommandlineUI) readString() string {
 func (ui *CommandlineUI) OnInputRequired(info UserInputRequest) (UserInputResponse, error) {
 
 	fmt.Printf("## %s\n\n%s\n", info.Title, info.Prompt)
-	defer fmt.Println("-----------------------")
 	if info.IsPassword {
-		text, err := prompt.Stdin.PromptPassword("> ")
+		fmt.Printf("> ")
+		text, err := terminal.ReadPassword(int(os.Stdin.Fd()))
 		if err != nil {
-			log.Error("Failed to read password", "error", err)
-			return UserInputResponse{}, err
+			log.Error("Failed to read password", "err", err)
 		}
-		return UserInputResponse{text}, nil
+		fmt.Println("-----------------------")
+		return UserInputResponse{string(text)}, err
 	}
 	text := ui.readString()
+	fmt.Println("-----------------------")
 	return UserInputResponse{text}, nil
 }
 

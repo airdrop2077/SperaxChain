@@ -38,7 +38,7 @@ import (
 	"github.com/Sperax/SperaxChain/cmd/utils"
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/common/hexutil"
-	"github.com/Sperax/SperaxChain/console/prompt"
+	"github.com/Sperax/SperaxChain/console"
 	"github.com/Sperax/SperaxChain/crypto"
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/p2p"
@@ -210,7 +210,7 @@ func initialize() {
 
 	if *mailServerMode {
 		if len(msPassword) == 0 {
-			msPassword, err = prompt.Stdin.PromptPassword("Please enter the Mail Server password: ")
+			msPassword, err = console.Stdin.PromptPassword("Please enter the Mail Server password: ")
 			if err != nil {
 				utils.Fatalf("Failed to read Mail Server password: %s", err)
 			}
@@ -346,7 +346,7 @@ func configureNode() {
 	if *requestMail {
 		p2pAccept = true
 		if len(msPassword) == 0 {
-			msPassword, err = prompt.Stdin.PromptPassword("Please enter the Mail Server password: ")
+			msPassword, err = console.Stdin.PromptPassword("Please enter the Mail Server password: ")
 			if err != nil {
 				utils.Fatalf("Failed to read Mail Server password: %s", err)
 			}
@@ -355,7 +355,7 @@ func configureNode() {
 
 	if !*asymmetricMode && !*forwarderMode {
 		if len(symPass) == 0 {
-			symPass, err = prompt.Stdin.PromptPassword("Please enter the password for symmetric encryption: ")
+			symPass, err = console.Stdin.PromptPassword("Please enter the password for symmetric encryption: ")
 			if err != nil {
 				utils.Fatalf("Failed to read password: %v", err)
 			}

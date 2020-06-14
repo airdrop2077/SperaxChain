@@ -27,13 +27,12 @@ import (
 	"time"
 
 	"github.com/Sperax/SperaxChain/common"
-	"github.com/Sperax/SperaxChain/console/prompt"
+	"github.com/Sperax/SperaxChain/consensus/ethash"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/eth"
 	"github.com/Sperax/SperaxChain/internal/jsre"
 	"github.com/Sperax/SperaxChain/miner"
 	"github.com/Sperax/SperaxChain/node"
-	"github.com/ethereum/go-ethereum/consensus/ethash"
 )
 
 const (
@@ -68,10 +67,10 @@ func (p *hookedPrompter) PromptPassword(prompt string) (string, error) {
 func (p *hookedPrompter) PromptConfirm(prompt string) (bool, error) {
 	return false, errors.New("not implemented")
 }
-func (p *hookedPrompter) SetHistory(history []string)                     {}
-func (p *hookedPrompter) AppendHistory(command string)                    {}
-func (p *hookedPrompter) ClearHistory()                                   {}
-func (p *hookedPrompter) SetWordCompleter(completer prompt.WordCompleter) {}
+func (p *hookedPrompter) SetHistory(history []string)              {}
+func (p *hookedPrompter) AppendHistory(command string)             {}
+func (p *hookedPrompter) ClearHistory()                            {}
+func (p *hookedPrompter) SetWordCompleter(completer WordCompleter) {}
 
 // tester is a console test environment for the console tests to operate on.
 type tester struct {

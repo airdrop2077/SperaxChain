@@ -32,7 +32,7 @@ import (
 	"github.com/Sperax/SperaxChain/accounts/abi/bind/backends"
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/common/mclock"
-	"github.com/Sperax/SperaxChain/consensus/bdls_engine"
+	"github.com/Sperax/SperaxChain/consensus/ethash"
 	"github.com/Sperax/SperaxChain/contracts/checkpointoracle/contract"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/rawdb"
@@ -171,9 +171,9 @@ func testIndexers(db ethdb.Database, odr light.OdrBackend, config *light.Indexer
 func newTestClientHandler(backend *backends.SimulatedBackend, odr *LesOdr, indexers []*core.ChainIndexer, db ethdb.Database, peers *serverPeerSet, ulcServers []string, ulcFraction int) *clientHandler {
 	var (
 		evmux  = new(event.TypeMux)
-		engine = bdls_engine.NewFaker()
+		engine = ethash.NewFaker()
 		gspec  = core.Genesis{
-			Config:   params.AllBDLSProtocolChanges,
+			Config:   params.AllEthashProtocolChanges,
 			Alloc:    core.GenesisAlloc{bankAddr: {Balance: bankFunds}},
 			GasLimit: 100000000,
 		}
@@ -203,7 +203,7 @@ func newTestClientHandler(backend *backends.SimulatedBackend, odr *LesOdr, index
 		lesCommons: lesCommons{
 			genesis:     genesis.Hash(),
 			config:      &eth.Config{LightPeers: 100, NetworkId: NetworkId},
-			chainConfig: params.AllBDLSProtocolChanges,
+			chainConfig: params.AllEthashProtocolChanges,
 			iConfig:     light.TestClientIndexerConfig,
 			chainDb:     db,
 			oracle:      oracle,
@@ -229,7 +229,7 @@ func newTestClientHandler(backend *backends.SimulatedBackend, odr *LesOdr, index
 func newTestServerHandler(blocks int, indexers []*core.ChainIndexer, db ethdb.Database, peers *clientPeerSet, clock mclock.Clock) (*serverHandler, *backends.SimulatedBackend) {
 	var (
 		gspec = core.Genesis{
-			Config:   params.AllBDLSProtocolChanges,
+			Config:   params.AllEthashProtocolChanges,
 			Alloc:    core.GenesisAlloc{bankAddr: {Balance: bankFunds}},
 			GasLimit: 100000000,
 		}
@@ -266,7 +266,7 @@ func newTestServerHandler(blocks int, indexers []*core.ChainIndexer, db ethdb.Da
 		lesCommons: lesCommons{
 			genesis:     genesis.Hash(),
 			config:      &eth.Config{LightPeers: 100, NetworkId: NetworkId},
-			chainConfig: params.AllBDLSProtocolChanges,
+			chainConfig: params.AllEthashProtocolChanges,
 			iConfig:     light.TestServerIndexerConfig,
 			chainDb:     db,
 			chainReader: simulation.Blockchain(),
@@ -508,7 +508,7 @@ func newClientServerEnv(t *testing.T, blocks int, protocol int, callback indexer
 		clock = &mclock.Simulated{}
 	}
 	dist := newRequestDistributor(speers, clock)
-	rm := newRetrieveManager(speers, dist, func() time.Duration { return time.Millisecond * 500 })
+	rm := newRetrieveManager(speers, dist, nil)
 	odr := NewLesOdr(cdb, light.TestClientIndexerConfig, rm)
 
 	sindexers := testIndexers(sdb, nil, light.TestServerIndexerConfig)

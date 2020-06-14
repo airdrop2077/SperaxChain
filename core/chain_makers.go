@@ -66,6 +66,18 @@ func (b *BlockGen) SetExtra(data []byte) {
 	b.header.Extra = data
 }
 
+// SetNonce sets the nonce field of the generated block.
+func (b *BlockGen) SetNonce(nonce types.BlockNonce) {
+	b.header.Nonce = nonce
+}
+
+// SetDifficulty sets the difficulty field of the generated block. This method is
+// useful for Clique tests where the difficulty does not depend on time. For the
+// ethash tests, please use OffsetTime, which implicitly recalculates the diff.
+func (b *BlockGen) SetDifficulty(diff *big.Int) {
+	b.header.Difficulty = diff
+}
+
 // AddTx adds a transaction to the generated block. If no coinbase has
 // been set, the block's coinbase is set to the zero address.
 //
@@ -157,10 +169,8 @@ func (b *BlockGen) OffsetTime(seconds int64) {
 	if b.header.Time <= b.parent.Header().Time {
 		panic("block time out of range")
 	}
-	/* NOTE(xtaci): remove difficulty setting
 	chainreader := &fakeChainReader{config: b.config}
 	b.header.Difficulty = b.engine.CalcDifficulty(chainreader, b.header.Time, b.parent.Header())
-	*/
 }
 
 // GenerateChain creates a chain of n blocks. The first block's
@@ -203,7 +213,7 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 		}
 		if b.engine != nil {
 			// Finalize and seal the block
-			block, _ := b.engine.FinalizeAndAssemble(chainreader, b.header, statedb, b.txs, b.receipts)
+			block, _ := b.engine.FinalizeAndAssemble(chainreader, b.header, statedb, b.txs, b.uncles, b.receipts)
 
 			// Write state changes to db
 			root, err := statedb.Commit(config.IsEIP158(b.header.Number))
@@ -242,13 +252,12 @@ func makeHeader(chain consensus.ChainReader, parent *types.Block, state *state.S
 		Root:       state.IntermediateRoot(chain.Config().IsEIP158(parent.Number())),
 		ParentHash: parent.Hash(),
 		Coinbase:   parent.Coinbase(),
-		/* NOTE(xtaci) remove difficulty setting
 		Difficulty: engine.CalcDifficulty(chain, time, &types.Header{
 			Number:     parent.Number(),
 			Time:       time - 10,
 			Difficulty: parent.Difficulty(),
+			UncleHash:  parent.UncleHash(),
 		}),
-		*/
 		GasLimit: CalcGasLimit(parent, parent.GasLimit(), parent.GasLimit()),
 		Number:   new(big.Int).Add(parent.Number(), common.Big1),
 		Time:     time,

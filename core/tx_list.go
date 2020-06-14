@@ -22,8 +22,8 @@ import (
 	"math/big"
 	"sort"
 
-	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/log"
 )
 

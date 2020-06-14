@@ -31,6 +31,8 @@ import (
 	"github.com/Sperax/SperaxChain/common/hexutil"
 	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/consensus/bdls_engine"
+	"github.com/Sperax/SperaxChain/consensus/clique"
+	"github.com/Sperax/SperaxChain/consensus/ethash"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/bloombits"
 	"github.com/Sperax/SperaxChain/core/rawdb"
@@ -71,7 +73,7 @@ type Ethereum struct {
 	blockchain      *core.BlockChain
 	protocolManager *ProtocolManager
 	lesServer       LesServer
-	dialCandidates  enode.Iterator
+	dialCandiates   enode.Iterator
 
 	// DB interfaces
 	chainDb ethdb.Database // Block chain database
@@ -150,19 +152,13 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		chainDb:           chainDb,
 		eventMux:          ctx.EventMux,
 		accountManager:    ctx.AccountManager,
-		engine:            CreateConsensusEngine(ctx, chainConfig, config.Miner.Notify, config.Miner.Noverify, chainDb),
+		engine:            CreateConsensusEngine(ctx, chainConfig, &config.Ethash, config.Miner.Notify, config.Miner.Noverify, chainDb),
 		closeBloomHandler: make(chan struct{}),
 		networkID:         config.NetworkId,
 		gasPrice:          config.Miner.GasPrice,
 		etherbase:         config.Miner.Etherbase,
 		bloomRequests:     make(chan chan *bloombits.Retrieval),
 		bloomIndexer:      NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms),
-	}
-
-	// set consensus group for BDLS
-	if bdls, ok := eth.engine.(*bdls_engine.BDLSEngine); ok {
-		bdls.SetParticipants(config.Miner.BDLSConsensusGroup)
-		log.Debug("Set consensus group to bdls engine", "group", config.Miner.BDLSConsensusGroup)
 	}
 
 	bcVersion := rawdb.ReadDatabaseVersion(chainDb)
@@ -231,7 +227,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
 
-	eth.dialCandidates, err = eth.setupDiscovery(&ctx.Config.P2P)
+	eth.dialCandiates, err = eth.setupDiscovery(&ctx.Config.P2P)
 	if err != nil {
 		return nil, err
 	}
@@ -257,9 +253,40 @@ func makeExtraData(extra []byte) []byte {
 }
 
 // CreateConsensusEngine creates the required type of consensus engine instance for an Ethereum service
-func CreateConsensusEngine(ctx *node.ServiceContext, chainConfig *params.ChainConfig, notify []string, noverify bool, db ethdb.Database) consensus.Engine {
-	consensusEngine := bdls_engine.New(ctx.AccountManager, ctx.EventMux)
-	return consensusEngine
+func CreateConsensusEngine(ctx *node.ServiceContext, chainConfig *params.ChainConfig, config *ethash.Config, notify []string, noverify bool, db ethdb.Database) consensus.Engine {
+	if chainConfig.BDLS != nil {
+		return bdls_engine.New(chainConfig.BDLS, ctx.AccountManager, ctx.EventMux)
+	}
+
+	// If proof-of-authority is requested, set it up
+	if chainConfig.Clique != nil {
+		return clique.New(chainConfig.Clique, db)
+	}
+	// Otherwise assume proof-of-work
+	switch config.PowMode {
+	case ethash.ModeFake:
+		log.Warn("Ethash used in fake mode")
+		return ethash.NewFaker()
+	case ethash.ModeTest:
+		log.Warn("Ethash used in test mode")
+		return ethash.NewTester(nil, noverify)
+	case ethash.ModeShared:
+		log.Warn("Ethash used in shared mode")
+		return ethash.NewShared()
+	default:
+		engine := ethash.New(ethash.Config{
+			CacheDir:         ctx.ResolvePath(config.CacheDir),
+			CachesInMem:      config.CachesInMem,
+			CachesOnDisk:     config.CachesOnDisk,
+			CachesLockMmap:   config.CachesLockMmap,
+			DatasetDir:       config.DatasetDir,
+			DatasetsInMem:    config.DatasetsInMem,
+			DatasetsOnDisk:   config.DatasetsOnDisk,
+			DatasetsLockMmap: config.DatasetsLockMmap,
+		}, notify, noverify)
+		engine.SetThreads(-1) // Disable CPU mining
+		return engine
+	}
 }
 
 // APIs return the collection of RPC services the ethereum package offers.
@@ -403,6 +430,9 @@ func (s *Ethereum) shouldPreserve(block *types.Block) bool {
 	// is A, F and G sign the block of round5 and reject the block of opponents
 	// and in the round6, the last available signer B is offline, the whole
 	// network is stuck.
+	if _, ok := s.engine.(*clique.Clique); ok {
+		return false
+	}
 	return s.isLocalBlock(block)
 }
 
@@ -443,6 +473,14 @@ func (s *Ethereum) StartMining(threads int) error {
 		if err != nil {
 			log.Error("Cannot start mining without etherbase", "err", err)
 			return fmt.Errorf("etherbase missing: %v", err)
+		}
+		if clique, ok := s.engine.(*clique.Clique); ok {
+			wallet, err := s.accountManager.Find(accounts.Account{Address: eb})
+			if wallet == nil || err != nil {
+				log.Error("Etherbase account unavailable locally", "err", err)
+				return fmt.Errorf("signer missing: %v", err)
+			}
+			clique.Authorize(eb, wallet.SignData)
 		}
 		// If mining is started, we can disable the transaction rejection mechanism
 		// introduced to speed sync times.
@@ -490,7 +528,7 @@ func (s *Ethereum) Protocols() []p2p.Protocol {
 	for i, vsn := range ProtocolVersions {
 		protos[i] = s.protocolManager.makeProtocol(vsn)
 		protos[i].Attributes = []enr.Entry{s.currentEthEntry()}
-		protos[i].DialCandidates = s.dialCandidates
+		protos[i].DialCandidates = s.dialCandiates
 	}
 	if s.lesServer != nil {
 		protos = append(protos, s.lesServer.Protocols()...)

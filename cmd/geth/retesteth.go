@@ -31,7 +31,7 @@ import (
 	"github.com/Sperax/SperaxChain/common/hexutil"
 	"github.com/Sperax/SperaxChain/common/math"
 	"github.com/Sperax/SperaxChain/consensus"
-	"github.com/Sperax/SperaxChain/consensus/bdls_engine"
+	"github.com/Sperax/SperaxChain/consensus/ethash"
 	"github.com/Sperax/SperaxChain/consensus/misc"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/rawdb"
@@ -162,6 +162,7 @@ type CParamsAccount struct {
 	Precompiled *CPAccountPrecompiled `json:"precompiled"`
 	Code        hexutil.Bytes         `json:"code"`
 	Storage     map[string]string     `json:"storage"`
+	Nonce       *math.HexOrDecimal64  `json:"nonce"`
 }
 
 type CPAccountPrecompiled struct {
@@ -207,6 +208,10 @@ func (e *NoRewardEngine) VerifyHeaders(chain consensus.ChainReader, headers []*t
 	return e.inner.VerifyHeaders(chain, headers, seals)
 }
 
+func (e *NoRewardEngine) VerifyUncles(chain consensus.ChainReader, block *types.Block) error {
+	return e.inner.VerifyUncles(chain, block)
+}
+
 func (e *NoRewardEngine) VerifySeal(chain consensus.ChainReader, header *types.Header) error {
 	return e.inner.VerifySeal(chain, header)
 }
@@ -215,30 +220,35 @@ func (e *NoRewardEngine) Prepare(chain consensus.ChainReader, header *types.Head
 	return e.inner.Prepare(chain, header)
 }
 
-func (e *NoRewardEngine) accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header) {
+func (e *NoRewardEngine) accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) {
 	// Simply touch miner and uncle coinbase accounts
 	reward := big.NewInt(0)
+	for _, uncle := range uncles {
+		state.AddBalance(uncle.Coinbase, reward)
+	}
 	state.AddBalance(header.Coinbase, reward)
 }
 
-func (e *NoRewardEngine) Finalize(chain consensus.ChainReader, header *types.Header, statedb *state.StateDB, txs []*types.Transaction) {
+func (e *NoRewardEngine) Finalize(chain consensus.ChainReader, header *types.Header, statedb *state.StateDB, txs []*types.Transaction,
+	uncles []*types.Header) {
 	if e.rewardsOn {
-		e.inner.Finalize(chain, header, statedb, txs)
+		e.inner.Finalize(chain, header, statedb, txs, uncles)
 	} else {
-		e.accumulateRewards(chain.Config(), statedb, header)
+		e.accumulateRewards(chain.Config(), statedb, header, uncles)
 		header.Root = statedb.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	}
 }
 
-func (e *NoRewardEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, statedb *state.StateDB, txs []*types.Transaction, receipts []*types.Receipt) (*types.Block, error) {
+func (e *NoRewardEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, statedb *state.StateDB, txs []*types.Transaction,
+	uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	if e.rewardsOn {
-		return e.inner.FinalizeAndAssemble(chain, header, statedb, txs, receipts)
+		return e.inner.FinalizeAndAssemble(chain, header, statedb, txs, uncles, receipts)
 	} else {
-		e.accumulateRewards(chain.Config(), statedb, header)
+		e.accumulateRewards(chain.Config(), statedb, header, uncles)
 		header.Root = statedb.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 
 		// Header seems complete, assemble into a block and return
-		return types.NewBlock(header, txs, receipts), nil
+		return types.NewBlock(header, txs, uncles, receipts), nil
 	}
 }
 
@@ -280,6 +290,10 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 		if account.Balance != nil {
 			balance.Set((*big.Int)(account.Balance))
 		}
+		var nonce uint64
+		if account.Nonce != nil {
+			nonce = uint64(*account.Nonce)
+		}
 		if account.Precompiled == nil || account.Balance != nil {
 			storage := make(map[common.Hash]common.Hash)
 			for k, v := range account.Storage {
@@ -288,6 +302,7 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 			accounts[address] = core.GenesisAccount{
 				Balance: balance,
 				Code:    account.Code,
+				Nonce:   nonce,
 				Storage: storage,
 			}
 		}
@@ -350,9 +365,11 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 			PetersburgBlock:     petersburgBlock,
 			IstanbulBlock:       istanbulBlock,
 		},
+		Nonce:      uint64(chainParams.Genesis.Nonce),
 		Timestamp:  uint64(chainParams.Genesis.Timestamp),
 		ExtraData:  chainParams.Genesis.ExtraData,
 		GasLimit:   uint64(chainParams.Genesis.GasLimit),
+		Difficulty: big.NewInt(0).Set((*big.Int)(chainParams.Genesis.Difficulty)),
 		Mixhash:    common.BigToHash((*big.Int)(chainParams.Genesis.MixHash)),
 		Coinbase:   chainParams.Genesis.Author,
 		ParentHash: chainParams.Genesis.ParentHash,
@@ -365,10 +382,21 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 	fmt.Printf("Chain config: %v\n", chainConfig)
 
 	var inner consensus.Engine
-
 	switch chainParams.SealEngine {
+	case "NoProof", "NoReward":
+		inner = ethash.NewFaker()
+	case "Ethash":
+		inner = ethash.New(ethash.Config{
+			CacheDir:         "ethash",
+			CachesInMem:      2,
+			CachesOnDisk:     3,
+			CachesLockMmap:   false,
+			DatasetsInMem:    1,
+			DatasetsOnDisk:   2,
+			DatasetsLockMmap: false,
+		}, nil, false)
 	default:
-		inner = bdls_engine.NewFaker()
+		return false, fmt.Errorf("unrecognised seal engine: %s", chainParams.SealEngine)
 	}
 	engine := &NoRewardEngine{inner: inner, rewardsOn: chainParams.SealEngine != "NoReward"}
 
@@ -518,7 +546,7 @@ func (api *RetestethAPI) mineBlock() error {
 			}
 		}
 	}
-	block, err := api.engine.FinalizeAndAssemble(api.blockchain, header, statedb, txs, receipts)
+	block, err := api.engine.FinalizeAndAssemble(api.blockchain, header, statedb, txs, []*types.Header{}, receipts)
 	if err != nil {
 		return err
 	}

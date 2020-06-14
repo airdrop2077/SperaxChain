@@ -30,6 +30,7 @@ import (
 
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/common/hexutil"
+	"github.com/Sperax/SperaxChain/consensus/ethash"
 	"github.com/Sperax/SperaxChain/eth"
 	"github.com/Sperax/SperaxChain/eth/downloader"
 	"github.com/Sperax/SperaxChain/les/flowcontrol"
@@ -39,7 +40,6 @@ import (
 	"github.com/Sperax/SperaxChain/p2p/simulations"
 	"github.com/Sperax/SperaxChain/p2p/simulations/adapters"
 	"github.com/Sperax/SperaxChain/rpc"
-	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/mattn/go-colorable"
 )
 

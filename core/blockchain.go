@@ -178,10 +178,11 @@ type BlockChain struct {
 	txLookupCache *lru.Cache     // Cache for the most recent transaction lookup data.
 	futureBlocks  *lru.Cache     // future blocks are blocks added for later processing
 
-	quit          chan struct{}  // blockchain quit channel
-	wg            sync.WaitGroup // chain processing wait group for shutting down
-	running       int32          // 0 if chain is running, 1 when stopped
+	quit    chan struct{} // blockchain quit channel
+	running int32         // running must be called atomically
+	// procInterrupt must be atomically called
 	procInterrupt int32          // interrupt signaler for block processing
+	wg            sync.WaitGroup // chain processing wait group for shutting down
 
 	engine     consensus.Engine
 	validator  Validator  // Block and state validator interface
@@ -238,7 +239,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	bc.processor = NewStateProcessor(chainConfig, bc, engine)
 
 	var err error
-	bc.hc, err = NewHeaderChain(db, chainConfig, engine, bc.insertStopped)
+	bc.hc, err = NewHeaderChain(db, chainConfig, engine, bc.getProcInterrupt)
 	if err != nil {
 		return nil, err
 	}
@@ -329,6 +330,10 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		go bc.maintainTxIndex(txIndexBlock)
 	}
 	return bc, nil
+}
+
+func (bc *BlockChain) getProcInterrupt() bool {
+	return atomic.LoadInt32(&bc.procInterrupt) == 1
 }
 
 // GetVMConfig returns the block chain VM config.
@@ -591,7 +596,7 @@ func (bc *BlockChain) ResetWithGenesisBlock(genesis *types.Block) error {
 
 	// Prepare the genesis block and reinitialise the chain
 	batch := bc.db.NewBatch()
-	rawdb.WriteTd(batch, genesis.Hash(), genesis.NumberU64(), common.Big1)
+	rawdb.WriteTd(batch, genesis.Hash(), genesis.NumberU64(), genesis.Difficulty())
 	rawdb.WriteBlock(batch, genesis)
 	if err := batch.Write(); err != nil {
 		log.Crit("Failed to write genesis block", "err", err)
@@ -851,6 +856,17 @@ func (bc *BlockChain) GetBlocksFromHash(hash common.Hash, n int) (blocks []*type
 	return
 }
 
+// GetUnclesInChain retrieves all the uncles from a given block backwards until
+// a specific distance is reached.
+func (bc *BlockChain) GetUnclesInChain(block *types.Block, length int) []*types.Header {
+	uncles := []*types.Header{}
+	for i := 0; block != nil && i < length; i++ {
+		uncles = append(uncles, block.Uncles()...)
+		block = bc.GetBlock(block.ParentHash(), block.NumberU64()-1)
+	}
+	return uncles
+}
+
 // TrieNode retrieves a blob of data associated with a trie node (or code hash)
 // either from ephemeral in-memory cache, or from persistent storage.
 func (bc *BlockChain) TrieNode(hash common.Hash) ([]byte, error) {
@@ -866,7 +882,8 @@ func (bc *BlockChain) Stop() {
 	// Unsubscribe all subscriptions registered from blockchain
 	bc.scope.Close()
 	close(bc.quit)
-	bc.StopInsert()
+	atomic.StoreInt32(&bc.procInterrupt, 1)
+
 	bc.wg.Wait()
 
 	// Ensure that the entirety of the state snapshot is journalled to disk.
@@ -909,18 +926,6 @@ func (bc *BlockChain) Stop() {
 		}
 	}
 	log.Info("Blockchain stopped")
-}
-
-// StopInsert interrupts all insertion methods, causing them to return
-// errInsertionInterrupted as soon as possible. Insertion is permanently disabled after
-// calling this method.
-func (bc *BlockChain) StopInsert() {
-	atomic.StoreInt32(&bc.procInterrupt, 1)
-}
-
-// insertStopped returns true after StopInsert has been called.
-func (bc *BlockChain) insertStopped() bool {
-	return atomic.LoadInt32(&bc.procInterrupt) == 1
 }
 
 func (bc *BlockChain) procFutureBlocks() {
@@ -1069,7 +1074,7 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 		size  = 0
 	)
 	// updateHead updates the head fast sync block if the inserted blocks are better
-	// and returns an indicator whether the inserted blocks are canonical.
+	// and returns a indicator whether the inserted blocks are canonical.
 	updateHead := func(head *types.Block) bool {
 		bc.chainmu.Lock()
 
@@ -1108,7 +1113,7 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 		var deleted []*numberHash
 		for i, block := range blockChain {
 			// Short circuit insertion if shutting down or processing failed
-			if bc.insertStopped() {
+			if atomic.LoadInt32(&bc.procInterrupt) == 1 {
 				return 0, errInsertionInterrupted
 			}
 			// Short circuit insertion if it is required(used in testing only)
@@ -1255,7 +1260,7 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 		batch := bc.db.NewBatch()
 		for i, block := range blockChain {
 			// Short circuit insertion if shutting down or processing failed
-			if bc.insertStopped() {
+			if atomic.LoadInt32(&bc.procInterrupt) == 1 {
 				return 0, errInsertionInterrupted
 			}
 			// Short circuit if the owner header is unknown
@@ -1408,7 +1413,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	// Make sure no inconsistent state is leaked during insertion
 	currentBlock := bc.CurrentBlock()
 	localTd := bc.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
-	externTd := new(big.Int).Add(common.Big1, ptd)
+	externTd := new(big.Int).Add(block.Difficulty(), ptd)
 
 	// Irrelevant of the canonical status, write the block itself to the database.
 	//
@@ -1644,7 +1649,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 			externTd = bc.GetTd(block.ParentHash(), block.NumberU64()-1) // The first block can't be nil
 		)
 		for block != nil && err == ErrKnownBlock {
-			externTd = new(big.Int).Add(externTd, common.Big1)
+			externTd = new(big.Int).Add(externTd, block.Difficulty())
 			if localTd.Cmp(externTd) < 0 {
 				break
 			}
@@ -1703,8 +1708,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 	// No validation errors for the first block (or chain prefix skipped)
 	for ; block != nil && err == nil || err == ErrKnownBlock; block, err = it.next() {
 		// If the chain is terminating, stop processing blocks
-		if bc.insertStopped() {
-			log.Debug("Abort during block processing")
+		if atomic.LoadInt32(&bc.procInterrupt) == 1 {
+			log.Debug("Premature abort during blocks processing")
 			break
 		}
 		// If the header is a banned one, straight out abort
@@ -1719,13 +1724,11 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		// its header and body was already in the database).
 		if err == ErrKnownBlock {
 			logger := log.Debug
-			/* NOTE(xtaci): removed clique
 			if bc.chainConfig.Clique == nil {
 				logger = log.Warn
 			}
-			*/
 			logger("Inserted known block", "number", block.Number(), "hash", block.Hash(),
-				"txs", len(block.Transactions()), "gas", block.GasUsed(),
+				"uncles", len(block.Uncles()), "txs", len(block.Transactions()), "gas", block.GasUsed(),
 				"root", block.Root())
 
 			// Special case. Commit the empty receipt slice if we meet the known
@@ -1835,7 +1838,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		switch status {
 		case CanonStatTy:
 			log.Debug("Inserted new block", "number", block.Number(), "hash", block.Hash(),
-				"txs", len(block.Transactions()), "gas", block.GasUsed(),
+				"uncles", len(block.Uncles()), "txs", len(block.Transactions()), "gas", block.GasUsed(),
 				"elapsed", common.PrettyDuration(time.Since(start)),
 				"root", block.Root())
 
@@ -1846,16 +1849,16 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 
 		case SideStatTy:
 			log.Debug("Inserted forked block", "number", block.Number(), "hash", block.Hash(),
-				"elapsed", common.PrettyDuration(time.Since(start)),
-				"txs", len(block.Transactions()), "gas", block.GasUsed(),
+				"diff", block.Difficulty(), "elapsed", common.PrettyDuration(time.Since(start)),
+				"txs", len(block.Transactions()), "gas", block.GasUsed(), "uncles", len(block.Uncles()),
 				"root", block.Root())
 
 		default:
 			// This in theory is impossible, but lets be nice to our future selves and leave
 			// a log, instead of trying to track down blocks imports that don't emit logs.
 			log.Warn("Inserted block with unknown status", "number", block.Number(), "hash", block.Hash(),
-				"elapsed", common.PrettyDuration(time.Since(start)),
-				"txs", len(block.Transactions()), "gas", block.GasUsed(),
+				"diff", block.Difficulty(), "elapsed", common.PrettyDuration(time.Since(start)),
+				"txs", len(block.Transactions()), "gas", block.GasUsed(), "uncles", len(block.Uncles()),
 				"root", block.Root())
 		}
 		stats.processed++
@@ -1931,7 +1934,7 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator) (i
 		if externTd == nil {
 			externTd = bc.GetTd(block.ParentHash(), block.NumberU64()-1)
 		}
-		externTd = new(big.Int).Add(externTd, common.Big1)
+		externTd = new(big.Int).Add(externTd, block.Difficulty())
 
 		if !bc.HasBlock(block.Hash(), block.NumberU64()) {
 			start := time.Now()
@@ -1939,8 +1942,8 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator) (i
 				return it.index, err
 			}
 			log.Debug("Injected sidechain block", "number", block.Number(), "hash", block.Hash(),
-				"elapsed", common.PrettyDuration(time.Since(start)),
-				"txs", len(block.Transactions()), "gas", block.GasUsed(),
+				"diff", block.Difficulty(), "elapsed", common.PrettyDuration(time.Since(start)),
+				"txs", len(block.Transactions()), "gas", block.GasUsed(), "uncles", len(block.Uncles()),
 				"root", block.Root())
 		}
 	}
@@ -1993,8 +1996,8 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator) (i
 			blocks, memory = blocks[:0], 0
 
 			// If the chain is terminating, stop processing blocks
-			if bc.insertStopped() {
-				log.Debug("Abort during blocks processing")
+			if atomic.LoadInt32(&bc.procInterrupt) == 1 {
+				log.Debug("Premature abort during blocks processing")
 				return 0, nil
 			}
 		}

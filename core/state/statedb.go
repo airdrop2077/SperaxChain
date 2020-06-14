@@ -24,9 +24,9 @@ import (
 	"sort"
 	"time"
 
+	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/core/state/snapshot"
 	"github.com/Sperax/SperaxChain/core/types"
-	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/crypto"
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/metrics"

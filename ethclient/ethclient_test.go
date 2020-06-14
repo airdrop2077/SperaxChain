@@ -25,8 +25,9 @@ import (
 	"testing"
 	"time"
 
-	ethereum "github.com/Sperax/SperaxChain"
+	"github.com/Sperax/SperaxChain"
 	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/consensus/ethash"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/rawdb"
 	"github.com/Sperax/SperaxChain/core/types"
@@ -34,7 +35,6 @@ import (
 	"github.com/Sperax/SperaxChain/eth"
 	"github.com/Sperax/SperaxChain/node"
 	"github.com/Sperax/SperaxChain/params"
-	"github.com/ethereum/go-ethereum/consensus/ethash"
 )
 
 // Verify that Client implements the ethereum interfaces.

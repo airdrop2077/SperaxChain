@@ -28,7 +28,6 @@ import (
 	"github.com/Sperax/SperaxChain/accounts/scwallet"
 	"github.com/Sperax/SperaxChain/accounts/usbwallet"
 	"github.com/Sperax/SperaxChain/common/hexutil"
-	"github.com/Sperax/SperaxChain/console/prompt"
 	"github.com/Sperax/SperaxChain/internal/jsre"
 	"github.com/Sperax/SperaxChain/rpc"
 )
@@ -36,13 +35,13 @@ import (
 // bridge is a collection of JavaScript utility methods to bride the .js runtime
 // environment and the Go RPC connection backing the remote method calls.
 type bridge struct {
-	client   *rpc.Client         // RPC client to execute Ethereum requests through
-	prompter prompt.UserPrompter // Input prompter to allow interactive user feedback
-	printer  io.Writer           // Output writer to serialize any display strings to
+	client   *rpc.Client  // RPC client to execute Ethereum requests through
+	prompter UserPrompter // Input prompter to allow interactive user feedback
+	printer  io.Writer    // Output writer to serialize any display strings to
 }
 
 // newBridge creates a new JavaScript wrapper around an RPC client.
-func newBridge(client *rpc.Client, prompter prompt.UserPrompter, printer io.Writer) *bridge {
+func newBridge(client *rpc.Client, prompter UserPrompter, printer io.Writer) *bridge {
 	return &bridge{
 		client:   client,
 		prompter: prompter,
@@ -230,7 +229,7 @@ func (b *bridge) readPinAndReopenWallet(call jsre.Call) (goja.Value, error) {
 // original RPC method (saved in jeth.unlockAccount) with it to actually execute
 // the RPC call.
 func (b *bridge) UnlockAccount(call jsre.Call) (goja.Value, error) {
-	if len(call.Arguments) < 1 {
+	if nArgs := len(call.Arguments); nArgs < 2 {
 		return nil, fmt.Errorf("usage: unlockAccount(account, [ password, duration ])")
 	}
 	// Make sure we have an account specified to unlock.

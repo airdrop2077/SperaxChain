@@ -19,7 +19,7 @@ package shhclient
 import (
 	"context"
 
-	ethereum "github.com/Sperax/SperaxChain"
+	"github.com/Sperax/SperaxChain"
 	"github.com/Sperax/SperaxChain/common/hexutil"
 	"github.com/Sperax/SperaxChain/rpc"
 	whisper "github.com/Sperax/SperaxChain/whisper/whisperv6"

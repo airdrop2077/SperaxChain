@@ -22,8 +22,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Sperax/SperaxChain/core/vm"
 	"github.com/Sperax/SperaxChain/common/math"
+	"github.com/Sperax/SperaxChain/core/vm"
 )
 
 // Compiler contains information about the parsed source

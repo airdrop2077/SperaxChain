@@ -46,13 +46,15 @@ var errGenesisNoConfig = errors.New("genesis has no chain configuration")
 // Genesis specifies the header fields, state of a genesis block. It also defines hard
 // fork switch-over blocks through the chain configuration.
 type Genesis struct {
-	Config    *params.ChainConfig `json:"config"`
-	Timestamp uint64              `json:"timestamp"`
-	ExtraData []byte              `json:"extraData"`
-	GasLimit  uint64              `json:"gasLimit"   gencodec:"required"`
-	Mixhash   common.Hash         `json:"mixHash"`
-	Coinbase  common.Address      `json:"coinbase"`
-	Alloc     GenesisAlloc        `json:"alloc"      gencodec:"required"`
+	Config     *params.ChainConfig `json:"config"`
+	Nonce      uint64              `json:"nonce"`
+	Timestamp  uint64              `json:"timestamp"`
+	ExtraData  []byte              `json:"extraData"`
+	GasLimit   uint64              `json:"gasLimit"   gencodec:"required"`
+	Difficulty *big.Int            `json:"difficulty" gencodec:"required"`
+	Mixhash    common.Hash         `json:"mixHash"`
+	Coinbase   common.Address      `json:"coinbase"`
+	Alloc      GenesisAlloc        `json:"alloc"      gencodec:"required"`
 
 	// These fields are used for consensus tests. Please don't use them
 	// in actual genesis blocks.
@@ -81,22 +83,26 @@ type GenesisAccount struct {
 	Code       []byte                      `json:"code,omitempty"`
 	Storage    map[common.Hash]common.Hash `json:"storage,omitempty"`
 	Balance    *big.Int                    `json:"balance" gencodec:"required"`
+	Nonce      uint64                      `json:"nonce,omitempty"`
 	PrivateKey []byte                      `json:"secretKey,omitempty"` // for tests
 }
 
 // field type overrides for gencodec
 type genesisSpecMarshaling struct {
-	Timestamp math.HexOrDecimal64
-	ExtraData hexutil.Bytes
-	GasLimit  math.HexOrDecimal64
-	GasUsed   math.HexOrDecimal64
-	Number    math.HexOrDecimal64
-	Alloc     map[common.UnprefixedAddress]GenesisAccount
+	Nonce      math.HexOrDecimal64
+	Timestamp  math.HexOrDecimal64
+	ExtraData  hexutil.Bytes
+	GasLimit   math.HexOrDecimal64
+	GasUsed    math.HexOrDecimal64
+	Number     math.HexOrDecimal64
+	Difficulty *math.HexOrDecimal256
+	Alloc      map[common.UnprefixedAddress]GenesisAccount
 }
 
 type genesisAccountMarshaling struct {
 	Code       hexutil.Bytes
 	Balance    *math.HexOrDecimal256
+	Nonce      math.HexOrDecimal64
 	Storage    map[storageJSON]storageJSON
 	PrivateKey hexutil.Bytes
 }
@@ -147,7 +153,7 @@ func (e *GenesisMismatchError) Error() string {
 // The returned chain configuration is never nil.
 func SetupGenesisBlock(db ethdb.Database, genesis *Genesis) (*params.ChainConfig, common.Hash, error) {
 	if genesis != nil && genesis.Config == nil {
-		return params.AllBDLSProtocolChanges, common.Hash{}, errGenesisNoConfig
+		return params.AllEthashProtocolChanges, common.Hash{}, errGenesisNoConfig
 	}
 	// Just commit the new block if there is no stored genesis block.
 	stored := rawdb.ReadCanonicalHash(db, 0)
@@ -237,7 +243,7 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 	case ghash == params.GoerliGenesisHash:
 		return params.GoerliChainConfig
 	default:
-		return params.AllBDLSProtocolChanges
+		return params.AllEthashProtocolChanges
 	}
 }
 
@@ -251,6 +257,7 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 	for addr, account := range g.Alloc {
 		statedb.AddBalance(addr, account.Balance)
 		statedb.SetCode(addr, account.Code)
+		statedb.SetNonce(addr, account.Nonce)
 		for key, value := range account.Storage {
 			statedb.SetState(addr, key, value)
 		}
@@ -258,30 +265,27 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 	root := statedb.IntermediateRoot(false)
 	head := &types.Header{
 		Number:     new(big.Int).SetUint64(g.Number),
+		Nonce:      types.EncodeNonce(g.Nonce),
 		Time:       g.Timestamp,
 		ParentHash: g.ParentHash,
 		Extra:      g.ExtraData,
 		GasLimit:   g.GasLimit,
 		GasUsed:    g.GasUsed,
-		// NOTE(xtaci): remove difficulty setting
-		// Difficulty: g.Difficulty,
-		MixDigest: g.Mixhash,
-		Coinbase:  g.Coinbase,
-		Root:      root,
+		Difficulty: g.Difficulty,
+		MixDigest:  g.Mixhash,
+		Coinbase:   g.Coinbase,
+		Root:       root,
 	}
 	if g.GasLimit == 0 {
 		head.GasLimit = params.GenesisGasLimit
 	}
-	// NOTE(xtaci): remove difficulty setting
-	/*
-		if g.Difficulty == nil {
-			head.Difficulty = params.GenesisDifficulty
-		}
-	*/
+	if g.Difficulty == nil {
+		head.Difficulty = params.GenesisDifficulty
+	}
 	statedb.Commit(false)
 	statedb.Database().TrieDB().Commit(root, true)
 
-	return types.NewBlock(head, nil, nil)
+	return types.NewBlock(head, nil, nil, nil)
 }
 
 // Commit writes the block and state of a genesis specification to the database.
@@ -293,12 +297,12 @@ func (g *Genesis) Commit(db ethdb.Database) (*types.Block, error) {
 	}
 	config := g.Config
 	if config == nil {
-		config = params.AllBDLSProtocolChanges
+		config = params.AllEthashProtocolChanges
 	}
 	if err := config.CheckConfigForkOrder(); err != nil {
 		return nil, err
 	}
-	rawdb.WriteTd(db, block.Hash(), block.NumberU64(), common.Big1)
+	rawdb.WriteTd(db, block.Hash(), block.NumberU64(), g.Difficulty)
 	rawdb.WriteBlock(db, block)
 	rawdb.WriteReceipts(db, block.Hash(), block.NumberU64(), nil)
 	rawdb.WriteCanonicalHash(db, block.Hash(), block.NumberU64())
@@ -328,55 +332,63 @@ func GenesisBlockForTesting(db ethdb.Database, addr common.Address, balance *big
 // DefaultGenesisBlock returns the Ethereum main net genesis block.
 func DefaultGenesisBlock() *Genesis {
 	return &Genesis{
-		Config:    params.MainnetChainConfig,
-		ExtraData: hexutil.MustDecode("0x11bbe8db4e347b4e8c937c1c8370e4b5ed33adb3db69cbdb7a38e1e50b1b82fa"),
-		GasLimit:  5000,
-		Alloc:     decodePrealloc(mainnetAllocData),
+		Config:     params.MainnetChainConfig,
+		Nonce:      66,
+		ExtraData:  hexutil.MustDecode("0x11bbe8db4e347b4e8c937c1c8370e4b5ed33adb3db69cbdb7a38e1e50b1b82fa"),
+		GasLimit:   5000,
+		Difficulty: big.NewInt(17179869184),
+		Alloc:      decodePrealloc(mainnetAllocData),
 	}
 }
 
 // DefaultRopstenGenesisBlock returns the Ropsten network genesis block.
 func DefaultRopstenGenesisBlock() *Genesis {
 	return &Genesis{
-		Config:    params.RopstenChainConfig,
-		ExtraData: hexutil.MustDecode("0x3535353535353535353535353535353535353535353535353535353535353535"),
-		GasLimit:  16777216,
-		Alloc:     decodePrealloc(ropstenAllocData),
+		Config:     params.RopstenChainConfig,
+		Nonce:      66,
+		ExtraData:  hexutil.MustDecode("0x3535353535353535353535353535353535353535353535353535353535353535"),
+		GasLimit:   16777216,
+		Difficulty: big.NewInt(1048576),
+		Alloc:      decodePrealloc(ropstenAllocData),
 	}
 }
 
 // DefaultRinkebyGenesisBlock returns the Rinkeby network genesis block.
 func DefaultRinkebyGenesisBlock() *Genesis {
 	return &Genesis{
-		Config:    params.RinkebyChainConfig,
-		Timestamp: 1492009146,
-		ExtraData: hexutil.MustDecode("0x52657370656374206d7920617574686f7269746168207e452e436172746d616e42eb768f2244c8811c63729a21a3569731535f067ffc57839b00206d1ad20c69a1981b489f772031b279182d99e65703f0076e4812653aab85fca0f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
-		GasLimit:  4700000,
-		Alloc:     decodePrealloc(rinkebyAllocData),
+		Config:     params.RinkebyChainConfig,
+		Timestamp:  1492009146,
+		ExtraData:  hexutil.MustDecode("0x52657370656374206d7920617574686f7269746168207e452e436172746d616e42eb768f2244c8811c63729a21a3569731535f067ffc57839b00206d1ad20c69a1981b489f772031b279182d99e65703f0076e4812653aab85fca0f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+		GasLimit:   4700000,
+		Difficulty: big.NewInt(1),
+		Alloc:      decodePrealloc(rinkebyAllocData),
 	}
 }
 
 // DefaultGoerliGenesisBlock returns the Görli network genesis block.
 func DefaultGoerliGenesisBlock() *Genesis {
 	return &Genesis{
-		Config:    params.GoerliChainConfig,
-		Timestamp: 1548854791,
-		ExtraData: hexutil.MustDecode("0x22466c6578692069732061207468696e6722202d204166726900000000000000e0a2bd4258d2768837baa26a28fe71dc079f84c70000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
-		GasLimit:  10485760,
-		Alloc:     decodePrealloc(goerliAllocData),
+		Config:     params.GoerliChainConfig,
+		Timestamp:  1548854791,
+		ExtraData:  hexutil.MustDecode("0x22466c6578692069732061207468696e6722202d204166726900000000000000e0a2bd4258d2768837baa26a28fe71dc079f84c70000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+		GasLimit:   10485760,
+		Difficulty: big.NewInt(1),
+		Alloc:      decodePrealloc(goerliAllocData),
 	}
 }
 
 // DeveloperGenesisBlock returns the 'geth --dev' genesis block.
 func DeveloperGenesisBlock(period uint64, faucet common.Address) *Genesis {
 	// Override the default period to the user requested one
-	config := *params.AllBDLSProtocolChanges
+	config := *params.AllCliqueProtocolChanges
+	config.Clique.Period = period
 
 	// Assemble and return the genesis with the precompiles and faucet pre-funded
 	return &Genesis{
-		Config:    &config,
-		ExtraData: append(append(make([]byte, 32), faucet[:]...), make([]byte, crypto.SignatureLength)...),
-		GasLimit:  6283185,
+		Config:     &config,
+		ExtraData:  append(append(make([]byte, 32), faucet[:]...), make([]byte, crypto.SignatureLength)...),
+		GasLimit:   6283185,
+		Difficulty: big.NewInt(1),
 		Alloc: map[common.Address]GenesisAccount{
 			common.BytesToAddress([]byte{1}): {Balance: big.NewInt(1)}, // ECRecover
 			common.BytesToAddress([]byte{2}): {Balance: big.NewInt(1)}, // SHA256

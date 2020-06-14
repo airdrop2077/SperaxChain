@@ -28,6 +28,7 @@ import (
 
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
+	"github.com/Sperax/SperaxChain/consensus/ethash"
 	"github.com/Sperax/SperaxChain/core/rawdb"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
@@ -35,7 +36,6 @@ import (
 	"github.com/Sperax/SperaxChain/crypto"
 	"github.com/Sperax/SperaxChain/ethdb"
 	"github.com/Sperax/SperaxChain/params"
-	"github.com/ethereum/go-ethereum/consensus/ethash"
 )
 
 // So we can deterministically seed different blockchains
@@ -1410,7 +1410,7 @@ func TestEIP161AccountRemoval(t *testing.T) {
 		t.Error("account should not exist")
 	}
 
-	// account mustn't be created post eip 161
+	// account musn't be created post eip 161
 	if _, err := blockchain.InsertChain(types.Blocks{blocks[2]}); err != nil {
 		t.Fatal(err)
 	}

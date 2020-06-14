@@ -198,7 +198,7 @@ func (lc *LightChain) ResetWithGenesisBlock(genesis *types.Block) {
 
 	// Prepare the genesis block and reinitialise the chain
 	batch := lc.chainDb.NewBatch()
-	rawdb.WriteTd(batch, genesis.Hash(), genesis.NumberU64(), common.Big1)
+	rawdb.WriteTd(batch, genesis.Hash(), genesis.NumberU64(), genesis.Difficulty())
 	rawdb.WriteBlock(batch, genesis)
 	rawdb.WriteHeadHeaderHash(batch, genesis.Hash())
 	if err := batch.Write(); err != nil {
@@ -314,16 +314,10 @@ func (lc *LightChain) Stop() {
 		return
 	}
 	close(lc.quit)
-	lc.StopInsert()
-	lc.wg.Wait()
-	log.Info("Blockchain stopped")
-}
-
-// StopInsert interrupts all insertion methods, causing them to return
-// errInsertionInterrupted as soon as possible. Insertion is permanently disabled after
-// calling this method.
-func (lc *LightChain) StopInsert() {
 	atomic.StoreInt32(&lc.procInterrupt, 1)
+
+	lc.wg.Wait()
+	log.Info("Blockchain manager stopped")
 }
 
 // Rollback is designed to remove a chain of links from the database that aren't
@@ -497,12 +491,9 @@ func (lc *LightChain) SyncCheckpoint(ctx context.Context, checkpoint *params.Tru
 	head := lc.CurrentHeader().Number.Uint64()
 
 	latest := (checkpoint.SectionIndex+1)*lc.indexerConfig.ChtSize - 1
-	// NOTE(xtaci): removed clique
-	/*
-		if clique := lc.hc.Config().Clique; clique != nil {
-			latest -= latest % clique.Epoch // epoch snapshot for clique
-		}
-	*/
+	if clique := lc.hc.Config().Clique; clique != nil {
+		latest -= latest % clique.Epoch // epoch snapshot for clique
+	}
 	if head >= latest {
 		return true
 	}

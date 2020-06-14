@@ -19,11 +19,11 @@ package core
 import (
 	"sync/atomic"
 
+	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/core/vm"
-	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/params"
 )
 

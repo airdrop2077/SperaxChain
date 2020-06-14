@@ -582,6 +582,11 @@ func (w *wallet) SignTx(account accounts.Account, tx *types.Transaction, chainID
 	return signed, nil
 }
 
+// NOTE(xtaci): stub
+func (w *wallet) GetPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error) {
+	return nil, errors.New("not implemented")
+}
+
 // SignHashWithPassphrase implements accounts.Wallet, however signing arbitrary
 // data is not supported for Ledger wallets, so this method will always return
 // an error.
@@ -594,9 +599,4 @@ func (w *wallet) SignTextWithPassphrase(account accounts.Account, passphrase str
 // Since USB wallets don't rely on passphrases, these are silently ignored.
 func (w *wallet) SignTxWithPassphrase(account accounts.Account, passphrase string, tx *types.Transaction, chainID *big.Int) (*types.Transaction, error) {
 	return w.SignTx(account, tx, chainID)
-}
-
-// NOTE(xtaci): stub
-func (w *wallet) GetPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error) {
-	return nil, errors.New("not implemented")
 }

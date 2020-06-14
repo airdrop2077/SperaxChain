@@ -26,6 +26,8 @@ import (
 	"github.com/Sperax/SperaxChain/accounts"
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
+	"github.com/Sperax/SperaxChain/consensus/clique"
+	"github.com/Sperax/SperaxChain/consensus/ethash"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/rawdb"
 	"github.com/Sperax/SperaxChain/core/types"
@@ -34,8 +36,6 @@ import (
 	"github.com/Sperax/SperaxChain/ethdb"
 	"github.com/Sperax/SperaxChain/event"
 	"github.com/Sperax/SperaxChain/params"
-	"github.com/ethereum/go-ethereum/consensus/clique"
-	"github.com/ethereum/go-ethereum/consensus/ethash"
 )
 
 const (

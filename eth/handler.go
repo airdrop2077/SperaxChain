@@ -85,7 +85,6 @@ type ProtocolManager struct {
 	txsCh         chan core.NewTxsEvent
 	txsSub        event.Subscription
 	minedBlockSub *event.TypeMuxSubscription
-
 	// consensus output message subscription
 	consensusSub *event.TypeMuxSubscription
 
@@ -393,7 +392,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 	if err != nil {
 		return err
 	}
-
 	if msg.Size > protocolMaxMsgSize {
 		return errResp(ErrMsgTooLarge, "%v > %v", msg.Size, protocolMaxMsgSize)
 	}
@@ -581,17 +579,19 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		// Deliver them all to the downloader for queuing
 		transactions := make([][]*types.Transaction, len(request))
+		uncles := make([][]*types.Header, len(request))
 
 		for i, body := range request {
 			transactions[i] = body.Transactions
+			uncles[i] = body.Uncles
 		}
 		// Filter out any explicitly requested bodies, deliver the rest to the downloader
-		filter := len(transactions) > 0
+		filter := len(transactions) > 0 || len(uncles) > 0
 		if filter {
-			transactions = pm.blockFetcher.FilterBodies(p.id, transactions, time.Now())
+			transactions, uncles = pm.blockFetcher.FilterBodies(p.id, transactions, uncles, time.Now())
 		}
-		if len(transactions) > 0 || !filter {
-			err := pm.downloader.DeliverBodies(p.id, transactions)
+		if len(transactions) > 0 || len(uncles) > 0 || !filter {
+			err := pm.downloader.DeliverBodies(p.id, transactions, uncles)
 			if err != nil {
 				log.Debug("Failed to deliver bodies", "err", err)
 			}
@@ -708,6 +708,10 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		if err := msg.Decode(&request); err != nil {
 			return errResp(ErrDecode, "%v: %v", msg, err)
 		}
+		if hash := types.CalcUncleHash(request.Block.Uncles()); hash != request.Block.UncleHash() {
+			log.Warn("Propagated block has invalid uncles", "have", hash, "exp", request.Block.UncleHash())
+			break // TODO(karalabe): return error eventually, but wait a few releases
+		}
 		if hash := types.DeriveSha(request.Block.Transactions()); hash != request.Block.TxHash() {
 			log.Warn("Propagated block has invalid body", "have", hash, "exp", request.Block.TxHash())
 			break // TODO(karalabe): return error eventually, but wait a few releases
@@ -726,7 +730,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		// calculate the head hash and TD that the peer truly must have.
 		var (
 			trueHead = request.Block.ParentHash()
-			trueTD   = new(big.Int).Sub(request.TD, common.Big1)
+			trueTD   = new(big.Int).Sub(request.TD, request.Block.Difficulty())
 		)
 		// Update the peer's total difficulty if better than the previous
 		if _, td := p.Head(); trueTD.Cmp(td) > 0 {
@@ -804,8 +808,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			p.MarkTransaction(tx.Hash())
 		}
 		pm.txFetcher.Enqueue(p.id, txs, msg.Code == PooledTransactionsMsg)
-
-	case msg.Code == BDLSConsensusMsg: // Sperax Consensus Extension
+	case msg.Code == BDLSConsensusMsg && p.version >= eth65: // Sperax Consensus Extension
 		// get consensus message bytes
 		msgStream := rlp.NewStream(msg.Payload, uint64(msg.Size))
 		bts, err := msgStream.Bytes()
@@ -823,26 +826,14 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 		// propagate this message
 		pm.BroadcastConsensusMsg(bts)
+
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 	}
 	return nil
 }
 
-// BroadcastConsensusMsg broadcasts a consensus message to peers
-func (pm *ProtocolManager) BroadcastConsensusMsg(bts []byte) {
-	// bytes hash
-	hash := bdls_engine.BytesHash(bts)
-	peers := pm.peers.PeersWithoutConsensus(hash)
-	// Send the consensus to a subset of our peers
-	log.Warn("BroadcastConsensusMsg", "num peers", len(peers))
-	for _, peer := range peers {
-		peer.SendConsensusMsg(bts)
-	}
-	log.Warn("Propagated consensus", "hash", hash, "recipients", len(peers))
-	return
-}
-
+// BroadcastBlock will either propagate a block to a subset of its peers, or
 // will only announce its availability (depending what's requested).
 func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
 	hash := block.Hash()
@@ -853,7 +844,7 @@ func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
 		// Calculate the TD of the block (it's not imported yet, so block.Td is not valid)
 		var td *big.Int
 		if parent := pm.blockchain.GetBlock(block.ParentHash(), block.NumberU64()-1); parent != nil {
-			td = new(big.Int).Add(common.Big1, pm.blockchain.GetTd(block.ParentHash(), block.NumberU64()-1))
+			td = new(big.Int).Add(block.Difficulty(), pm.blockchain.GetTd(block.ParentHash(), block.NumberU64()-1))
 		} else {
 			log.Error("Propagating dangling block", "number", block.Number(), "hash", hash)
 			return
@@ -915,15 +906,18 @@ func (pm *ProtocolManager) BroadcastTransactions(txs types.Transactions, propaga
 	}
 }
 
-// consensusBroadcastLoop sends consensus messages to connected peers.
-func (pm *ProtocolManager) consensusBroadcastLoop() {
-	defer pm.wg.Done()
-
-	for obj := range pm.consensusSub.Chan() {
-		if ev, ok := obj.Data.(bdls_engine.ConsensusMessageOutput); ok {
-			pm.BroadcastConsensusMsg(ev) // broadcast to peers
-		}
+// BroadcastConsensusMsg broadcasts a consensus message to peers
+func (pm *ProtocolManager) BroadcastConsensusMsg(bts []byte) {
+	// bytes hash
+	hash := bdls_engine.BytesHash(bts)
+	peers := pm.peers.PeersWithoutConsensus(hash)
+	// Send the consensus to a subset of our peers
+	log.Warn("BroadcastConsensusMsg", "num peers", len(peers))
+	for _, peer := range peers {
+		peer.SendConsensusMsg(bts)
 	}
+	log.Warn("Propagated consensus", "hash", hash, "recipients", len(peers))
+	return
 }
 
 // minedBroadcastLoop sends mined blocks to connected peers.
@@ -934,6 +928,17 @@ func (pm *ProtocolManager) minedBroadcastLoop() {
 		if ev, ok := obj.Data.(core.NewMinedBlockEvent); ok {
 			pm.BroadcastBlock(ev.Block, true)  // First propagate block to peers
 			pm.BroadcastBlock(ev.Block, false) // Only then announce to the rest
+		}
+	}
+}
+
+// consensusBroadcastLoop sends consensus messages to connected peers.
+func (pm *ProtocolManager) consensusBroadcastLoop() {
+	defer pm.wg.Done()
+
+	for obj := range pm.consensusSub.Chan() {
+		if ev, ok := obj.Data.(bdls_engine.ConsensusMessageOutput); ok {
+			pm.BroadcastConsensusMsg(ev) // broadcast to peers
 		}
 	}
 }

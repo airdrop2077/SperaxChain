@@ -98,11 +98,11 @@ type peer struct {
 	td   *big.Int
 	lock sync.RWMutex
 
-	knownBlocks     mapset.Set        // Set of block hashes known to be known by this peer
+	knownBlocks        mapset.Set // Set of block hashes known to be known by this peer
+	knownConsensusMsgs mapset.Set // BDLS Extension to track broadcasted consensus
+
 	queuedBlocks    chan *propEvent   // Queue of blocks to broadcast to the peer
 	queuedBlockAnns chan *types.Block // Queue of blocks to announce to the peer
-
-	knownConsensusMsgs mapset.Set // BDLS Extension to track broadcasted consensus
 
 	knownTxs    mapset.Set                           // Set of transaction hashes known to be known by this peer
 	txBroadcast chan []common.Hash                   // Channel used to queue transaction propagation requests

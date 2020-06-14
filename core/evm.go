@@ -19,10 +19,10 @@ package core
 import (
 	"math/big"
 
+	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/core/vm"
-	"github.com/Sperax/SperaxChain/common"
 )
 
 // ChainContext supports retrieving headers and consensus parameters from the
@@ -52,7 +52,7 @@ func NewEVMContext(msg Message, header *types.Header, chain ChainContext, author
 		Coinbase:    beneficiary,
 		BlockNumber: new(big.Int).Set(header.Number),
 		Time:        new(big.Int).SetUint64(header.Time),
-		Difficulty:  new(big.Int).Set(common.Big1),
+		Difficulty:  new(big.Int).Set(header.Difficulty),
 		GasLimit:    header.GasLimit,
 		GasPrice:    new(big.Int).Set(msg.GasPrice()),
 	}

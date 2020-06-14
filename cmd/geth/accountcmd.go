@@ -23,7 +23,7 @@ import (
 	"github.com/Sperax/SperaxChain/accounts"
 	"github.com/Sperax/SperaxChain/accounts/keystore"
 	"github.com/Sperax/SperaxChain/cmd/utils"
-	prompt2 "github.com/Sperax/SperaxChain/console/prompt"
+	"github.com/Sperax/SperaxChain/console"
 	"github.com/Sperax/SperaxChain/crypto"
 	"github.com/Sperax/SperaxChain/log"
 	"gopkg.in/urfave/cli.v1"
@@ -247,12 +247,12 @@ func getPassPhrase(prompt string, confirmation bool, i int, passwords []string) 
 	if prompt != "" {
 		fmt.Println(prompt)
 	}
-	password, err := prompt2.Stdin.PromptPassword("Password: ")
+	password, err := console.Stdin.PromptPassword("Password: ")
 	if err != nil {
 		utils.Fatalf("Failed to read password: %v", err)
 	}
 	if confirmation {
-		confirm, err := prompt2.Stdin.PromptPassword("Repeat password: ")
+		confirm, err := console.Stdin.PromptPassword("Repeat password: ")
 		if err != nil {
 			utils.Fatalf("Failed to read password confirmation: %v", err)
 		}

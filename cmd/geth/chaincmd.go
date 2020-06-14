@@ -28,7 +28,7 @@ import (
 
 	"github.com/Sperax/SperaxChain/cmd/utils"
 	"github.com/Sperax/SperaxChain/common"
-	"github.com/Sperax/SperaxChain/console/prompt"
+	"github.com/Sperax/SperaxChain/console"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/rawdb"
 	"github.com/Sperax/SperaxChain/core/state"
@@ -521,7 +521,7 @@ func removeDB(ctx *cli.Context) error {
 // confirmAndRemoveDB prompts the user for a last confirmation and removes the
 // folder if accepted.
 func confirmAndRemoveDB(database string, kind string) {
-	confirm, err := prompt.Stdin.PromptConfirm(fmt.Sprintf("Remove %s (%s)?", kind, database))
+	confirm, err := console.Stdin.PromptConfirm(fmt.Sprintf("Remove %s (%s)?", kind, database))
 	switch {
 	case err != nil:
 		utils.Fatalf("%v", err)

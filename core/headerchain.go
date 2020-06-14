@@ -26,10 +26,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/core/rawdb"
 	"github.com/Sperax/SperaxChain/core/types"
-	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/ethdb"
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/params"
@@ -151,7 +151,7 @@ func (hc *HeaderChain) WriteHeader(header *types.Header) (status WriteStatus, er
 	}
 	head := hc.CurrentHeader().Number.Uint64()
 	localTd := hc.GetTd(hc.currentHeaderHash, head)
-	externTd := new(big.Int).Add(common.Big1, ptd)
+	externTd := new(big.Int).Add(header.Difficulty, ptd)
 
 	// Irrelevant of the canonical status, write the td and header to the database
 	//

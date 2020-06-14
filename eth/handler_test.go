@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/consensus/ethash"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/rawdb"
 	"github.com/Sperax/SperaxChain/core/state"
@@ -35,7 +36,6 @@ import (
 	"github.com/Sperax/SperaxChain/event"
 	"github.com/Sperax/SperaxChain/p2p"
 	"github.com/Sperax/SperaxChain/params"
-	"github.com/ethereum/go-ethereum/consensus/ethash"
 )
 
 // Tests that block headers can be retrieved from a remote chain based on user queries.

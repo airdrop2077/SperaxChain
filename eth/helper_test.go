@@ -29,6 +29,7 @@ import (
 	"testing"
 
 	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/consensus/ethash"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/forkid"
 	"github.com/Sperax/SperaxChain/core/rawdb"
@@ -41,7 +42,6 @@ import (
 	"github.com/Sperax/SperaxChain/p2p"
 	"github.com/Sperax/SperaxChain/p2p/enode"
 	"github.com/Sperax/SperaxChain/params"
-	"github.com/ethereum/go-ethereum/consensus/ethash"
 )
 
 var (

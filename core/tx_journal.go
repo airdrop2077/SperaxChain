@@ -21,8 +21,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/rlp"
 )

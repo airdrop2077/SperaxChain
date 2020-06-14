@@ -32,6 +32,11 @@ type (
 	ConsensusMessageInput []byte
 )
 
+type Config struct {
+	// initial participants address
+	Participants []common.Address
+}
+
 // PublicKey to Identity conversion, for use in BDLS
 func PubKeyToIdentity(pubkey *ecdsa.PublicKey) (ret bdls.Identity) {
 	// for a publickey first we convert to ethereum common.Address
@@ -67,21 +72,17 @@ type BDLSEngine struct {
 	mu sync.Mutex
 }
 
-func New(accountManager *accounts.Manager, mux *event.TypeMux) *BDLSEngine {
+func New(config *params.BDLSConfig, accountManager *accounts.Manager, mux *event.TypeMux) *BDLSEngine {
 	engine := new(BDLSEngine)
 	engine.mux = mux
 	engine.accountManager = accountManager
+	engine.participants = config.Participants
+
 	priv, err := crypto.GenerateKey()
 	if err != nil {
 		log.Crit("BDLS generate ephermal key", "err", err)
 	}
 	engine.ephermalKey = priv
-	return engine
-}
-
-func NewFaker() *BDLSEngine {
-	engine := New(nil, nil)
-	engine.fake = true
 	return engine
 }
 
@@ -91,13 +92,6 @@ func BytesHash(bts []byte) (h common.Hash) {
 	rlp.Encode(hw, bts)
 	hw.Sum(h[:0])
 	return h
-}
-
-// SetParticipants for next height
-func (e *BDLSEngine) SetParticipants(participants []common.Address) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.participants = participants
 }
 
 // SetBlockValidator starts the validating engine
@@ -176,6 +170,10 @@ func (e *BDLSEngine) VerifyHeaders(chain consensus.ChainReader, headers []*types
 	return abort, results
 }
 
+func (e *BDLSEngine) VerifyUncles(chain consensus.ChainReader, block *types.Block) error {
+	return nil
+}
+
 // VerifySeal checks whether the crypto seal on a header is valid according to
 // the consensus rules of the given engine.
 func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Header) error {
@@ -236,7 +234,7 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 //
 // Note: The block header and state database might be updated to reflect any
 // consensus rules that happen at finalization (e.g. block rewards).
-func (e *BDLSEngine) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction) {
+func (e *BDLSEngine) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
 	accumulateRewards(chain.Config(), state, header)
 	header.Root = state.IntermediateRoot(true)
 }
@@ -246,10 +244,10 @@ func (e *BDLSEngine) Finalize(chain consensus.ChainReader, header *types.Header,
 //
 // Note: The block header and state database might be updated to reflect any
 // consensus rules that happen at finalization (e.g. block rewards).
-func (e *BDLSEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, receipts []*types.Receipt) (*types.Block, error) {
+func (e *BDLSEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	accumulateRewards(chain.Config(), state, header)
 	header.Root = state.IntermediateRoot(true)
-	return types.NewBlock(header, txs, receipts), nil
+	return types.NewBlock(header, txs, nil, receipts), nil
 }
 
 // Seal generates a new sealing request for the given input block and pushes

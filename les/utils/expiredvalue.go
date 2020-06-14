@@ -63,7 +63,14 @@ func ExpFactor(logOffset Fixed64) ExpirationFactor {
 // Value calculates the expired value based on a floating point base and integer
 // power-of-2 exponent. This function should be used by multi-value expired structures.
 func (e ExpirationFactor) Value(base float64, exp uint64) float64 {
-	return base / e.Factor * math.Pow(2, float64(int64(exp-e.Exp)))
+	res := base / e.Factor
+	if exp > e.Exp {
+		res *= float64(uint64(1) << (exp - e.Exp))
+	}
+	if exp < e.Exp {
+		res /= float64(uint64(1) << (e.Exp - exp))
+	}
+	return res
 }
 
 // value calculates the value at the given moment.

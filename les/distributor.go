@@ -180,11 +180,12 @@ func (d *requestDistributor) loop() {
 type selectPeerItem struct {
 	peer   distPeer
 	req    *distReq
-	weight uint64
+	weight int64
 }
 
-func selectPeerWeight(i interface{}) uint64 {
-	return i.(selectPeerItem).weight
+// Weight implements wrsItem interface
+func (sp selectPeerItem) Weight() int64 {
+	return sp.weight
 }
 
 // nextRequest returns the next possible request from any peer, along with the
@@ -219,9 +220,9 @@ func (d *requestDistributor) nextRequest() (distPeer, *distReq, time.Duration) {
 				wait, bufRemain := peer.waitBefore(cost)
 				if wait == 0 {
 					if sel == nil {
-						sel = utils.NewWeightedRandomSelect(selectPeerWeight)
+						sel = utils.NewWeightedRandomSelect()
 					}
-					sel.Update(selectPeerItem{peer: peer, req: req, weight: uint64(bufRemain*1000000) + 1})
+					sel.Update(selectPeerItem{peer: peer, req: req, weight: int64(bufRemain*1000000) + 1})
 				} else {
 					if bestWait == 0 || wait < bestWait {
 						bestWait = wait

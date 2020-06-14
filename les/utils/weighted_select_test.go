@@ -26,18 +26,17 @@ type testWrsItem struct {
 	widx *int
 }
 
-func testWeight(i interface{}) uint64 {
-	t := i.(*testWrsItem)
+func (t *testWrsItem) Weight() int64 {
 	w := *t.widx
 	if w == -1 || w == t.idx {
-		return uint64(t.idx + 1)
+		return int64(t.idx + 1)
 	}
 	return 0
 }
 
 func TestWeightedRandomSelect(t *testing.T) {
 	testFn := func(cnt int) {
-		s := NewWeightedRandomSelect(testWeight)
+		s := NewWeightedRandomSelect()
 		w := -1
 		list := make([]testWrsItem, cnt)
 		for i := range list {

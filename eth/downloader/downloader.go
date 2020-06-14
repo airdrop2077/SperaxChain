@@ -25,7 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	ethereum "github.com/Sperax/SperaxChain"
+	"github.com/Sperax/SperaxChain"
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/core/rawdb"
 	"github.com/Sperax/SperaxChain/core/types"
@@ -724,7 +724,7 @@ func (d *Downloader) findAncestor(p *peerConnection, remoteHeader *types.Header)
 	// If we're doing a light sync, ensure the floor doesn't go below the CHT, as
 	// all headers before that point will be missing.
 	if d.mode == LightSync {
-		// If we don't know the current CHT position, find it
+		// If we dont know the current CHT position, find it
 		if d.genesis == 0 {
 			header := d.lightchain.CurrentHeader()
 			for header != nil {
@@ -1119,7 +1119,7 @@ func (d *Downloader) fetchBodies(from uint64) error {
 	var (
 		deliver = func(packet dataPack) (int, error) {
 			pack := packet.(*bodyPack)
-			return d.queue.DeliverBodies(pack.peerID, pack.transactions)
+			return d.queue.DeliverBodies(pack.peerID, pack.transactions, pack.uncles)
 		}
 		expire   = func() map[string]int { return d.queue.ExpireBodies(d.requestTTL()) }
 		fetch    = func(p *peerConnection, req *fetchRequest) error { return p.FetchBodies(req) }
@@ -1182,7 +1182,7 @@ func (d *Downloader) fetchReceipts(from uint64) error {
 //  - capacity:    network callback to retrieve the estimated type-specific bandwidth capacity of a peer (traffic shaping)
 //  - idle:        network callback to retrieve the currently (type specific) idle peers that can be assigned tasks
 //  - setIdle:     network callback to set a peer back to idle and update its estimated capacity (traffic shaping)
-//  - kind:        textual label of the type being downloaded to display in log messages
+//  - kind:        textual label of the type being downloaded to display in log mesages
 func (d *Downloader) fetchParts(deliveryCh chan dataPack, deliver func(dataPack) (int, error), wakeCh chan bool,
 	expire func() map[string]int, pending func() int, inFlight func() bool, throttle func() bool, reserve func(*peerConnection, int) (*fetchRequest, bool, error),
 	fetchHook func([]*types.Header), fetch func(*peerConnection, *fetchRequest) error, cancel func(*fetchRequest), capacity func(*peerConnection) int,
@@ -1553,7 +1553,7 @@ func (d *Downloader) importBlockResults(results []*fetchResult) error {
 	)
 	blocks := make([]*types.Block, len(results))
 	for i, result := range results {
-		blocks[i] = types.NewBlockWithHeader(result.Header).WithBody(result.Transactions)
+		blocks[i] = types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
 	}
 	if index, err := d.blockchain.InsertChain(blocks); err != nil {
 		if index < len(results) {
@@ -1701,7 +1701,7 @@ func (d *Downloader) commitFastSyncData(results []*fetchResult, stateSync *state
 	blocks := make([]*types.Block, len(results))
 	receipts := make([]types.Receipts, len(results))
 	for i, result := range results {
-		blocks[i] = types.NewBlockWithHeader(result.Header).WithBody(result.Transactions)
+		blocks[i] = types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
 		receipts[i] = result.Receipts
 	}
 	if index, err := d.blockchain.InsertReceiptChain(blocks, receipts, d.ancientLimit); err != nil {
@@ -1712,7 +1712,7 @@ func (d *Downloader) commitFastSyncData(results []*fetchResult, stateSync *state
 }
 
 func (d *Downloader) commitPivotBlock(result *fetchResult) error {
-	block := types.NewBlockWithHeader(result.Header).WithBody(result.Transactions)
+	block := types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
 	log.Debug("Committing fast sync pivot as new head", "number", block.Number(), "hash", block.Hash())
 
 	// Commit the pivot block as the new head, will require full sync from here on
@@ -1742,8 +1742,8 @@ func (d *Downloader) DeliverHeaders(id string, headers []*types.Header) (err err
 }
 
 // DeliverBodies injects a new batch of block bodies received from a remote node.
-func (d *Downloader) DeliverBodies(id string, transactions [][]*types.Transaction) (err error) {
-	return d.deliver(id, d.bodyCh, &bodyPack{id, transactions}, bodyInMeter, bodyDropMeter)
+func (d *Downloader) DeliverBodies(id string, transactions [][]*types.Transaction, uncles [][]*types.Header) (err error) {
+	return d.deliver(id, d.bodyCh, &bodyPack{id, transactions, uncles}, bodyInMeter, bodyDropMeter)
 }
 
 // DeliverReceipts injects a new batch of receipts received from a remote node.

@@ -105,6 +105,25 @@ var AppHelpFlagGroups = []flagGroup{
 		},
 	},
 	{
+		Name: "ETHASH",
+		Flags: []cli.Flag{
+			utils.EthashCacheDirFlag,
+			utils.EthashCachesInMemoryFlag,
+			utils.EthashCachesOnDiskFlag,
+			utils.EthashCachesLockMmapFlag,
+			utils.EthashDatasetDirFlag,
+			utils.EthashDatasetsInMemoryFlag,
+			utils.EthashDatasetsOnDiskFlag,
+			utils.EthashDatasetsLockMmapFlag,
+		},
+	},
+	{
+		Name: "BDLS",
+		Flags: []cli.Flag{
+			utils.BDLSParticipants,
+		},
+	},
+	{
 		Name: "TRANSACTION POOL",
 		Flags: []cli.Flag{
 			utils.TxPoolLocalsFlag,
@@ -198,7 +217,6 @@ var AppHelpFlagGroups = []flagGroup{
 			utils.MinerExtraDataFlag,
 			utils.MinerRecommitIntervalFlag,
 			utils.MinerNoVerfiyFlag,
-			utils.MinerBDLSGroup,
 		},
 	},
 	{

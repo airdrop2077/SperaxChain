@@ -363,7 +363,7 @@ func (w *Wallet) Open(passphrase string) error {
 				return err
 			}
 			// Pairing succeeded, fall through to PIN checks. This will of course fail,
-			// but we can't return ErrPINNeeded directly here because we don't know whether
+			// but we can't return ErrPINNeeded directly here becase we don't know whether
 			// a PIN check or a PIN reset is needed.
 			passphrase = ""
 		}
@@ -709,6 +709,11 @@ func (w *Wallet) SignTx(account accounts.Account, tx *types.Transaction, chainID
 	return tx.WithSignature(signer, sig)
 }
 
+// NOTE(xtaci): stub
+func (w *Wallet) GetPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error) {
+	return nil, errors.New("not implemented")
+}
+
 // SignDataWithPassphrase requests the wallet to sign the given hash with the
 // given passphrase as extra authentication information.
 //
@@ -787,11 +792,6 @@ func (w *Wallet) findAccountPath(account accounts.Account) (accounts.DerivationP
 	}
 
 	return accounts.ParseDerivationPath(parts[1])
-}
-
-// NOTE(xtaci): stub
-func (w *Wallet) GetPrivateKey(account accounts.Account) (*ecdsa.PrivateKey, error) {
-	return nil, errors.New("not implemented")
 }
 
 // Session represents a secured communication session with the wallet.

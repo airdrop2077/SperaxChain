@@ -38,7 +38,8 @@ import (
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/common/fdlimit"
 	"github.com/Sperax/SperaxChain/consensus"
-	"github.com/Sperax/SperaxChain/consensus/bdls_engine"
+	"github.com/Sperax/SperaxChain/consensus/clique"
+	"github.com/Sperax/SperaxChain/consensus/ethash"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/vm"
 	"github.com/Sperax/SperaxChain/crypto"
@@ -277,6 +278,49 @@ var (
 		Name:  "ulc.onlyannounce",
 		Usage: "Ultra light server sends announcements only",
 	}
+	// Ethash settings
+	EthashCacheDirFlag = DirectoryFlag{
+		Name:  "ethash.cachedir",
+		Usage: "Directory to store the ethash verification caches (default = inside the datadir)",
+	}
+	EthashCachesInMemoryFlag = cli.IntFlag{
+		Name:  "ethash.cachesinmem",
+		Usage: "Number of recent ethash caches to keep in memory (16MB each)",
+		Value: eth.DefaultConfig.Ethash.CachesInMem,
+	}
+	EthashCachesOnDiskFlag = cli.IntFlag{
+		Name:  "ethash.cachesondisk",
+		Usage: "Number of recent ethash caches to keep on disk (16MB each)",
+		Value: eth.DefaultConfig.Ethash.CachesOnDisk,
+	}
+	EthashCachesLockMmapFlag = cli.BoolFlag{
+		Name:  "ethash.cacheslockmmap",
+		Usage: "Lock memory maps of recent ethash caches",
+	}
+	EthashDatasetDirFlag = DirectoryFlag{
+		Name:  "ethash.dagdir",
+		Usage: "Directory to store the ethash mining DAGs",
+		Value: DirectoryString(eth.DefaultConfig.Ethash.DatasetDir),
+	}
+	EthashDatasetsInMemoryFlag = cli.IntFlag{
+		Name:  "ethash.dagsinmem",
+		Usage: "Number of recent ethash mining DAGs to keep in memory (1+GB each)",
+		Value: eth.DefaultConfig.Ethash.DatasetsInMem,
+	}
+	EthashDatasetsOnDiskFlag = cli.IntFlag{
+		Name:  "ethash.dagsondisk",
+		Usage: "Number of recent ethash mining DAGs to keep on disk (1+GB each)",
+		Value: eth.DefaultConfig.Ethash.DatasetsOnDisk,
+	}
+	EthashDatasetsLockMmapFlag = cli.BoolFlag{
+		Name:  "ethash.dagslockmmap",
+		Usage: "Lock memory maps for recent ethash mining DAGs",
+	}
+	BDLSParticipants = cli.StringFlag{
+		Name:  "bdls.bdlsgroup",
+		Usage: "bdls's address list file name in BDLS consensus group",
+		Value: "0",
+	}
 	// Transaction pool settings
 	TxPoolLocalsFlag = cli.StringFlag{
 		Name:  "txpool.locals",
@@ -393,11 +437,6 @@ var (
 	MinerEtherbaseFlag = cli.StringFlag{
 		Name:  "miner.etherbase",
 		Usage: "Public address for block mining rewards (default = first account)",
-		Value: "0",
-	}
-	MinerBDLSGroup = cli.StringFlag{
-		Name:  "miner.bdlsgroup",
-		Usage: "miner's address list in BDLS consensus group",
 		Value: "0",
 	}
 	MinerExtraDataFlag = cli.StringFlag{
@@ -1295,6 +1334,56 @@ func setTxPool(ctx *cli.Context, cfg *core.TxPoolConfig) {
 	}
 }
 
+func setEthash(ctx *cli.Context, cfg *eth.Config) {
+	if ctx.GlobalIsSet(EthashCacheDirFlag.Name) {
+		cfg.Ethash.CacheDir = ctx.GlobalString(EthashCacheDirFlag.Name)
+	}
+	if ctx.GlobalIsSet(EthashDatasetDirFlag.Name) {
+		cfg.Ethash.DatasetDir = ctx.GlobalString(EthashDatasetDirFlag.Name)
+	}
+	if ctx.GlobalIsSet(EthashCachesInMemoryFlag.Name) {
+		cfg.Ethash.CachesInMem = ctx.GlobalInt(EthashCachesInMemoryFlag.Name)
+	}
+	if ctx.GlobalIsSet(EthashCachesOnDiskFlag.Name) {
+		cfg.Ethash.CachesOnDisk = ctx.GlobalInt(EthashCachesOnDiskFlag.Name)
+	}
+	if ctx.GlobalIsSet(EthashCachesLockMmapFlag.Name) {
+		cfg.Ethash.CachesLockMmap = ctx.GlobalBool(EthashCachesLockMmapFlag.Name)
+	}
+	if ctx.GlobalIsSet(EthashDatasetsInMemoryFlag.Name) {
+		cfg.Ethash.DatasetsInMem = ctx.GlobalInt(EthashDatasetsInMemoryFlag.Name)
+	}
+	if ctx.GlobalIsSet(EthashDatasetsOnDiskFlag.Name) {
+		cfg.Ethash.DatasetsOnDisk = ctx.GlobalInt(EthashDatasetsOnDiskFlag.Name)
+	}
+	if ctx.GlobalIsSet(EthashDatasetsLockMmapFlag.Name) {
+		cfg.Ethash.DatasetsLockMmap = ctx.GlobalBool(EthashDatasetsLockMmapFlag.Name)
+	}
+}
+
+func setBDLS(ctx *cli.Context, cfg *eth.Config) {
+	// NOTE(xtaci): load bdls participants group
+	if ctx.GlobalIsSet(BDLSParticipants.Name) {
+		file, err := os.Open(ctx.GlobalString(BDLSParticipants.Name))
+		if err != nil {
+			log.Crit("open BDLS group file:", err)
+		}
+		dec := json.NewDecoder(file)
+
+		var quorum []string
+		err = dec.Decode(&quorum)
+		if err != nil {
+			log.Crit("bdls file json decode", "err", err)
+		}
+
+		log.Debug("quorum", "list", quorum)
+
+		for k := range quorum {
+			cfg.BDLS.Participants = append(cfg.BDLS.Participants, common.HexToAddress(quorum[k]))
+		}
+	}
+}
+
 func setMiner(ctx *cli.Context, cfg *miner.Config) {
 	if ctx.GlobalIsSet(MinerNotifyFlag.Name) {
 		cfg.Notify = strings.Split(ctx.GlobalString(MinerNotifyFlag.Name), ",")
@@ -1423,31 +1512,11 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	if keystores := stack.AccountManager().Backends(keystore.KeyStoreType); len(keystores) > 0 {
 		ks = keystores[0].(*keystore.KeyStore)
 	}
-
-	// NOTE(xtaci): load bdls participants group
-	if ctx.GlobalIsSet(MinerBDLSGroup.Name) {
-		file, err := os.Open(ctx.GlobalString(MinerBDLSGroup.Name))
-		if err != nil {
-			log.Crit("open BDLS group file:", err)
-		}
-		dec := json.NewDecoder(file)
-
-		var quorum []string
-		err = dec.Decode(&quorum)
-		if err != nil {
-			log.Crit("bdls file json decode", "err", err)
-		}
-
-		log.Debug("quorum", "list", quorum)
-
-		for k := range quorum {
-			cfg.Miner.BDLSConsensusGroup = append(cfg.Miner.BDLSConsensusGroup, common.HexToAddress(quorum[k]))
-		}
-	}
-
 	setEtherbase(ctx, ks, cfg)
 	setGPO(ctx, &cfg.GPO)
 	setTxPool(ctx, &cfg.TxPool)
+	setEthash(ctx, cfg)
+	setBDLS(ctx, cfg)
 	setMiner(ctx, &cfg.Miner)
 	setWhitelist(ctx, cfg)
 	setLes(ctx, cfg)
@@ -1524,19 +1593,19 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 			cfg.NetworkId = 3
 		}
 		cfg.Genesis = core.DefaultRopstenGenesisBlock()
-		setDNSDiscoveryDefaults(cfg, params.RopstenGenesisHash)
+		setDNSDiscoveryDefaults(cfg, params.KnownDNSNetworks[params.RopstenGenesisHash])
 	case ctx.GlobalBool(RinkebyFlag.Name):
 		if !ctx.GlobalIsSet(NetworkIdFlag.Name) {
 			cfg.NetworkId = 4
 		}
 		cfg.Genesis = core.DefaultRinkebyGenesisBlock()
-		setDNSDiscoveryDefaults(cfg, params.RinkebyGenesisHash)
+		setDNSDiscoveryDefaults(cfg, params.KnownDNSNetworks[params.RinkebyGenesisHash])
 	case ctx.GlobalBool(GoerliFlag.Name):
 		if !ctx.GlobalIsSet(NetworkIdFlag.Name) {
 			cfg.NetworkId = 5
 		}
 		cfg.Genesis = core.DefaultGoerliGenesisBlock()
-		setDNSDiscoveryDefaults(cfg, params.GoerliGenesisHash)
+		setDNSDiscoveryDefaults(cfg, params.KnownDNSNetworks[params.GoerliGenesisHash])
 	case ctx.GlobalBool(DeveloperFlag.Name):
 		if !ctx.GlobalIsSet(NetworkIdFlag.Name) {
 			cfg.NetworkId = 1337
@@ -1565,25 +1634,18 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 		}
 	default:
 		if cfg.NetworkId == 1 {
-			setDNSDiscoveryDefaults(cfg, params.MainnetGenesisHash)
+			setDNSDiscoveryDefaults(cfg, params.KnownDNSNetworks[params.MainnetGenesisHash])
 		}
 	}
 }
 
 // setDNSDiscoveryDefaults configures DNS discovery with the given URL if
 // no URLs are set.
-func setDNSDiscoveryDefaults(cfg *eth.Config, genesis common.Hash) {
+func setDNSDiscoveryDefaults(cfg *eth.Config, url string) {
 	if cfg.DiscoveryURLs != nil {
-		return // already set through flags/config
+		return
 	}
-
-	protocol := "all"
-	if cfg.SyncMode == downloader.LightSync {
-		protocol = "les"
-	}
-	if url := params.KnownDNSNetwork(genesis, protocol); url != "" {
-		cfg.DiscoveryURLs = []string{url}
-	}
+	cfg.DiscoveryURLs = []string{url}
 }
 
 // RegisterEthService adds an Ethereum client to the stack.
@@ -1734,8 +1796,23 @@ func MakeChain(ctx *cli.Context, stack *node.Node, readOnly bool) (chain *core.B
 		Fatalf("%v", err)
 	}
 	var engine consensus.Engine
-	engine = bdls_engine.NewFaker()
-
+	if config.Clique != nil {
+		engine = clique.New(config.Clique, chainDb)
+	} else {
+		engine = ethash.NewFaker()
+		if !ctx.GlobalBool(FakePoWFlag.Name) {
+			engine = ethash.New(ethash.Config{
+				CacheDir:         stack.ResolvePath(eth.DefaultConfig.Ethash.CacheDir),
+				CachesInMem:      eth.DefaultConfig.Ethash.CachesInMem,
+				CachesOnDisk:     eth.DefaultConfig.Ethash.CachesOnDisk,
+				CachesLockMmap:   eth.DefaultConfig.Ethash.CachesLockMmap,
+				DatasetDir:       stack.ResolvePath(eth.DefaultConfig.Ethash.DatasetDir),
+				DatasetsInMem:    eth.DefaultConfig.Ethash.DatasetsInMem,
+				DatasetsOnDisk:   eth.DefaultConfig.Ethash.DatasetsOnDisk,
+				DatasetsLockMmap: eth.DefaultConfig.Ethash.DatasetsLockMmap,
+			}, nil, false)
+		}
+	}
 	if gcmode := ctx.GlobalString(GCModeFlag.Name); gcmode != "full" && gcmode != "archive" {
 		Fatalf("--%s must be either 'full' or 'archive'", GCModeFlag.Name)
 	}

@@ -320,11 +320,8 @@ func (s *Service) readLoop(conn *websocket.Conn) {
 			request, ok := msg["emit"][1].(map[string]interface{})
 			if !ok {
 				log.Warn("Invalid stats history request", "msg", msg["emit"][1])
-				select {
-				case s.histCh <- nil: // Treat it as an no indexes request
-				default:
-				}
-				continue
+				s.histCh <- nil
+				continue // Ethstats sometime sends invalid history requests, ignore those
 			}
 			list, ok := request["list"].([]interface{})
 			if !ok {
@@ -352,7 +349,7 @@ func (s *Service) readLoop(conn *websocket.Conn) {
 	}
 }
 
-// nodeInfo is the collection of meta information about a node that is displayed
+// nodeInfo is the collection of metainformation about a node that is displayed
 // on the monitoring page.
 type nodeInfo struct {
 	Name     string `json:"name"`
@@ -482,9 +479,12 @@ type blockStats struct {
 	Miner      common.Address `json:"miner"`
 	GasUsed    uint64         `json:"gasUsed"`
 	GasLimit   uint64         `json:"gasLimit"`
+	Diff       string         `json:"difficulty"`
+	TotalDiff  string         `json:"totalDifficulty"`
 	Txs        []txStats      `json:"transactions"`
 	TxHash     common.Hash    `json:"transactionsRoot"`
 	Root       common.Hash    `json:"stateRoot"`
+	Uncles     uncleStats     `json:"uncles"`
 }
 
 // txStats is the information to report about individual transactions.
@@ -527,7 +527,9 @@ func (s *Service) assembleBlockStats(block *types.Block) *blockStats {
 	// Gather the block infos from the local blockchain
 	var (
 		header *types.Header
+		td     *big.Int
 		txs    []txStats
+		uncles []*types.Header
 	)
 	if s.eth != nil {
 		// Full nodes have all needed information available
@@ -535,11 +537,13 @@ func (s *Service) assembleBlockStats(block *types.Block) *blockStats {
 			block = s.eth.BlockChain().CurrentBlock()
 		}
 		header = block.Header()
+		td = s.eth.BlockChain().GetTd(header.Hash(), header.Number.Uint64())
 
 		txs = make([]txStats, len(block.Transactions()))
 		for i, tx := range block.Transactions() {
 			txs[i].Hash = tx.Hash()
 		}
+		uncles = block.Uncles()
 	} else {
 		// Light nodes would need on-demand lookups for transactions/uncles, skip
 		if block != nil {
@@ -547,6 +551,7 @@ func (s *Service) assembleBlockStats(block *types.Block) *blockStats {
 		} else {
 			header = s.les.BlockChain().CurrentHeader()
 		}
+		td = s.les.BlockChain().GetTd(header.Hash(), header.Number.Uint64())
 		txs = []txStats{}
 	}
 	// Assemble and return the block stats
@@ -560,9 +565,12 @@ func (s *Service) assembleBlockStats(block *types.Block) *blockStats {
 		Miner:      author,
 		GasUsed:    header.GasUsed,
 		GasLimit:   header.GasLimit,
+		Diff:       header.Difficulty.String(),
+		TotalDiff:  td.String(),
 		Txs:        txs,
 		TxHash:     header.TxHash,
 		Root:       header.Root,
+		Uncles:     uncles,
 	}
 }
 

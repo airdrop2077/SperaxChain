@@ -25,12 +25,12 @@ import (
 	"time"
 
 	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/consensus/ethash"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/rawdb"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/crypto"
 	"github.com/Sperax/SperaxChain/params"
-	"github.com/ethereum/go-ethereum/consensus/ethash"
 )
 
 var (
@@ -183,14 +183,16 @@ func (f *fetcherTester) makeBodyFetcher(peer string, blocks map[common.Hash]*typ
 	return func(hashes []common.Hash) error {
 		// Gather the block bodies to return
 		transactions := make([][]*types.Transaction, 0, len(hashes))
+		uncles := make([][]*types.Header, 0, len(hashes))
 
 		for _, hash := range hashes {
 			if block, ok := closure[hash]; ok {
 				transactions = append(transactions, block.Transactions())
+				uncles = append(uncles, block.Uncles())
 			}
 		}
 		// Return on a new thread
-		go f.fetcher.FilterBodies(peer, transactions, time.Now().Add(drift))
+		go f.fetcher.FilterBodies(peer, transactions, uncles, time.Now().Add(drift))
 
 		return nil
 	}
