@@ -46,7 +46,7 @@ var DefaultConfig = Config{
 		DatasetsOnDisk:   2,
 		DatasetsLockMmap: false,
 	},
-	NetworkId:          1,
+	NetworkId:          5889,
 	LightPeers:         100,
 	UltraLightFraction: 75,
 	DatabaseCache:      512,
@@ -65,6 +65,8 @@ var DefaultConfig = Config{
 		Blocks:     20,
 		Percentile: 60,
 	},
+
+	BDLS: *bdls_engine.DefaultConfig,
 }
 
 func init() {

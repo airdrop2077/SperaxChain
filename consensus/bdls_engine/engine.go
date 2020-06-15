@@ -33,6 +33,10 @@ var (
 	errInvalidUncleHash = errors.New("non empty uncle hash")
 	// errInvalidNonce is returned if a block's nonce is invalid
 	errInvalidNonce = errors.New("invalid nonce")
+	// empty decision field
+	errEmptyDecision = errors.New("empty decision field")
+	// invalid signer
+	errSignerCoinbaseMismatch = errors.New("signer doesn't match coinbase")
 )
 
 var (
@@ -50,8 +54,12 @@ type (
 )
 
 type Config struct {
-	// initial participants address
-	Participants []common.Address
+	// Default minimum difference between two consecutive block's timestamps in second
+	MinBlockPeriod uint64 `toml:",omitempty"`
+}
+
+var DefaultConfig = &Config{
+	MinBlockPeriod: 1,
 }
 
 // PublicKey to Identity conversion, for use in BDLS
@@ -144,7 +152,7 @@ func (e *BDLSEngine) Signer(header *types.Header) (common.Address, error) {
 		pubkey := &ecdsa.PublicKey{Curve: e.ephermalKey.Curve, X: big.NewInt(0).SetBytes(sp.X[:]), Y: big.NewInt(0).SetBytes(sp.Y[:])}
 		return crypto.PubkeyToAddress(*pubkey), nil
 	}
-	return common.Address{}, errors.New("cannot retrieve signer")
+	return common.Address{}, errEmptyDecision
 }
 
 // VerifyHeader checks whether a header conforms to the consensus rules of a
@@ -167,13 +175,23 @@ func (e *BDLSEngine) verifyHeader(chain consensus.ChainReader, header *types.Hea
 	}
 
 	// Ensure that the coinbase is valid
+	signer, err := e.Signer(header)
+	if err != nil {
+		return err
+	}
+	if header.Coinbase != signer {
+		return errSignerCoinbaseMismatch
+	}
+
+	// Ensure that the nonce is empty
 	if header.Nonce != (emptyNonce) {
 		return errInvalidNonce
 	}
-	// Ensure that the block doesn't contain any uncles which are meaningless in Istanbul
+	// Ensure that the block doesn't contain any uncles which are meaningless in BDLS
 	if header.UncleHash != nilUncleHash {
 		return errInvalidUncleHash
 	}
+
 	// Ensure that the block's difficulty is meaningful (may not be correct at this point)
 	if header.Difficulty == nil || header.Difficulty.Cmp(defaultDifficulty) != 0 {
 		return errInvalidDifficulty
@@ -190,6 +208,7 @@ func (e *BDLSEngine) verifyHeader(chain consensus.ChainReader, header *types.Hea
 		return consensus.ErrUnknownAncestor
 	}
 
+	// verify decision content
 	if err := e.VerifySeal(chain, header); err != nil {
 		return err
 	}
@@ -228,17 +247,15 @@ func (e *BDLSEngine) VerifyUncles(chain consensus.ChainReader, block *types.Bloc
 // VerifySeal checks whether the crypto seal on a header is valid according to
 // the consensus rules of the given engine.
 func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Header) error {
-
 	// step 0. Check decision field is not nil
 	if len(header.Decision) == 0 {
-		log.Debug("VerifySeal", "header.Decision", "decision field is nil")
-		return errors.New("decision field is nil")
+		return errEmptyDecision
 	}
 
-	// step 1. Get the SealHash(without Decision field) of this header
+	// step 1. Get the SealHash(without Decision field) of this header to verify against
 	sealHash := e.SealHash(header).Bytes()
 
-	// step 2. create a consensus object to validate this message at the correct height
+	// step 2. create a consensus config to validate this message at the correct height
 	config := &bdls.Config{
 		Epoch:            time.Now(),
 		PrivateKey:       e.ephermalKey,
@@ -256,13 +273,14 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		config.Participants = append(config.Participants, identity)
 	}
 
+	// step 3. create the consensus object to validate decide message
 	consensus, err := bdls.NewConsensus(config)
 	if err != nil {
 		log.Error("new consensus:", err)
 		return err
 	}
 
-	// step 3. validate decide message integrity
+	// step 3. validate decide message integrity to sealHash
 	err = consensus.ValidateDecideMessage(header.Decision, sealHash)
 	if err != nil {
 		log.Debug("VerifySeal", "ValidateDecideMessage", err)
@@ -275,10 +293,16 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 // Prepare initializes the consensus fields of a block header according to the
 // rules of a particular engine. The changes are executed inline.
 func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) error {
+	// unused fields, force to set to empty
 	header.Nonce = emptyNonce
 	// use the same difficulty for all blocks
 	header.Difficulty = defaultDifficulty
-
+	// check parent
+	number := header.Number.Uint64()
+	parent := chain.GetHeader(header.ParentHash, number-1)
+	if parent == nil {
+		return consensus.ErrUnknownAncestor
+	}
 	return nil
 }
 
