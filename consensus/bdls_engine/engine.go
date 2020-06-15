@@ -219,6 +219,9 @@ func (e *BDLSEngine) VerifyHeaders(chain consensus.ChainReader, headers []*types
 }
 
 func (e *BDLSEngine) VerifyUncles(chain consensus.ChainReader, block *types.Block) error {
+	if len(block.Uncles()) > 0 {
+		return errInvalidUncleHash
+	}
 	return nil
 }
 

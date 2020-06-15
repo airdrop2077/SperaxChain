@@ -31,7 +31,7 @@ func (h Header) MarshalJSON() ([]byte, error) {
 		Extra       hexutil.Bytes  `json:"extraData"        gencodec:"required"`
 		MixDigest   common.Hash    `json:"mixHash"`
 		Nonce       BlockNonce     `json:"nonce"`
-		Decision    hexutil.Bytes  `json:"extraData"        gencodec:"required"`
+		Decision    hexutil.Bytes  `json:"decision"        gencodec:"required"`
 		Hash        common.Hash    `json:"hash"`
 	}
 	var enc Header
@@ -73,7 +73,7 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		Extra       *hexutil.Bytes  `json:"extraData"        gencodec:"required"`
 		MixDigest   *common.Hash    `json:"mixHash"`
 		Nonce       *BlockNonce     `json:"nonce"`
-		Decision    *hexutil.Bytes  `json:"extraData"        gencodec:"required"`
+		Decision    *hexutil.Bytes  `json:"decision"        gencodec:"required"`
 	}
 	var dec Header
 	if err := json.Unmarshal(input, &dec); err != nil {
@@ -138,7 +138,7 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		h.Nonce = *dec.Nonce
 	}
 	if dec.Decision == nil {
-		return errors.New("missing required field 'extraData' for Header")
+		return errors.New("missing required field 'decision' for Header")
 	}
 	h.Decision = *dec.Decision
 	return nil
