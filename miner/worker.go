@@ -600,13 +600,29 @@ func (w *worker) resultLoop() {
 				sealhash = w.engine.SealHash(block.Header())
 				hash     = block.Hash()
 			)
+
+			// bdls engine accepts a block when a <decide> message has confirmed, each node can write the block now
+			if _, ok := w.engine.(*bdls_engine.BDLSEngine); ok {
+				_, err := w.chain.InsertChain(types.Blocks{block})
+				if err != nil {
+					log.Error("Insert BDLS finalized block failed", "err", err)
+					continue
+				}
+
+				// Broadcast the block and announce chain insertion event
+				w.mux.Post(core.NewMinedBlockEvent{Block: block})
+				continue
+			}
+
 			w.pendingMu.RLock()
 			task, exist := w.pendingTasks[sealhash]
 			w.pendingMu.RUnlock()
+
 			if !exist {
 				log.Error("Block found but no relative pending task", "number", block.Number(), "sealhash", sealhash, "hash", hash)
 				continue
 			}
+
 			// Different block could share same sealhash, deep copy here to prevent write-write conflict.
 			var (
 				receipts = make([]*types.Receipt, len(task.receipts))

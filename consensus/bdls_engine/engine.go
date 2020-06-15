@@ -543,7 +543,7 @@ WAIT_FOR_PRIVATEKEY:
 	defer updateTick.Stop()
 
 	// the core consensus message loop
-	log.Warn("CONSENSUS LOOP STARTED", "coinbase", block.Coinbase(), "height", block.NumberU64())
+	log.Warn("CONSENSUS TASK STARTED", "coinbase", block.Coinbase(), "height", block.NumberU64())
 	for {
 		select {
 		case obj, ok := <-consensusMessageChan: // from p2p
@@ -564,10 +564,10 @@ WAIT_FOR_PRIVATEKEY:
 					log.Warn("CONSENSUS <decide>", "height", newHeight, "round", newRound, "hash", newHeight, newRound, common.BytesToHash(newState))
 					hash := common.BytesToHash(newState)
 
-					// the block proposer assemble the block with proof
-					if hash == e.SealHash(block.Header()) {
-						// found the block, then we can seal the block with the proof
-						header := block.Header()
+					// every validator can finalize this block to it's local blockchain now
+					newblock := lookupBlock(hash)
+					if newblock != nil {
+						header := newblock.Header()
 						bts, err := consensus.CurrentProof().Marshal()
 						if err != nil {
 							log.Crit("consensusMessenger", "consensus.CurrentProof", err)
@@ -578,15 +578,12 @@ WAIT_FOR_PRIVATEKEY:
 						header.Decision = bts
 
 						// broadcast the mined block if i'm the proposer
-						mined := block.WithSeal(header)
+						mined := newblock.WithSeal(header)
 						// as block integrity is verified ahead in <roundchange> message,
 						// it's safe to stop the consensus loop now
 						results <- mined
-						return
-					} else {
-						results <- nil
-						return
 					}
+					return
 				}
 			}
 
@@ -659,12 +656,15 @@ func (e *BDLSEngine) CalcDifficulty(chain consensus.ChainReader, time uint64, pa
 
 // APIs returns the RPC APIs this consensus engine provides.
 func (e *BDLSEngine) APIs(chain consensus.ChainReader) []rpc.API {
+	/* TODO(xtaci): implement APIs
 	return []rpc.API{{
 		Namespace: "bdls",
 		Version:   "1.0",
 		Service:   nil,
 		Public:    true,
 	}}
+	*/
+	return nil
 }
 
 // Close terminates any background threads maintained by the consensus engine.
