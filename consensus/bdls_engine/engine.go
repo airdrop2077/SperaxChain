@@ -151,14 +151,19 @@ func (e *BDLSEngine) Signer(header *types.Header) (common.Address, error) {
 // given engine. Verifying the seal may be done optionally here, or explicitly
 // via the VerifySeal method.
 func (e *BDLSEngine) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool) error {
+	return e.verifyHeader(chain, header, nil)
+}
+
+// verifyHeader checks whether a header conforms to the consensus rules.The
+// caller may optionally pass in a batch of parents (ascending order) to avoid
+// looking those up from the database. This is useful for concurrently verifying
+// a batch of new headers.
+// NOTE(xtaci): downloader's batch verification
+func (e *BDLSEngine) verifyHeader(chain consensus.ChainReader, header *types.Header, parents []*types.Header) error {
 	// Short circuit if the header is known, or its parent not
 	number := header.Number.Uint64()
 	if chain.GetHeader(header.Hash(), number) != nil {
 		return nil
-	}
-	parent := chain.GetHeader(header.ParentHash, number-1)
-	if parent == nil {
-		return consensus.ErrUnknownAncestor
 	}
 
 	// Ensure that the coinbase is valid
@@ -174,10 +179,19 @@ func (e *BDLSEngine) VerifyHeader(chain consensus.ChainReader, header *types.Hea
 		return errInvalidDifficulty
 	}
 
-	if seal {
-		if err := e.VerifySeal(chain, header); err != nil {
-			return err
-		}
+	// Ensure that the block's timestamp isn't too close to it's parent
+	var parent *types.Header
+	if len(parents) > 0 {
+		parent = parents[len(parents)-1]
+	} else {
+		parent = chain.GetHeader(header.ParentHash, number-1)
+	}
+	if parent == nil || parent.Number.Uint64() != number-1 || parent.Hash() != header.ParentHash {
+		return consensus.ErrUnknownAncestor
+	}
+
+	if err := e.VerifySeal(chain, header); err != nil {
+		return err
 	}
 	return nil
 }
@@ -191,7 +205,7 @@ func (e *BDLSEngine) VerifyHeaders(chain consensus.ChainReader, headers []*types
 
 	go func() {
 		for i, header := range headers {
-			err := e.VerifyHeader(chain, header, seals[i])
+			err := e.verifyHeader(chain, header, headers[:i])
 
 			select {
 			case <-abort:
