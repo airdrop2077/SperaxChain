@@ -654,18 +654,21 @@ func (e *BDLSEngine) SealHash(header *types.Header) (hash common.Hash) {
 // CalcDifficulty is the difficulty adjustment algorithm. It returns the difficulty
 // that a new block should have.
 func (e *BDLSEngine) CalcDifficulty(chain consensus.ChainReader, time uint64, parent *types.Header) *big.Int {
-	return common.Big1
+	return new(big.Int)
 }
 
 // APIs returns the RPC APIs this consensus engine provides.
 func (e *BDLSEngine) APIs(chain consensus.ChainReader) []rpc.API {
-	// TODO
-	return nil
+	return []rpc.API{{
+		Namespace: "bdls",
+		Version:   "1.0",
+		Service:   nil,
+		Public:    true,
+	}}
 }
 
 // Close terminates any background threads maintained by the consensus engine.
 func (e *BDLSEngine) Close() error {
-	// TODO
 	return nil
 }
 
