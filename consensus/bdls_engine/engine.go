@@ -577,11 +577,14 @@ WAIT_FOR_PRIVATEKEY:
 						// store the the proof in block header
 						header.Decision = bts
 
-						// the mined block
+						// broadcast the mined block if i'm the proposer
 						mined := block.WithSeal(header)
 						// as block integrity is verified ahead in <roundchange> message,
 						// it's safe to stop the consensus loop now
 						results <- mined
+						return
+					} else {
+						results <- nil
 						return
 					}
 				}
