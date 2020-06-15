@@ -35,6 +35,8 @@ var (
 	errInvalidNonce = errors.New("invalid nonce")
 	// empty decision field
 	errEmptyDecision = errors.New("empty decision field")
+	// invalid input consensus message
+	errInvalidConsensusMessage = errors.New("invalid input consensus message")
 )
 
 var (
@@ -50,6 +52,16 @@ type (
 	// protocol manager will deliver this consensus message type
 	ConsensusMessageInput []byte
 )
+
+// ConsensusMessageHash return the consistent hash based on SignedMessage content(with out R, S)
+func ConsensusMessageHash(bts []byte) (common.Hash, error) {
+	sp, err := bdls.DecodeSignedMessage(bts)
+	if err != nil {
+		return common.Hash{}, errInvalidConsensusMessage
+	}
+
+	return common.BytesToHash(sp.Hash()), nil
+}
 
 const (
 	// minimum difference between two consecutive block's timestamps in second

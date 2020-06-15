@@ -813,19 +813,26 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		msgStream := rlp.NewStream(msg.Payload, uint64(msg.Size))
 		bts, err := msgStream.Bytes()
 		if err != nil {
-			log.Debug("Invalid Consensus Message", "msg", msg)
+			log.Debug("Error reading consensus message", "msg", msg)
+			return err
+		}
+
+		// calculate message hash
+		cHash, err := bdls_engine.ConsensusMessageHash(bts)
+		if err != nil {
+			log.Debug("Invalid incoming consensus message", "msg", msg)
 			return err
 		}
 
 		// mark for propagation
-		hash := bdls_engine.BytesHash(bts)
-		p.MarkConsensus(hash)
+		// record the hash to prevent from resending to the same peer
+		p.MarkConsensus(cHash)
 
-		// publish event to consensus core
+		// publish message to consensus.bdls_engine
 		pm.eventMux.Post(bdls_engine.ConsensusMessageInput(bts))
 
-		// propagate this message
-		pm.BroadcastConsensusMsg(bts)
+		// propagate this message immediately
+		pm.BroadcastConsensusMsg(cHash, bts)
 
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
@@ -907,11 +914,9 @@ func (pm *ProtocolManager) BroadcastTransactions(txs types.Transactions, propaga
 }
 
 // BroadcastConsensusMsg broadcasts a consensus message to peers
-func (pm *ProtocolManager) BroadcastConsensusMsg(bts []byte) {
-	// bytes hash
-	hash := bdls_engine.BytesHash(bts)
+func (pm *ProtocolManager) BroadcastConsensusMsg(hash common.Hash, bts []byte) {
 	peers := pm.peers.PeersWithoutConsensus(hash)
-	// Send the consensus to a subset of our peers
+	// broadcast the consensus message to all peers
 	for _, peer := range peers {
 		peer.SendConsensusMsg(bts)
 	}
@@ -936,7 +941,11 @@ func (pm *ProtocolManager) consensusBroadcastLoop() {
 
 	for obj := range pm.consensusSub.Chan() {
 		if ev, ok := obj.Data.(bdls_engine.ConsensusMessageOutput); ok {
-			pm.BroadcastConsensusMsg(ev) // broadcast to peers
+			cHash, err := bdls_engine.ConsensusMessageHash(ev)
+			if err != nil {
+				log.Crit("Invalid outgoing consensus message", "msg", ev)
+			}
+			pm.BroadcastConsensusMsg(cHash, ev) // broadcast to peers
 		}
 	}
 }
