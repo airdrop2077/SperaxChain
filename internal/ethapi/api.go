@@ -25,7 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/Sperax/SperaxChain/accounts"
 	"github.com/Sperax/SperaxChain/accounts/abi"
 	"github.com/Sperax/SperaxChain/accounts/keystore"
@@ -45,6 +44,7 @@ import (
 	"github.com/Sperax/SperaxChain/params"
 	"github.com/Sperax/SperaxChain/rlp"
 	"github.com/Sperax/SperaxChain/rpc"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/tyler-smith/go-bip39"
 )
 
@@ -1095,6 +1095,7 @@ func RPCMarshalHeader(head *types.Header) map[string]interface{} {
 		"miner":            head.Coinbase,
 		"difficulty":       (*hexutil.Big)(head.Difficulty),
 		"extraData":        hexutil.Bytes(head.Extra),
+		"decision":         hexutil.Bytes(head.Decision),
 		"size":             hexutil.Uint64(head.Size()),
 		"gasLimit":         hexutil.Uint64(head.GasLimit),
 		"gasUsed":          hexutil.Uint64(head.GasUsed),
