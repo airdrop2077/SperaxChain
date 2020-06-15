@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Sperax/SperaxChain/common"
-	"github.com/Sperax/SperaxChain/consensus/bdls_engine"
 	"github.com/Sperax/SperaxChain/consensus/ethash"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/eth/downloader"
@@ -44,7 +43,6 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		SnapshotCache           int
 		Miner                   miner.Config
 		Ethash                  ethash.Config
-		BDLS                    bdls_engine.Config
 		TxPool                  core.TxPoolConfig
 		GPO                     gasprice.Config
 		EnablePreimageRecording bool
@@ -81,7 +79,6 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.SnapshotCache = c.SnapshotCache
 	enc.Miner = c.Miner
 	enc.Ethash = c.Ethash
-	enc.BDLS = c.BDLS
 	enc.TxPool = c.TxPool
 	enc.GPO = c.GPO
 	enc.EnablePreimageRecording = c.EnablePreimageRecording
@@ -122,7 +119,6 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		SnapshotCache           *int
 		Miner                   *miner.Config
 		Ethash                  *ethash.Config
-		BDLS                    *bdls_engine.Config
 		TxPool                  *core.TxPoolConfig
 		GPO                     *gasprice.Config
 		EnablePreimageRecording *bool
@@ -211,9 +207,6 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	}
 	if dec.Ethash != nil {
 		c.Ethash = *dec.Ethash
-	}
-	if dec.BDLS != nil {
-		c.BDLS = *dec.BDLS
 	}
 	if dec.TxPool != nil {
 		c.TxPool = *dec.TxPool

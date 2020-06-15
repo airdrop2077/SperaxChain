@@ -53,14 +53,10 @@ type (
 	ConsensusMessageInput []byte
 )
 
-type Config struct {
-	// Default minimum difference between two consecutive block's timestamps in second
-	MinBlockPeriod uint64 `toml:",omitempty"`
-}
-
-var DefaultConfig = &Config{
-	MinBlockPeriod: 1,
-}
+const (
+	// minimum difference between two consecutive block's timestamps in second
+	minBlockPeriod = 3 * time.Second
+)
 
 // PublicKey to Identity conversion, for use in BDLS
 func PubKeyToIdentity(pubkey *ecdsa.PublicKey) (ret bdls.Identity) {
@@ -82,9 +78,6 @@ type BDLSEngine struct {
 	// the account manager to get private key
 	accountManager *accounts.Manager
 
-	// participants address
-	participants []common.Address
-
 	// pre-validator for <roundchange> message
 	stateAt       func(hash common.Hash) (*state.StateDB, error)
 	hasBadBlock   func(hash common.Hash) bool
@@ -95,11 +88,10 @@ type BDLSEngine struct {
 	mu sync.Mutex
 }
 
-func New(config *params.BDLSConfig, accountManager *accounts.Manager, mux *event.TypeMux) *BDLSEngine {
+func New(accountManager *accounts.Manager, mux *event.TypeMux) *BDLSEngine {
 	engine := new(BDLSEngine)
 	engine.mux = mux
 	engine.accountManager = accountManager
-	engine.participants = config.Participants
 
 	priv, err := crypto.GenerateKey()
 	if err != nil {
@@ -266,10 +258,12 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 	}
 
 	// TODO: to set the participants from previous blocks?
-	// currently it's fixed
-	for k := range e.participants {
+	// currently it's fixed to initial validator
+	participants := chain.Config().BDLS.Participants
+	// type conversion in BDLS core
+	for k := range participants {
 		var identity bdls.Identity
-		copy(identity[:], e.participants[k][:])
+		copy(identity[:], participants[k][:])
 		config.Participants = append(config.Participants, identity)
 	}
 
@@ -474,8 +468,12 @@ WAIT_FOR_PRIVATEKEY:
 			// step 3. record or replace this block, the coinbase has verified against signature in VerifyProposal
 			pubkey := &ecdsa.PublicKey{Curve: e.ephermalKey.Curve, X: big.NewInt(0).SetBytes(signed.X[:]), Y: big.NewInt(0).SetBytes(signed.Y[:])}
 			signerAddr := crypto.PubkeyToAddress(*pubkey)
-			for k := range e.participants {
-				if e.participants[k] == signerAddr {
+
+			// TODO: to set the participants from previous blocks?
+			// currently it's fixed to initial validator
+			participants := chain.Config().BDLS.Participants
+			for k := range participants {
+				if participants[k] == signerAddr {
 					knownBlocks[signerAddr] = &blk
 					return true
 				}
@@ -510,10 +508,11 @@ WAIT_FOR_PRIVATEKEY:
 		MessageOutCallback: messageOutCallback,
 	}
 
+	participants := chain.Config().BDLS.Participants
 	// identity conversion from common.Address
-	for k := range e.participants {
+	for k := range participants {
 		var identity bdls.Identity
-		copy(identity[:], e.participants[k][:])
+		copy(identity[:], participants[k][:])
 		config.Participants = append(config.Participants, identity)
 	}
 

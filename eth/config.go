@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/Sperax/SperaxChain/common"
-	"github.com/Sperax/SperaxChain/consensus/bdls_engine"
 	"github.com/Sperax/SperaxChain/consensus/ethash"
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/eth/downloader"
@@ -65,8 +64,6 @@ var DefaultConfig = Config{
 		Blocks:     20,
 		Percentile: 60,
 	},
-
-	BDLS: *bdls_engine.DefaultConfig,
 }
 
 func init() {
@@ -140,9 +137,6 @@ type Config struct {
 
 	// Ethash options
 	Ethash ethash.Config
-
-	// BDLS options
-	BDLS bdls_engine.Config
 
 	// Transaction pool options
 	TxPool core.TxPoolConfig
