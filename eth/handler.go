@@ -912,11 +912,9 @@ func (pm *ProtocolManager) BroadcastConsensusMsg(bts []byte) {
 	hash := bdls_engine.BytesHash(bts)
 	peers := pm.peers.PeersWithoutConsensus(hash)
 	// Send the consensus to a subset of our peers
-	log.Warn("BroadcastConsensusMsg", "num peers", len(peers))
 	for _, peer := range peers {
 		peer.SendConsensusMsg(bts)
 	}
-	log.Warn("Propagated consensus", "hash", hash, "recipients", len(peers))
 	return
 }
 

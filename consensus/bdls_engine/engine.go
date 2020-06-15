@@ -400,8 +400,6 @@ WAIT_FOR_PRIVATEKEY:
 			signed.AuxData = nil
 		}()
 
-		log.Warn("validator", "message type:", m.Type)
-
 		switch m.Type {
 		case bdls.MessageType_RoundChange:
 			// For incoming <roundchange> message(proposal), we should validate the block sent
