@@ -34,7 +34,6 @@ const (
 	eth63 = 63
 	eth64 = 64
 	eth65 = 65
-	spa01 = 1201
 )
 
 // protocolName is the official short name of the protocol used during capability negotiation.
