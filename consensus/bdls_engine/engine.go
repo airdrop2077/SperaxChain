@@ -35,8 +35,6 @@ var (
 	errInvalidNonce = errors.New("invalid nonce")
 	// empty decision field
 	errEmptyDecision = errors.New("empty decision field")
-	// invalid signer
-	errSignerCoinbaseMismatch = errors.New("signer doesn't match coinbase")
 )
 
 var (
@@ -133,7 +131,7 @@ func (e *BDLSEngine) Author(header *types.Header) (common.Address, error) {
 	return header.Coinbase, nil
 }
 
-// Signer returns the signer of this header
+// Signer returns the final signer of this header
 func (e *BDLSEngine) Signer(header *types.Header) (common.Address, error) {
 	if len(header.Decision) > 0 {
 		sp, err := bdls.DecodeSignedMessage(header.Decision)
@@ -164,15 +162,6 @@ func (e *BDLSEngine) verifyHeader(chain consensus.ChainReader, header *types.Hea
 	number := header.Number.Uint64()
 	if chain.GetHeader(header.Hash(), number) != nil {
 		return nil
-	}
-
-	// Ensure that the coinbase is valid
-	signer, err := e.Signer(header)
-	if err != nil {
-		return err
-	}
-	if header.Coinbase != signer {
-		return errSignerCoinbaseMismatch
 	}
 
 	// Ensure that the nonce is empty
@@ -239,6 +228,12 @@ func (e *BDLSEngine) VerifyUncles(chain consensus.ChainReader, block *types.Bloc
 // VerifySeal checks whether the crypto seal on a header is valid according to
 // the consensus rules of the given engine.
 func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Header) error {
+	// The genesis block is the always valid dead-end
+	number := header.Number.Uint64()
+	if number == 0 {
+		return nil
+	}
+
 	// step 0. Check decision field is not nil
 	if len(header.Decision) == 0 {
 		return errEmptyDecision
