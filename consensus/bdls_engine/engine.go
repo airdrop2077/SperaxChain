@@ -55,6 +55,8 @@ import (
 const (
 	// minimum difference between two consecutive block's timestamps in second
 	minBlockPeriod = 3
+	// max proposal from a participants
+	maxProposalsPerParticipants = 2
 )
 
 // Message exchange between consensus engine & protocol manager
@@ -75,6 +77,8 @@ var (
 	errInvalidUncleHash = errors.New("non empty uncle hash")
 	// errInvalidNonce is returned if a block's nonce is invalid
 	errInvalidNonce = errors.New("invalid nonce")
+	// errNonEmptyDecision is returned if a block's decisionis invalid
+	errNonEmptyDecision = errors.New("non-empty decision field in proposal")
 	// empty decision field
 	errEmptyDecision = errors.New("empty decision field")
 	// invalid input consensus message
@@ -414,17 +418,18 @@ WAIT_FOR_PRIVATEKEY:
 	// start new consensus round
 	// step 1. Get the SealHash(without Decision field) of this header
 	e.mu.Lock()
-	sealHash := e.SealHash(block.Header())
 
 	// known proposed blocks from each participants' <roundchange> messages
-	knownProposals := make(map[common.Address]*types.Block)
+	knownProposals := make(map[common.Address][]*types.Block)
 
 	// to lookup the block for current consensus height
 	lookupProposal := func(hash common.Hash) *types.Block {
 		// loop to find the block
-		for _, v := range knownProposals {
-			if v.Hash() == hash {
-				return v
+		for _, blocks := range knownProposals {
+			for _, b := range blocks {
+				if b.Hash() == hash {
+					return b
+				}
 			}
 		}
 		return nil
@@ -441,7 +446,7 @@ WAIT_FOR_PRIVATEKEY:
 			var outblock *types.Block
 
 			// find blocks & assembly to auxdata
-			if blockHash == e.SealHash(block.Header()) {
+			if blockHash == block.Hash() {
 				// locally proposed block
 				outblock = block
 			} else {
@@ -481,7 +486,7 @@ WAIT_FOR_PRIVATEKEY:
 	}
 
 	// message validator for incoming messages which has correctly signed
-	messageValidator := func(m *bdls.Message, signed *bdls.SignedProto) bool {
+	messageValidator := func(c *bdls.Consensus, m *bdls.Message, signed *bdls.SignedProto) bool {
 		log.Debug("consensus received message", "type", m.Type)
 		// clear all auxdata before consensus processing,
 		// we don't want the consensus core to keep this external field
@@ -507,9 +512,15 @@ WAIT_FOR_PRIVATEKEY:
 				return false
 			}
 
+			// extra check that the decision field is 0-length
+			if len(header.Decision) != 0 {
+				log.Error("non-empty decision field in proposed block", "decision", header.Decision)
+				return false
+			}
+
 			// step 2. compare hash with block in auxdata
-			if e.SealHash(header) != common.BytesToHash(m.State) {
-				log.Error("messageValidator auxdata hash", "seal hash", e.SealHash(blk.Header()), "state hash", common.BytesToHash(m.State))
+			if header.Hash() != common.BytesToHash(m.State) {
+				log.Error("messageValidator auxdata hash", "block hash", header.Hash(), "state hash", common.BytesToHash(m.State))
 				return false
 			}
 
@@ -525,8 +536,16 @@ WAIT_FOR_PRIVATEKEY:
 			signer := crypto.PubkeyToAddress(*signed.PublicKey(e.ephermalKey.Curve))
 			participants := chain.Config().BDLS.Participants
 			for k := range participants {
-				if participants[k] == signer {
-					knownProposals[signer] = &blk
+				if participants[k] == signer { // valid participants
+					// try to check if previous proposals has been rejected
+					var effectiveBlocks []*types.Block
+					for _, pBlock := range knownProposals[signer] {
+						if c.HasProposed(pBlock.Hash().Bytes()) { // effective proposal
+							effectiveBlocks = append(effectiveBlocks, pBlock)
+						}
+					}
+					effectiveBlocks = append(effectiveBlocks, &blk)
+					knownProposals[signer] = effectiveBlocks
 					return true
 				}
 			}
@@ -578,7 +597,7 @@ WAIT_FOR_PRIVATEKEY:
 	}
 
 	// step 4. propose the block hash
-	consensus.Propose(sealHash.Bytes())
+	consensus.Propose(block.Hash().Bytes())
 
 	// step 5: step delay by last block timestamp
 	consensus.SetLatency(time.Second)
@@ -612,7 +631,7 @@ WAIT_FOR_PRIVATEKEY:
 			if ev, ok := obj.Data.(ConsensusMessageInput); ok {
 				err := consensus.ReceiveMessage(ev, time.Now()) // input to core
 				if err != nil {
-					log.Warn("consensus receive:", "err", err)
+					log.Debug("consensus receive:", "err", err)
 				}
 				newHeight, newRound, newState := consensus.CurrentState()
 

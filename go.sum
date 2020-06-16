@@ -56,6 +56,10 @@ github.com/Sperax/bdls v1.3.1-0.20200613031906-f689e5e998c8 h1:3at+wVaRMubV3pF6J
 github.com/Sperax/bdls v1.3.1-0.20200613031906-f689e5e998c8/go.mod h1:Y8GrgnL0DLu+SNzq74iz60gFtlnfDU6dyZ4VOCO278o=
 github.com/Sperax/bdls v1.3.1-0.20200613083742-2dabb5a1ced6 h1:bLwbfY9p4gczPRKTLuSxm/Pol014Zurq+Bd+D4l5nvk=
 github.com/Sperax/bdls v1.3.1-0.20200613083742-2dabb5a1ced6/go.mod h1:Y8GrgnL0DLu+SNzq74iz60gFtlnfDU6dyZ4VOCO278o=
+github.com/Sperax/bdls v1.3.2-0.20200616075114-784553660dbd h1:XGES1Px6kKqKKSwjFJyyDtRwqRiFIbff7bC4irgnt7o=
+github.com/Sperax/bdls v1.3.2-0.20200616075114-784553660dbd/go.mod h1:Y8GrgnL0DLu+SNzq74iz60gFtlnfDU6dyZ4VOCO278o=
+github.com/Sperax/bdls v1.3.2-0.20200616081443-a790cb77c687 h1:KEsAqx1X05yfCLspPJwWIvJp+ycBGMJY8R0Hr38VzSc=
+github.com/Sperax/bdls v1.3.2-0.20200616081443-a790cb77c687/go.mod h1:Y8GrgnL0DLu+SNzq74iz60gFtlnfDU6dyZ4VOCO278o=
 github.com/StackExchange/wmi v0.0.0-20180116203802-5d049714c4a6 h1:fLjPD/aNc3UIOA6tDi6QXUemppXK3P9BI7mr2hd6gx8=
 github.com/StackExchange/wmi v0.0.0-20180116203802-5d049714c4a6/go.mod h1:3eOhrUMpNV+6aFIbp5/iudMxNCF27Vw2OZgy4xEx0Fg=
 github.com/VictoriaMetrics/fastcache v1.5.7 h1:4y6y0G8PRzszQUYIQHHssv/jgPHAb5qQuuDNdCbyAgw=
