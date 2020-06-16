@@ -1,3 +1,33 @@
+// BSD 3-Clause License
+//
+// Copyright (c) 2020, Sperax
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//
+// 1. Redistributions of source code must retain the above copyright notice, this
+//    list of conditions and the following disclaimer.
+//
+// 2. Redistributions in binary form must reproduce the above copyright notice,
+//    this list of conditions and the following disclaimer in the documentation
+//    and/or other materials provided with the distribution.
+//
+// 3. Neither the name of the copyright holder nor the names of its
+//    contributors may be used to endorse or promote products derived from
+//    this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 package bdls_engine
 
 import (
@@ -20,7 +50,19 @@ import (
 	"github.com/Sperax/SperaxChain/rlp"
 	"github.com/Sperax/SperaxChain/rpc"
 	"github.com/Sperax/bdls"
-	"golang.org/x/crypto/sha3"
+)
+
+const (
+	// minimum difference between two consecutive block's timestamps in second
+	minBlockPeriod = 3
+)
+
+// Message exchange between consensus engine & protocol manager
+type (
+	// protocol manager will subscribe and broadcast this type of message
+	ConsensusMessageOutput []byte
+	// protocol manager will deliver the incoming consensus message via this type to this engine
+	ConsensusMessageInput []byte
 )
 
 var (
@@ -42,33 +84,22 @@ var (
 )
 
 var (
-	defaultDifficulty = big.NewInt(1)
+	defaultDifficulty = big.NewInt(1)            // difficulty in block headers is always 1
 	nilUncleHash      = types.CalcUncleHash(nil) // Always Keccak256(RLP([])) as uncles are meaningless outside of PoW.
-	emptyNonce        = types.BlockNonce{}
+	emptyNonce        = types.BlockNonce{}       // nonce in block headers is always all-zeros
 )
 
-// For consensus message event I/O
-type (
-	// protocol manager will subscribe to this consensus message
-	ConsensusMessageOutput []byte
-	// protocol manager will deliver this consensus message type
-	ConsensusMessageInput []byte
-)
-
-// ConsensusMessageHash return the consistent hash based on SignedMessage content(with out R, S)
+// ConsensusMessageHash return the consistent hash based on SignedMessage content,
+// not including signature R, S, which has random number in ecdsa signing.
 func ConsensusMessageHash(bts []byte) (common.Hash, error) {
 	sp, err := bdls.DecodeSignedMessage(bts)
 	if err != nil {
 		return common.Hash{}, errInvalidConsensusMessage
 	}
 
+	// convert the hash bytes in bdls to common.Hash
 	return common.BytesToHash(sp.Hash()), nil
 }
-
-const (
-	// minimum difference between two consecutive block's timestamps in second
-	minBlockPeriod = 3
-)
 
 // PublicKey to Identity conversion, for use in BDLS
 func PubKeyToIdentity(pubkey *ecdsa.PublicKey) (ret bdls.Identity) {
@@ -79,27 +110,31 @@ func PubKeyToIdentity(pubkey *ecdsa.PublicKey) (ret bdls.Identity) {
 	return
 }
 
-// BDLSEngine implements blockchain consensus engine
+// BDLSEngine implements BDLS-based blockchain consensus engine
 type BDLSEngine struct {
-	// ephermal private key for verification
+	// ephermal private key for header verification
 	ephermalKey *ecdsa.PrivateKey
 
-	// event mux to send consensus message as events
+	// event mux to exchange consensus message with protocol manager
 	mux *event.TypeMux
 
-	// the account manager to get private key
+	// the account manager to get private key as a participant
 	accountManager *accounts.Manager
 
-	// pre-validator for <roundchange> message
+	// as the block will be exchanged via <roundchange> message,
+	// we need to validate these blocks in-flight, so we need processBlock at given height with state,
+	// and compare the results with related fields in block header.
 	stateAt       func(hash common.Hash) (*state.StateDB, error)
 	hasBadBlock   func(hash common.Hash) bool
 	processBlock  func(block *types.Block, statedb *state.StateDB) (types.Receipts, []*types.Log, uint64, error)
 	validateState func(block *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64) error
 
-	// mutex for BDLSEngine
+	// mutex for fields
 	mu sync.Mutex
 }
 
+// New creates a ethereum  compatible BDLS engine with account manager for signing and mux for
+// message exchanging
 func New(accountManager *accounts.Manager, mux *event.TypeMux) *BDLSEngine {
 	engine := new(BDLSEngine)
 	engine.mux = mux
@@ -113,16 +148,7 @@ func New(accountManager *accounts.Manager, mux *event.TypeMux) *BDLSEngine {
 	return engine
 }
 
-// BytesHash computes keccak256 hash for a slice
-func BytesHash(bts []byte) (h common.Hash) {
-	hw := sha3.NewLegacyKeccak256()
-	rlp.Encode(hw, bts)
-	hw.Sum(h[:0])
-	return h
-}
-
-// SetBlockValidator starts the validating engine
-// NOTE(xtaci): this must be set before Seal operations
+// SetBlockValidator starts the validating engine, this will be set by miner while starting.
 func (e *BDLSEngine) SetBlockValidator(hasBadBlock func(common.Hash) bool,
 	processBlock func(*types.Block, *state.StateDB) (types.Receipts, []*types.Log, uint64, error),
 	validateState func(*types.Block, *state.StateDB, types.Receipts, uint64) error,
@@ -137,7 +163,6 @@ func (e *BDLSEngine) SetBlockValidator(hasBadBlock func(common.Hash) bool,
 	e.stateAt = stateAt
 }
 
-///////////////////////////////////////////////////////////////////////////////
 // Author retrieves the Ethereum address of the account that minted the given
 // block, which may be different from the header's coinbase if a consensus
 // engine is based on signatures.
