@@ -170,25 +170,19 @@ func (e *BDLSEngine) Author(header *types.Header) (common.Address, error) {
 	return header.Coinbase, nil
 }
 
-// Signer returns the final signer of this header
-func (e *BDLSEngine) Signer(header *types.Header) (common.Address, error) {
-	if len(header.Decision) > 0 {
-		sp, err := bdls.DecodeSignedMessage(header.Decision)
-		if err != nil {
-			return common.Address{}, err
-		}
-
-		pubkey := &ecdsa.PublicKey{Curve: e.ephermalKey.Curve, X: big.NewInt(0).SetBytes(sp.X[:]), Y: big.NewInt(0).SetBytes(sp.Y[:])}
-		return crypto.PubkeyToAddress(*pubkey), nil
-	}
-	return common.Address{}, errEmptyDecision
-}
-
 // VerifyHeader checks whether a header conforms to the consensus rules of a
 // given engine. Verifying the seal may be done optionally here, or explicitly
 // via the VerifySeal method.
 func (e *BDLSEngine) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool) error {
-	return e.verifyHeader(chain, header, nil)
+	err := e.verifyHeader(chain, header, nil)
+	if err != nil {
+		return err
+	}
+
+	if err := e.VerifySeal(chain, header); err != nil {
+		return err
+	}
+	return nil
 }
 
 // verifyHeader checks whether a header conforms to the consensus rules.The
@@ -231,10 +225,6 @@ func (e *BDLSEngine) verifyHeader(chain consensus.ChainReader, header *types.Hea
 		return errInvalidTimestamp
 	}
 
-	// verify decision content
-	if err := e.VerifySeal(chain, header); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -426,13 +416,13 @@ WAIT_FOR_PRIVATEKEY:
 	e.mu.Lock()
 	sealHash := e.SealHash(block.Header())
 
-	// known blocks from <roundchange> messages
-	knownBlocks := make(map[common.Address]*types.Block)
+	// known proposed blocks from each participants' <roundchange> messages
+	knownProposals := make(map[common.Address]*types.Block)
 
 	// to lookup the block for current consensus height
-	lookupBlock := func(hash common.Hash) *types.Block {
+	lookupProposal := func(hash common.Hash) *types.Block {
 		// loop to find the block
-		for _, v := range knownBlocks {
+		for _, v := range knownProposals {
 			if v.Hash() == hash {
 				return v
 			}
@@ -443,9 +433,10 @@ WAIT_FOR_PRIVATEKEY:
 	// mesasge out call back to handle auxcilliary messages along with the consensus message
 	messageOutCallback := func(m *bdls.Message, signed *bdls.SignedProto) {
 		log.Debug("consensus sending message", "type", m.Type)
-		// for <roundchange> message, we need to append the corresponding types.Block to the message
 		switch m.Type {
 		case bdls.MessageType_RoundChange:
+			// for <roundchange> message, we need to send the corresponding block
+			// as proposal.
 			blockHash := common.BytesToHash(m.State)
 			var outblock *types.Block
 
@@ -455,14 +446,17 @@ WAIT_FOR_PRIVATEKEY:
 				outblock = block
 			} else {
 				// externally proposed block
-				outblock = lookupBlock(blockHash)
+				outblock = lookupProposal(blockHash)
 			}
 
+			// impossible situation here, all outgoing proposals in <roundchange>
+			// are to be known.
 			if outblock == nil {
-				log.Warn("cannot find block", "hash", blockHash)
+				log.Error("cannot locate the proposed block", "hash", blockHash)
 				return
 			}
 
+			// marshal the proposal block to binary and embed it in signed.AuxData
 			blockData, err := rlp.EncodeToBytes(outblock)
 			if err != nil {
 				log.Error("messageOutCallBack", "rlp.EncodeToBytes", err)
@@ -470,13 +464,15 @@ WAIT_FOR_PRIVATEKEY:
 			signed.AuxData = blockData
 		}
 
+		// all outgoing signed message will be delivered to ProtocolManager
+		// and finally to send to peers.
 		bts, err := signed.Marshal()
 		if err != nil {
 			log.Error("messageOutCallback", "signed.Marshal", err)
 			return
 		}
 
-		// broadcast the message out
+		// broadcast the message via event mux
 		err = e.mux.Post(ConsensusMessageOutput(bts))
 		if err != nil {
 			log.Error("messageOutCallback", "mux.Post", err)
@@ -487,7 +483,8 @@ WAIT_FOR_PRIVATEKEY:
 	// message validator for incoming messages which has correctly signed
 	messageValidator := func(m *bdls.Message, signed *bdls.SignedProto) bool {
 		log.Debug("consensus received message", "type", m.Type)
-		// clear all auxdata before consensus processing
+		// clear all auxdata before consensus processing,
+		// we don't want the consensus core to keep this external field
 		defer func() {
 			signed.AuxData = nil
 		}()
@@ -495,7 +492,7 @@ WAIT_FOR_PRIVATEKEY:
 		switch m.Type {
 		case bdls.MessageType_RoundChange:
 			// For incoming <roundchange> message(proposal), we should validate the block sent
-			// via sp.AuxData field,  ahead of consensus processing.
+			// via sp.AuxData field, ahead of consensus processing.
 			var blk types.Block
 			err := rlp.DecodeBytes(signed.AuxData, &blk)
 			if err != nil {
@@ -503,40 +500,38 @@ WAIT_FOR_PRIVATEKEY:
 				return false
 			}
 
-			// step 1. compare hash with block in auxdata
-			if e.SealHash(blk.Header()) != common.BytesToHash(m.State) {
+			// step 1. verify header
+			header := blk.Header()
+			if err := e.verifyHeader(chain, header, nil); err != nil {
+				log.Error("verifyHeader", "err", err)
+				return false
+			}
+
+			// step 2. compare hash with block in auxdata
+			if e.SealHash(header) != common.BytesToHash(m.State) {
 				log.Error("messageValidator auxdata hash", "seal hash", e.SealHash(blk.Header()), "state hash", common.BytesToHash(m.State))
 				return false
 			}
 
-			//  step 2
-			parentHeader := chain.GetHeader(blk.ParentHash(), blk.NumberU64()-1)
-			if parentHeader == nil {
-				log.Error("unknown ancestor", "parenthash", blk.ParentHash(), "number", blk.NumberU64()-1)
-				return false
-			}
-
-			// step 2. validate the proposed block
-			if !e.verifyProposalBlock(&blk) {
+			// step 3. validate the proposed block content
+			if !e.verifyProposal(&blk) {
 				log.Error("verify Proposal block failed")
 				return false
 			}
 
-			// step 3. record or replace this block, the coinbase has verified against signature in VerifyProposal
-			pubkey := &ecdsa.PublicKey{Curve: e.ephermalKey.Curve, X: big.NewInt(0).SetBytes(signed.X[:]), Y: big.NewInt(0).SetBytes(signed.Y[:])}
-			signerAddr := crypto.PubkeyToAddress(*pubkey)
-
+			// step 4. record or replace this block, the coinbase has verified against signature in VerifyProposal
 			// TODO: to set the participants from previous blocks?
 			// currently it's fixed to initial validator
+			signer := crypto.PubkeyToAddress(*signed.PublicKey(e.ephermalKey.Curve))
 			participants := chain.Config().BDLS.Participants
 			for k := range participants {
-				if participants[k] == signerAddr {
-					knownBlocks[signerAddr] = &blk
+				if participants[k] == signer {
+					knownProposals[signer] = &blk
 					return true
 				}
 			}
 
-			log.Error("cannot find signer in participant", "addr", signerAddr)
+			log.Error("cannot find signer in participant", "addr", signer)
 			return false
 		}
 
@@ -553,7 +548,7 @@ WAIT_FOR_PRIVATEKEY:
 		StateValidate: func(s bdls.State) bool {
 			// make sure all states are known from <roundchange> exchanging
 			hash := common.BytesToHash(s)
-			if lookupBlock(hash) != nil {
+			if lookupProposal(hash) != nil {
 				return true
 			}
 
@@ -627,7 +622,7 @@ WAIT_FOR_PRIVATEKEY:
 					hash := common.BytesToHash(newState)
 
 					// every validator can finalize this block to it's local blockchain now
-					newblock := lookupBlock(hash)
+					newblock := lookupProposal(hash)
 					if newblock != nil {
 						header := newblock.Header()
 						bts, err := consensus.CurrentProof().Marshal()
@@ -660,7 +655,7 @@ WAIT_FOR_PRIVATEKEY:
 }
 
 // VerifyProposalBlock implements blockchain specific block validator
-func (e *BDLSEngine) verifyProposalBlock(block *types.Block) bool {
+func (e *BDLSEngine) verifyProposal(block *types.Block) bool {
 	// check bad block
 	if e.hasBadBlock != nil {
 		if e.hasBadBlock(block.Hash()) {

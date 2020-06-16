@@ -327,6 +327,7 @@ func (b *Block) TxHash() common.Hash      { return b.header.TxHash }
 func (b *Block) ReceiptHash() common.Hash { return b.header.ReceiptHash }
 func (b *Block) UncleHash() common.Hash   { return b.header.UncleHash }
 func (b *Block) Extra() []byte            { return common.CopyBytes(b.header.Extra) }
+func (b *Block) Decision() []byte         { return common.CopyBytes(b.header.Decision) }
 
 func (b *Block) Header() *Header { return CopyHeader(b.header) }
 
