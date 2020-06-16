@@ -37,6 +37,8 @@ var (
 	errEmptyDecision = errors.New("empty decision field")
 	// invalid input consensus message
 	errInvalidConsensusMessage = errors.New("invalid input consensus message")
+	// errInvalidTimestamp is returned if the timestamp of a block is lower than the previous block's timestamp + the minimum block period.
+	errInvalidTimestamp = errors.New("invalid timestamp")
 )
 
 var (
@@ -65,7 +67,7 @@ func ConsensusMessageHash(bts []byte) (common.Hash, error) {
 
 const (
 	// minimum difference between two consecutive block's timestamps in second
-	minBlockPeriod = 3 * time.Second
+	minBlockPeriod = 3
 )
 
 // PublicKey to Identity conversion, for use in BDLS
@@ -200,6 +202,9 @@ func (e *BDLSEngine) verifyHeader(chain consensus.ChainReader, header *types.Hea
 	if parent == nil || parent.Number.Uint64() != number-1 || parent.Hash() != header.ParentHash {
 		return consensus.ErrUnknownAncestor
 	}
+	if parent.Time+minBlockPeriod > header.Time {
+		return errInvalidTimestamp
+	}
 
 	// verify decision content
 	if err := e.VerifySeal(chain, header); err != nil {
@@ -304,6 +309,13 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
 	}
+
+	// set header's timestamp(unix time) to at least minBlockPeriod since last block
+	header.Time = parent.Time + minBlockPeriod
+	if header.Time < uint64(time.Now().Unix()) {
+		header.Time = uint64(time.Now().Unix())
+	}
+
 	return nil
 }
 
@@ -315,6 +327,7 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 func (e *BDLSEngine) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
 	accumulateRewards(chain.Config(), state, header)
 	header.Root = state.IntermediateRoot(true)
+	header.UncleHash = nilUncleHash
 }
 
 // FinalizeAndAssemble runs any post-transaction state modifications (e.g. block
@@ -325,6 +338,7 @@ func (e *BDLSEngine) Finalize(chain consensus.ChainReader, header *types.Header,
 func (e *BDLSEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	accumulateRewards(chain.Config(), state, header)
 	header.Root = state.IntermediateRoot(true)
+	header.UncleHash = nilUncleHash
 	return types.NewBlock(header, txs, nil, receipts), nil
 }
 
@@ -340,14 +354,14 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 
 // a consensus task for a specific block
 func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) {
-	// retry get private key from account manager
-	var privateKey *ecdsa.PrivateKey
 
+	// get to private key from account manager
+	var privateKey *ecdsa.PrivateKey
 WAIT_FOR_PRIVATEKEY:
 	for {
-		<-time.After(time.Second)
 		select {
 		case <-stop:
+			results <- nil
 			return
 		default:
 			log.Debug("looking for the wallet of coinbase:", "coinbase", block.Coinbase())
@@ -362,6 +376,7 @@ WAIT_FOR_PRIVATEKEY:
 			priv, err := wallet.GetPrivateKey(accounts.Account{Address: block.Coinbase()})
 			if err != nil {
 				e.mu.Unlock()
+				<-time.After(time.Second) // wait for a second before retry
 				continue
 			}
 			e.mu.Unlock()
@@ -369,6 +384,16 @@ WAIT_FOR_PRIVATEKEY:
 			privateKey = priv
 			break WAIT_FOR_PRIVATEKEY
 		}
+	}
+
+	// time compensation to avoid fast block generation
+	delay := time.Unix(int64(block.Header().Time), 0).Sub(time.Now())
+	// wait for the timestamp of header, use this to adjust the block period
+	select {
+	case <-time.After(delay):
+	case <-stop:
+		results <- nil
+		return
 	}
 
 	// start new consensus round
