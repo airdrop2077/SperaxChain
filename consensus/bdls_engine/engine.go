@@ -540,10 +540,13 @@ WAIT_FOR_PRIVATEKEY:
 					// try to check if previous proposals has been rejected
 					var effectiveBlocks []*types.Block
 					for _, pBlock := range knownProposals[signer] {
-						if c.HasProposed(pBlock.Hash().Bytes()) { // effective proposal
+						if pBlock.Hash() == blk.Hash() { // remove the duplicated previous proposals
+							continue
+						} else if c.HasProposed(pBlock.Hash().Bytes()) { // effective proposal
 							effectiveBlocks = append(effectiveBlocks, pBlock)
 						}
 					}
+
 					effectiveBlocks = append(effectiveBlocks, &blk)
 					knownProposals[signer] = effectiveBlocks
 					return true
@@ -750,5 +753,5 @@ func (e *BDLSEngine) Close() error {
 
 // mining reward computation
 func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header) {
-	state.AddBalance(header.Coinbase, big.NewInt(100))
+	state.AddBalance(header.Coinbase, new(big.Int).Mul(big.NewInt(1), big.NewInt(params.Ether)))
 }
