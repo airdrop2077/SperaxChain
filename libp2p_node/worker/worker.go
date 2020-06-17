@@ -172,7 +172,7 @@ func (w *Worker) CommitTransactions(pending map[common.Address]types.Transaction
 func (w *Worker) FinalizeNewBlock() (*types.Block, error) {
 	state := w.current.state.Copy()
 	copyHeader := types.CopyHeader(w.current.header)
-	block, err := w.engine.FinalizeAndAssemble(w.chain, copyHeader, state, w.current.txs, w.current.receipts)
+	block, err := w.engine.FinalizeAndAssemble(w.chain, copyHeader, state, w.current.txs, nil, w.current.receipts)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot finalize block")
 	}
