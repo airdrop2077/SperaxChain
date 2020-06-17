@@ -27,6 +27,7 @@ import (
 
 // Genesis hashes to enforce below configs on.
 var (
+	// TODO set genesis hash
 	MainnetGenesisHash = common.HexToHash("0xaccbcaac533ce61d2bc4ae77caa18bb996c56c974e97397458e92ae47f34ba86")
 	TestnetGenesisHash = common.HexToHash("0xaccbcaac533ce61d2bc4ae77caa18bb996c56c974e97397458e92ae47f34ba86")
 )
@@ -63,7 +64,7 @@ var (
 
 	// TestnetChainConfig is the chain parameters to run a node on the test network.
 	TestnetChainConfig = &ChainConfig{
-		ChainID:             big.NewInt(5860),
+		ChainID:             big.NewInt(5890),
 		HomesteadBlock:      big.NewInt(0),
 		EIP150Block:         big.NewInt(0),
 		EIP155Block:         big.NewInt(0),
