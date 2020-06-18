@@ -345,7 +345,7 @@ func DefaultTestnetGenesisBlock() *Genesis {
 		ExtraData:  hexutil.MustDecode("0x3535353535353535353535353535353535353535353535353535353535353535"),
 		GasLimit:   16777216,
 		Difficulty: big.NewInt(1),
-		Alloc:      decodePrealloc(ropstenAllocData),
+		Alloc:      decodePrealloc(testnetAllocData),
 	}
 }
 
