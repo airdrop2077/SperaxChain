@@ -55,8 +55,6 @@ import (
 const (
 	// minimum difference between two consecutive block's timestamps in second
 	minBlockPeriod = 3
-	// max proposal from a participants
-	maxProposalsPerParticipants = 2
 )
 
 // Message exchange between consensus engine & protocol manager
