@@ -270,6 +270,12 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		return nil
 	}
 
+	// check parent
+	parent := chain.GetHeader(header.ParentHash, number-1)
+	if parent == nil {
+		return consensus.ErrUnknownAncestor
+	}
+
 	// step 0. Check decision field is not nil
 	if len(header.Decision) == 0 {
 		return errEmptyDecision
@@ -297,6 +303,7 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		copy(identity[:], participants[k][:])
 		config.Participants = append(config.Participants, identity)
 	}
+	e.shuffleParticipants(config.Participants, parent.Hash())
 
 	// step 3. create the consensus object to validate decide message
 	consensus, err := bdls.NewConsensus(config)
@@ -305,7 +312,7 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		return err
 	}
 
-	// step 3. validate decide message integrity to sealHash
+	// step 5. validate decide message integrity to sealHash
 	err = consensus.ValidateDecideMessage(header.Decision, sealHash)
 	if err != nil {
 		log.Debug("VerifySeal", "ValidateDecideMessage", err)
@@ -373,6 +380,13 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 
 // a consensus task for a specific block
 func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) {
+	// check parent
+	number := block.NumberU64()
+	parent := chain.GetHeader(block.ParentHash(), number-1)
+	if parent == nil {
+		results <- nil
+		return
+	}
 
 	// get to private key from account manager
 	var privateKey *ecdsa.PrivateKey
@@ -589,7 +603,7 @@ WAIT_FOR_PRIVATEKEY:
 		copy(identity[:], participants[k][:])
 		config.Participants = append(config.Participants, identity)
 	}
-
+	e.shuffleParticipants(config.Participants, parent.Hash())
 	e.mu.Unlock()
 
 	// step 3. create the consensus object
@@ -744,6 +758,21 @@ func (e *BDLSEngine) APIs(chain consensus.ChainReader) []rpc.API {
 	}}
 	*/
 	return nil
+}
+
+// shuffle participants based on a given hash as seed
+func (e *BDLSEngine) shuffleParticipants(identities []bdls.Identity, h common.Hash) {
+	bigJ := big.NewInt(0)
+	seed := big.NewInt(0).SetBytes(h.Bytes())
+	for i := len(identities) - 1; i >= 1; i-- {
+		// the next random variable will be the hash of the previous variable
+		seed.SetBytes(crypto.Keccak256(seed.Bytes()))
+		bigJ.Mod(seed, big.NewInt(int64(i+1)))
+		j := bigJ.Int64()
+		//log.Debug("swap", "i", i, "j", j)
+		identities[i], identities[j] = identities[j], identities[i]
+	}
+	return
 }
 
 // Close terminates any background threads maintained by the consensus engine.
