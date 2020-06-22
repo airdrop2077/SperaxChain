@@ -145,7 +145,7 @@ func New(accountManager *accounts.Manager, mux *event.TypeMux) *BDLSEngine {
 	// create an ephermal key for verification
 	priv, err := crypto.GenerateKey()
 	if err != nil {
-		log.Crit("BDLS generate ephermal key", "err", err)
+		log.Crit("BDLS generate ephermal key", "crypto.GenerateKey", err)
 	}
 	engine.ephermalKey = priv
 	return engine
@@ -308,14 +308,14 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 	// step 3. create the consensus object to validate decide message
 	consensus, err := bdls.NewConsensus(config)
 	if err != nil {
-		log.Error("new consensus:", err)
+		log.Error("VerifySeal", "bdls.NewConsensus", err)
 		return err
 	}
 
 	// step 4. validate decide message to the block
 	err = consensus.ValidateDecideMessage(header.Decision, sealHash)
 	if err != nil {
-		log.Debug("VerifySeal", "ValidateDecideMessage", err)
+		log.Debug("VerifySeal", "consensus..ValidateDecideMessage", err)
 		return err
 	}
 
@@ -433,6 +433,10 @@ WAIT_FOR_PRIVATEKEY:
 	e.mu.Lock()
 
 	// step 1. prepare callbacks(closures)
+	// we need to prepare 3 closures for this height, one to track proposals from local or remote,
+	// one to exchange the message from consensus core to p2p module, one to validate consensus
+	// messages with proposed blocks from remote.
+
 	// known proposed blocks from each participants' <roundchange> messages
 	knownProposals := make(map[common.Address][]*types.Block)
 
@@ -545,13 +549,11 @@ WAIT_FOR_PRIVATEKEY:
 			}
 
 			// step 4. record or replace this block, the coinbase has verified against signature in VerifyProposal
-			// TODO: to set the participants from previous blocks?
-			// currently it's fixed to initial validator
 			signer := crypto.PubkeyToAddress(*signed.PublicKey(e.ephermalKey.Curve))
 			participants := chain.Config().BDLS.Participants
 			for k := range participants {
 				if participants[k] == signer { // valid participants
-					// try to check if previous proposals has been rejected
+					// try to check if previous proposals has been rejected by consensus core
 					var effectiveBlocks []*types.Block
 					for _, pBlock := range knownProposals[signer] {
 						if pBlock.Hash() == blk.Hash() { // remove the duplicated previous proposals
@@ -561,6 +563,7 @@ WAIT_FOR_PRIVATEKEY:
 						}
 					}
 
+					// always record current proposal of this signer
 					effectiveBlocks = append(effectiveBlocks, &blk)
 					knownProposals[signer] = effectiveBlocks
 					return true
