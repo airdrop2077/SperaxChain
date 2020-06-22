@@ -75,9 +75,9 @@ var (
 	errInvalidUncleHash = errors.New("non empty uncle hash")
 	// errInvalidNonce is returned if a block's nonce is invalid
 	errInvalidNonce = errors.New("invalid nonce")
-	// errNonEmptyDecision is returned if a block's decisionis invalid
+	// errNonEmptyDecision is returned if a block's decision field is not empty
 	errNonEmptyDecision = errors.New("non-empty decision field in proposal")
-	// empty decision field
+	// errEmptyDecision is returned if a block's decision field is empty
 	errEmptyDecision = errors.New("empty decision field")
 	// invalid input consensus message
 	errInvalidConsensusMessage = errors.New("invalid input consensus message")
@@ -107,7 +107,7 @@ func ConsensusMessageHash(bts []byte) (common.Hash, error) {
 func PubKeyToIdentity(pubkey *ecdsa.PublicKey) (ret bdls.Identity) {
 	// for a publickey first we convert to ethereum common.Address
 	commonAddress := crypto.PubkeyToAddress(*pubkey)
-	// then we just byte copy to Coordiante struct
+	// then we just byte copy to Identiy struct
 	copy(ret[:], commonAddress[:])
 	return
 }
@@ -135,13 +135,14 @@ type BDLSEngine struct {
 	mu sync.Mutex
 }
 
-// New creates a ethereum  compatible BDLS engine with account manager for signing and mux for
+// New creates a ethereum compatible BDLS engine with account manager for signing and mux for
 // message exchanging
 func New(accountManager *accounts.Manager, mux *event.TypeMux) *BDLSEngine {
 	engine := new(BDLSEngine)
 	engine.mux = mux
 	engine.accountManager = accountManager
 
+	// create an ephermal key for verification
 	priv, err := crypto.GenerateKey()
 	if err != nil {
 		log.Crit("BDLS generate ephermal key", "err", err)
@@ -193,12 +194,11 @@ func (e *BDLSEngine) VerifyHeader(chain consensus.ChainReader, header *types.Hea
 // a batch of new headers.
 // NOTE(xtaci): downloader's batch verification
 func (e *BDLSEngine) verifyHeader(chain consensus.ChainReader, header *types.Header, parents []*types.Header) error {
-	// Short circuit if the header is known, or its parent not
+	// Ensure the block's parent exist
 	number := header.Number.Uint64()
 	if chain.GetHeader(header.Hash(), number) != nil {
 		return nil
 	}
-
 	// Ensure that the nonce is empty
 	if header.Nonce != (emptyNonce) {
 		return errInvalidNonce
@@ -208,7 +208,7 @@ func (e *BDLSEngine) verifyHeader(chain consensus.ChainReader, header *types.Hea
 		return errInvalidUncleHash
 	}
 
-	// Ensure that the block's difficulty is meaningful (may not be correct at this point)
+	// Ensure that the block's difficulty is 1
 	if header.Difficulty == nil || header.Difficulty.Cmp(defaultDifficulty) != 0 {
 		return errInvalidDifficulty
 	}
@@ -252,6 +252,8 @@ func (e *BDLSEngine) VerifyHeaders(chain consensus.ChainReader, headers []*types
 	return abort, results
 }
 
+// VerifyUncles verifies that the given block's uncles conform to the consensus
+// rules of a given engine.
 func (e *BDLSEngine) VerifyUncles(chain consensus.ChainReader, block *types.Block) error {
 	if len(block.Uncles()) > 0 {
 		return errInvalidUncleHash
@@ -292,7 +294,7 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		PubKeyToIdentity: PubKeyToIdentity,
 	}
 
-	// TODO: to set the participants from previous blocks?
+	// TODO: to set the participants based on some rules.
 	// currently it's fixed to initial validator
 	participants := chain.Config().BDLS.Participants
 	// type conversion in BDLS core
@@ -310,7 +312,7 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		return err
 	}
 
-	// step 5. validate decide message integrity to sealHash
+	// step 4. validate decide message to the block
 	err = consensus.ValidateDecideMessage(header.Decision, sealHash)
 	if err != nil {
 		log.Debug("VerifySeal", "ValidateDecideMessage", err)
@@ -378,7 +380,7 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 
 // a consensus task for a specific block
 func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) {
-	// check parent
+	// check block's parent
 	number := block.NumberU64()
 	parent := chain.GetHeader(block.ParentHash(), number-1)
 	if parent == nil {
@@ -428,9 +430,9 @@ WAIT_FOR_PRIVATEKEY:
 	}
 
 	// start new consensus round
-	// step 1. Get the SealHash(without Decision field) of this header
 	e.mu.Lock()
 
+	// step 1. prepare callbacks(closures)
 	// known proposed blocks from each participants' <roundchange> messages
 	knownProposals := make(map[common.Address][]*types.Block)
 
@@ -572,7 +574,7 @@ WAIT_FOR_PRIVATEKEY:
 		return true
 	}
 
-	// step 2. setup consensus config at given height
+	// step 2. setup consensus config at the given height
 	config := &bdls.Config{
 		Epoch:         time.Now(),
 		CurrentHeight: block.NumberU64() - 1,
@@ -594,6 +596,7 @@ WAIT_FOR_PRIVATEKEY:
 		MessageOutCallback: messageOutCallback,
 	}
 
+	// TODO(xtaci): correctly set participants based on rules
 	participants := chain.Config().BDLS.Participants
 	// identity conversion from common.Address
 	for k := range participants {
@@ -774,9 +777,7 @@ func (e *BDLSEngine) shuffleParticipants(identities []bdls.Identity, h common.Ha
 }
 
 // Close terminates any background threads maintained by the consensus engine.
-func (e *BDLSEngine) Close() error {
-	return nil
-}
+func (e *BDLSEngine) Close() error { return nil }
 
 // mining reward computation
 func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header) {
