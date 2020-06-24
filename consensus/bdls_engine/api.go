@@ -30,10 +30,20 @@
 
 package bdls_engine
 
-import "github.com/Sperax/SperaxChain/consensus"
+import (
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/consensus"
+	"github.com/Sperax/SperaxChain/core/types"
+)
 
 // API is a user facing RPC API to dump BDLS state
 type API struct {
 	chain  consensus.ChainReader
 	engine *BDLSEngine
+}
+
+func (api *API) SealHash(header *types.Header) (hash common.Hash) {
+	copied := types.CopyHeader(header)
+	copied.Decision = nil
+	return copied.Hash()
 }
