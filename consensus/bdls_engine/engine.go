@@ -753,15 +753,12 @@ func (e *BDLSEngine) CalcDifficulty(chain consensus.ChainReader, time uint64, pa
 
 // APIs returns the RPC APIs this consensus engine provides.
 func (e *BDLSEngine) APIs(chain consensus.ChainReader) []rpc.API {
-	/* TODO(xtaci): implement APIs
 	return []rpc.API{{
 		Namespace: "bdls",
 		Version:   "1.0",
-		Service:   nil,
+		Service:   &API{chain: chain, engine: e},
 		Public:    true,
 	}}
-	*/
-	return nil
 }
 
 // shuffle participants based on a given hash as seed
