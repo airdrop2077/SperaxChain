@@ -269,7 +269,7 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 
 	// consensus message exchange
 	pm.wg.Add(1)
-	pm.consensusSub = pm.eventMux.Subscribe(bdls_engine.ConsensusMessageOutput{})
+	pm.consensusSub = pm.eventMux.Subscribe(bdls_engine.MessageOutput{})
 	go pm.consensusBroadcastLoop()
 
 	// start sync handlers
@@ -808,7 +808,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			p.MarkTransaction(tx.Hash())
 		}
 		pm.txFetcher.Enqueue(p.id, txs, msg.Code == PooledTransactionsMsg)
-	case msg.Code == BDLSConsensusMsg && p.version >= spa01: // Sperax Consensus Extension
+	case msg.Code == BDLSMessage && p.version >= spa01: // Sperax Consensus Extension
 		// get consensus message bytes
 		msgStream := rlp.NewStream(msg.Payload, uint64(msg.Size))
 		bts, err := msgStream.Bytes()
@@ -818,7 +818,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 
 		// calculate message hash
-		cHash, err := bdls_engine.ConsensusMessageHash(bts)
+		cHash, err := bdls_engine.MessageHash(bts)
 		if err != nil {
 			log.Debug("Invalid incoming consensus message", "msg", msg)
 			return err
@@ -829,7 +829,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		p.MarkConsensus(cHash)
 
 		// publish message to consensus.bdls_engine
-		pm.eventMux.Post(bdls_engine.ConsensusMessageInput(bts))
+		pm.eventMux.Post(bdls_engine.MessageInput(bts))
 
 		// propagate this message immediately
 		pm.BroadcastConsensusMsg(cHash, bts)
@@ -941,8 +941,8 @@ func (pm *ProtocolManager) consensusBroadcastLoop() {
 	defer pm.wg.Done()
 
 	for obj := range pm.consensusSub.Chan() {
-		if ev, ok := obj.Data.(bdls_engine.ConsensusMessageOutput); ok {
-			cHash, err := bdls_engine.ConsensusMessageHash(ev)
+		if ev, ok := obj.Data.(bdls_engine.MessageOutput); ok {
+			cHash, err := bdls_engine.MessageHash(ev)
 			if err != nil {
 				log.Crit("Invalid outgoing consensus message", "msg", ev)
 			}

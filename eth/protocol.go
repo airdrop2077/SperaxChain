@@ -44,7 +44,7 @@ const protocolName = "spa"
 var ProtocolVersions = []uint{spa01}
 
 // protocolLengths are the number of implemented message corresponding to different protocol versions.
-var protocolLengths = map[uint]uint64{spa01: 19, eth65: 17, eth64: 17, eth63: 17}
+var protocolLengths = map[uint]uint64{spa01: 18, eth65: 17, eth64: 17, eth63: 17}
 
 const protocolMaxMsgSize = 10 * 1024 * 1024 // Maximum cap on the size of a protocol message
 
@@ -71,9 +71,8 @@ const (
 	GetPooledTransactionsMsg      = 0x09
 	PooledTransactionsMsg         = 0x0a
 
-	// BDLS Consensus Extensions
-	BDLSConsensusMsg = 0x11
-	ProposeBlock     = 0x12
+	// BDLS Extensions
+	BDLSMessage = 0x11
 )
 
 type errCode int

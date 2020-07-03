@@ -50,6 +50,7 @@ import (
 	"github.com/Sperax/SperaxChain/rlp"
 	"github.com/Sperax/SperaxChain/rpc"
 	"github.com/Sperax/bdls"
+	proto "github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -60,11 +61,9 @@ const (
 // Message exchange between consensus engine & protocol manager
 type (
 	// protocol manager will subscribe and broadcast this type of message
-	ConsensusMessageOutput []byte
+	MessageOutput []byte
 	// protocol manager will deliver the incoming consensus message via this type to this engine
-	ConsensusMessageInput []byte
-	// Proposer's message
-	ProposerMessageInput []byte
+	MessageInput []byte
 )
 
 var (
@@ -93,9 +92,9 @@ var (
 	emptyNonce        = types.BlockNonce{}       // nonce in block headers is always all-zeros
 )
 
-// ConsensusMessageHash return the consistent hash based on SignedMessage content,
+// MessageHash return the consistent hash based on SignedMessage content,
 // not including signature R, S, which has random number in ecdsa signing.
-func ConsensusMessageHash(bts []byte) (common.Hash, error) {
+func MessageHash(bts []byte) (common.Hash, error) {
 	sp, err := bdls.DecodeSignedMessage(bts)
 	if err != nil {
 		return common.Hash{}, errInvalidConsensusMessage
@@ -491,7 +490,7 @@ WAIT_FOR_PRIVATEKEY:
 		}
 
 		// broadcast the message via event mux
-		err = e.mux.Post(ConsensusMessageOutput(bts))
+		err = e.mux.Post(MessageOutput(bts))
 		if err != nil {
 			log.Error("messageOutCallback", "mux.Post", err)
 			return
@@ -619,20 +618,9 @@ WAIT_FOR_PRIVATEKEY:
 	// subscribe to consensus message input via event mux
 	var consensusMessageChan <-chan *event.TypeMuxEvent
 	if e.mux != nil {
-		consensusSub := e.mux.Subscribe(ConsensusMessageInput{})
+		consensusSub := e.mux.Subscribe(MessageInput{})
 		defer consensusSub.Unsubscribe()
 		consensusMessageChan = consensusSub.Chan()
-	} else {
-		log.Error("mux is nil")
-		return
-	}
-
-	// also subscribe to proposer messages
-	var proposerMessageChan <-chan *event.TypeMuxEvent
-	if e.mux != nil {
-		proposerSub := e.mux.Subscribe(ProposerMessageInput{})
-		defer proposerSub.Unsubscribe()
-		proposerMessageChan = proposerSub.Chan()
 	} else {
 		log.Error("mux is nil")
 		return
@@ -646,58 +634,65 @@ WAIT_FOR_PRIVATEKEY:
 	log.Warn("CONSENSUS TASK STARTED", "coinbase", block.Coinbase(), "height", block.NumberU64())
 	for {
 		select {
-		case obj := <-proposerMessageChan: // 3rd-party proposer's message
-			if proposal, ok := obj.Data.(ProposerMessageInput); ok {
-				var blk types.Block
-				err := rlp.DecodeBytes(proposal, &blk)
-				if err != nil {
-					log.Error("proposerMessage", "rlp.DecodeBytes", err)
-					continue
-				}
-
-				// validate proposer's block
-				// check block's parent
-				if !e.verifyProposal(&blk) {
-					log.Error("verify Proposal block failed")
-					continue
-				}
-
-				// confirmed a valid 3rd-party block, propose
-				consensus.Propose(block.Hash().Bytes())
-			}
 		case obj := <-consensusMessageChan: // consensus message
-			if ev, ok := obj.Data.(ConsensusMessageInput); ok {
-				err := consensus.ReceiveMessage(ev, time.Now()) // input to core
+			if ev, ok := obj.Data.(MessageInput); ok {
+				var em EngineMessage
+				err := proto.Unmarshal(ev, &em)
 				if err != nil {
-					log.Debug("consensus receive:", "err", err)
+					log.Error("proto.Unmarshal", "err", err)
 				}
-				newHeight, newRound, newState := consensus.CurrentState()
 
-				// new height confirmed, only proposer broadcast this mined block
-				if newHeight == block.NumberU64() {
-					log.Warn("CONSENSUS <decide>", "height", newHeight, "round", newRound, "hash", newHeight, newRound, common.BytesToHash(newState))
-					hash := common.BytesToHash(newState)
-
-					// every validator can finalize this block to it's local blockchain now
-					newblock := lookupProposal(hash)
-					if newblock != nil {
-						header := newblock.Header()
-						bts, err := consensus.CurrentProof().Marshal()
-						if err != nil {
-							log.Crit("consensusMessenger", "consensus.CurrentProof", err)
-							panic(err)
-						}
-
-						// store the the proof in block header
-						header.Decision = bts
-
-						// broadcast the mined block if i'm the proposer
-						mined := newblock.WithSeal(header)
-						// as block integrity is verified ahead in <roundchange> message,
-						// it's safe to stop the consensus loop now
-						results <- mined
+				switch em.Type {
+				case EngineMessageType_Proposal:
+					var blk types.Block
+					err := rlp.DecodeBytes(em.Message, &blk)
+					if err != nil {
+						log.Error("proposerMessage", "rlp.DecodeBytes", err)
+						continue
 					}
-					return
+
+					// validate proposer's block
+					// check block's parent
+					if !e.verifyProposal(&blk) {
+						log.Error("verify Proposal block failed")
+						continue
+					}
+
+					// confirmed a valid 3rd-party block, propose
+					consensus.Propose(block.Hash().Bytes())
+				case EngineMessageType_Consensus:
+					err := consensus.ReceiveMessage(em.Message, time.Now()) // input to core
+					if err != nil {
+						log.Debug("consensus receive:", "err", err)
+					}
+					newHeight, newRound, newState := consensus.CurrentState()
+
+					// new height confirmed, only proposer broadcast this mined block
+					if newHeight == block.NumberU64() {
+						log.Warn("CONSENSUS <decide>", "height", newHeight, "round", newRound, "hash", newHeight, newRound, common.BytesToHash(newState))
+						hash := common.BytesToHash(newState)
+
+						// every validator can finalize this block to it's local blockchain now
+						newblock := lookupProposal(hash)
+						if newblock != nil {
+							header := newblock.Header()
+							bts, err := consensus.CurrentProof().Marshal()
+							if err != nil {
+								log.Crit("consensusMessenger", "consensus.CurrentProof", err)
+								panic(err)
+							}
+
+							// store the the proof in block header
+							header.Decision = bts
+
+							// broadcast the mined block if i'm the proposer
+							mined := newblock.WithSeal(header)
+							// as block integrity is verified ahead in <roundchange> message,
+							// it's safe to stop the consensus loop now
+							results <- mined
+						}
+						return
+					}
 				}
 			}
 
