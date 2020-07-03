@@ -63,6 +63,8 @@ type (
 	ConsensusMessageOutput []byte
 	// protocol manager will deliver the incoming consensus message via this type to this engine
 	ConsensusMessageInput []byte
+	// Proposer's message
+	ProposerMessageInput []byte
 )
 
 var (
@@ -374,20 +376,13 @@ func (e *BDLSEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *ty
 // Note, the method returns immediately and will send the result async. More
 // than one result may also be returned depending on the consensus algorithm.
 func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
+	// TODO: check my role (validator or proposer)
 	go e.consensusTask(chain, block, results, stop)
 	return nil
 }
 
 // a consensus task for a specific block
 func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) {
-	// check block's parent
-	number := block.NumberU64()
-	parent := chain.GetHeader(block.ParentHash(), number-1)
-	if parent == nil {
-		results <- nil
-		return
-	}
-
 	// get to private key from account manager
 	var privateKey *ecdsa.PrivateKey
 WAIT_FOR_PRIVATEKEY:
@@ -607,7 +602,7 @@ WAIT_FOR_PRIVATEKEY:
 		copy(identity[:], participants[k][:])
 		config.Participants = append(config.Participants, identity)
 	}
-	e.shuffleParticipants(config.Participants, parent.Hash())
+	e.shuffleParticipants(config.Participants, block.ParentHash())
 	e.mu.Unlock()
 
 	// step 3. create the consensus object
@@ -616,9 +611,6 @@ WAIT_FOR_PRIVATEKEY:
 		log.Error("bdls.NewConsensus", "err", err)
 		return
 	}
-
-	// step 4. propose the block hash
-	consensus.Propose(block.Hash().Bytes())
 
 	// step 5: step delay by last block timestamp
 	consensus.SetLatency(time.Second)
@@ -635,6 +627,17 @@ WAIT_FOR_PRIVATEKEY:
 		return
 	}
 
+	// also subscribe to proposer messages
+	var proposerMessageChan <-chan *event.TypeMuxEvent
+	if e.mux != nil {
+		proposerSub := e.mux.Subscribe(ProposerMessageInput{})
+		defer proposerSub.Unsubscribe()
+		proposerMessageChan = proposerSub.Chan()
+	} else {
+		log.Error("mux is nil")
+		return
+	}
+
 	// the consensus updater ticker
 	updateTick := time.NewTicker(20 * time.Millisecond)
 	defer updateTick.Stop()
@@ -643,12 +646,26 @@ WAIT_FOR_PRIVATEKEY:
 	log.Warn("CONSENSUS TASK STARTED", "coinbase", block.Coinbase(), "height", block.NumberU64())
 	for {
 		select {
-		case obj, ok := <-consensusMessageChan: // from p2p
-			if !ok {
-				log.Error("cosnensusMessageChan closed")
-				return
-			}
+		case obj := <-proposerMessageChan: // 3rd-party proposer's message
+			if proposal, ok := obj.Data.(ProposerMessageInput); ok {
+				var blk types.Block
+				err := rlp.DecodeBytes(proposal, &blk)
+				if err != nil {
+					log.Error("proposerMessage", "rlp.DecodeBytes", err)
+					continue
+				}
 
+				// validate proposer's block
+				// check block's parent
+				if !e.verifyProposal(&blk) {
+					log.Error("verify Proposal block failed")
+					continue
+				}
+
+				// confirmed a valid 3rd-party block, propose
+				consensus.Propose(block.Hash().Bytes())
+			}
+		case obj := <-consensusMessageChan: // consensus message
 			if ev, ok := obj.Data.(ConsensusMessageInput); ok {
 				err := consensus.ReceiveMessage(ev, time.Now()) // input to core
 				if err != nil {
@@ -696,6 +713,8 @@ WAIT_FOR_PRIVATEKEY:
 
 // VerifyProposalBlock implements blockchain specific block validator
 func (e *BDLSEngine) verifyProposal(block *types.Block) bool {
+	// TODO: match proposer set
+
 	// check bad block
 	if e.hasBadBlock != nil {
 		if e.hasBadBlock(block.Hash()) {
