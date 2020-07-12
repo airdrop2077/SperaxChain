@@ -40,6 +40,7 @@ import (
 
 	"github.com/Sperax/SperaxChain/accounts"
 	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/common/hexutil"
 	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
@@ -57,6 +58,10 @@ import (
 const (
 	// minimum difference between two consecutive block's timestamps in second
 	minBlockPeriod = 3
+)
+
+var (
+	W0 = crypto.Keccak256(hexutil.MustDecode("0x3243F6A8885A308D313198A2E037073"))
 )
 
 // Message exchange between consensus engine & protocol manager
@@ -387,15 +392,7 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 func (e *BDLSEngine) RandAtBlock(chain consensus.ChainReader, block *types.Block) []byte {
 	hasher := sha3.NewLegacyKeccak256()
 	if block.NumberU64() == 0 {
-		signer := types.NewEIP155Signer(chain.Config().ChainID)
-		for _, tx := range block.Transactions() {
-			addr, err := types.Sender(signer, tx)
-			if err != nil {
-				continue
-			}
-			hasher.Write(addr.Bytes())
-		}
-		return hasher.Sum(nil)
+		return W0
 	} else {
 		prevBlock := chain.GetBlock(block.ParentHash(), block.NumberU64()-1)
 		coinbase := prevBlock.Coinbase()
