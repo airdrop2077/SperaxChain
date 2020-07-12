@@ -51,6 +51,7 @@ import (
 	"github.com/Sperax/SperaxChain/rpc"
 	"github.com/Sperax/bdls"
 	proto "github.com/gogo/protobuf/proto"
+	"golang.org/x/crypto/sha3"
 )
 
 const (
@@ -380,6 +381,31 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 	return nil
 }
 
+// Rand calcuates W
+// W0 = H(U0)
+// Wj = H(Pj-1,Wj-1) for 0<j<=r,
+func (e *BDLSEngine) RandAtBlock(chain consensus.ChainReader, block *types.Block) []byte {
+	hasher := sha3.NewLegacyKeccak256()
+	if block.NumberU64() == 0 {
+		signer := types.NewEIP155Signer(chain.Config().ChainID)
+		for _, tx := range block.Transactions() {
+			addr, err := types.Sender(signer, tx)
+			if err != nil {
+				continue
+			}
+			hasher.Write(addr.Bytes())
+		}
+		return hasher.Sum(nil)
+	} else {
+		prevBlock := chain.GetBlock(block.ParentHash(), block.NumberU64()-1)
+		coinbase := prevBlock.Coinbase()
+		hasher.Write(coinbase[:])
+		// TODO: if W has written in block header, then we can stop recursion.
+		hasher.Write(e.RandAtBlock(chain, prevBlock))
+		return hasher.Sum(nil)
+	}
+}
+
 // a consensus task for a specific block
 func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) {
 	// get to private key from account manager
@@ -576,8 +602,7 @@ WAIT_FOR_PRIVATEKEY:
 		Epoch:         time.Now(),
 		CurrentHeight: block.NumberU64() - 1,
 		PrivateKey:    privateKey,
-		// TODO(xtaci): (shuffle and set participants sequence based on some random number)
-		StateCompare: func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
+		StateCompare:  func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
 		StateValidate: func(s bdls.State) bool {
 			// make sure all states are known from <roundchange> exchanging
 			hash := common.BytesToHash(s)
@@ -601,7 +626,8 @@ WAIT_FOR_PRIVATEKEY:
 		copy(identity[:], participants[k][:])
 		config.Participants = append(config.Participants, identity)
 	}
-	e.shuffleParticipants(config.Participants, block.ParentHash())
+
+	e.shuffleParticipants(config.Participants, common.BytesToHash(e.RandAtBlock(chain, block)))
 	e.mu.Unlock()
 
 	// step 3. create the consensus object
@@ -642,7 +668,7 @@ WAIT_FOR_PRIVATEKEY:
 					log.Error("proto.Unmarshal", "err", err)
 				}
 
-				switch em.Type {
+				switch em.Type { // depends on message types
 				case EngineMessageType_Proposal:
 					var blk types.Block
 					err := rlp.DecodeBytes(em.Message, &blk)
