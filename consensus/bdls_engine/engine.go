@@ -40,7 +40,6 @@ import (
 
 	"github.com/Sperax/SperaxChain/accounts"
 	"github.com/Sperax/SperaxChain/common"
-	"github.com/Sperax/SperaxChain/common/hexutil"
 	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
@@ -52,16 +51,11 @@ import (
 	"github.com/Sperax/SperaxChain/rpc"
 	"github.com/Sperax/bdls"
 	proto "github.com/gogo/protobuf/proto"
-	"golang.org/x/crypto/sha3"
 )
 
 const (
 	// minimum difference between two consecutive block's timestamps in second
 	minBlockPeriod = 3
-)
-
-var (
-	W0 = crypto.Keccak256(hexutil.MustDecode("0x3243F6A8885A308D313198A2E037073"))
 )
 
 // Message exchange between consensus engine & protocol manager
@@ -384,23 +378,6 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 	// TODO: check my role (validator or proposer)
 	go e.consensusTask(chain, block, results, stop)
 	return nil
-}
-
-// Rand calcuates W
-// W0 = H(U0)
-// Wj = H(Pj-1,Wj-1) for 0<j<=r,
-func (e *BDLSEngine) RandAtBlock(chain consensus.ChainReader, block *types.Block) []byte {
-	hasher := sha3.NewLegacyKeccak256()
-	if block.NumberU64() == 0 {
-		return W0
-	} else {
-		prevBlock := chain.GetBlock(block.ParentHash(), block.NumberU64()-1)
-		coinbase := prevBlock.Coinbase()
-		hasher.Write(coinbase[:])
-		// TODO: if W has written in block header, then we can stop recursion.
-		hasher.Write(e.RandAtBlock(chain, prevBlock))
-		return hasher.Sum(nil)
-	}
 }
 
 // a consensus task for a specific block
