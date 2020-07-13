@@ -68,7 +68,7 @@ func (e *BDLSEngine) RandAtBlock(chain consensus.ChainReader, block *types.Block
 }
 
 // H(r;0;Ri,r,0;Wr) > max{0;1 i-aip}
-func (e *BDLSEngine) IsProposer(chain consensus.ChainReader, block *types.Block, R common.Hash, numStaked *big.Int, totalStaked *big.Int) bool {
+func (e *BDLSEngine) IsProposer(height uint64, W []byte, R common.Hash, numStaked *big.Int, totalStaked *big.Int) bool {
 	// compute p
 	p := big.NewFloat(0).SetInt(E1)
 	p.Mul(p, big.NewFloat(0).SetInt(Alpha))
@@ -82,10 +82,10 @@ func (e *BDLSEngine) IsProposer(chain consensus.ChainReader, block *types.Block,
 
 	// compute H
 	hasher := sha3.NewLegacyKeccak256()
-	binary.Write(hasher, binary.LittleEndian, block.NumberU64())
+	binary.Write(hasher, binary.LittleEndian, height)
 	binary.Write(hasher, binary.LittleEndian, 0)
 	hasher.Write(R[:])
-	hasher.Write(e.RandAtBlock(chain, block))
+	hasher.Write(W)
 
 	h := big.NewFloat(0)
 	x := big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(hasher.Sum(nil)))
