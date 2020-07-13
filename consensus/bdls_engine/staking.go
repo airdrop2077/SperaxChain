@@ -43,16 +43,17 @@ import (
 )
 
 var (
-	W0    = crypto.Keccak256(hexutil.MustDecode("0x3243F6A8885A308D313198A2E037073"))
-	E1    = big.NewInt(5)      // potential propser expectation
-	E2    = big.NewInt(50)     // BFT committee expectationA
-	Alpha = big.NewInt(100000) // unit of staking SPA
+	W0         = crypto.Keccak256Hash(hexutil.MustDecode("0x3243F6A8885A308D313198A2E037073"))
+	E1         = big.NewInt(5)      // potential propser expectation
+	E2         = big.NewInt(50)     // BFT committee expectationA
+	Alpha      = big.NewInt(100000) // unit of staking SPA
+	MaxUint256 = big.NewFloat(0).SetInt(big.NewInt(0).SetBytes([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}))
 )
 
-// Rand calcuates W
+// RandAtBlock calculates random number W based on block information
 // W0 = H(U0)
 // Wj = H(Pj-1,Wj-1) for 0<j<=r,
-func (e *BDLSEngine) RandAtBlock(chain consensus.ChainReader, block *types.Block) []byte {
+func (e *BDLSEngine) RandAtBlock(chain consensus.ChainReader, block *types.Block) common.Hash {
 	if block.NumberU64() == 0 {
 		return W0
 	}
@@ -63,8 +64,9 @@ func (e *BDLSEngine) RandAtBlock(chain consensus.ChainReader, block *types.Block
 	coinbase := prevBlock.Coinbase()
 	hasher.Write(coinbase[:])
 	// TODO: if W has written in block header, then we can stop recursion.
-	hasher.Write(e.RandAtBlock(chain, prevBlock))
-	return hasher.Sum(nil)
+	prevW := e.RandAtBlock(chain, prevBlock)
+	hasher.Write(prevW[:])
+	return common.BytesToHash(hasher.Sum(nil))
 }
 
 // H(r;0;Ri,r,0;Wr) > max{0;1 i-aip}
@@ -87,11 +89,11 @@ func (e *BDLSEngine) IsProposer(height uint64, W []byte, R common.Hash, numStake
 	hasher.Write(R[:])
 	hasher.Write(W)
 
-	h := big.NewFloat(0)
-	x := big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(hasher.Sum(nil)))
-	y := big.NewFloat(0).SetInt(big.NewInt(0).SetBytes([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}))
-	h.Quo(x, y)
+	// calculate H/MaxUint256
+	h := big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(hasher.Sum(nil)))
+	h.Quo(h, MaxUint256)
 
+	// prob compare
 	if h.Cmp(max) == 1 {
 		return true
 	}

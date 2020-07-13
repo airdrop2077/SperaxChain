@@ -601,7 +601,7 @@ WAIT_FOR_PRIVATEKEY:
 		config.Participants = append(config.Participants, identity)
 	}
 
-	e.shuffleParticipants(config.Participants, common.BytesToHash(e.RandAtBlock(chain, block)))
+	e.shuffleParticipants(config.Participants, e.RandAtBlock(chain, block))
 	e.mu.Unlock()
 
 	// step 3. create the consensus object
