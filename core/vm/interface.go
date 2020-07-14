@@ -31,6 +31,9 @@ type StateDB interface {
 	AddBalance(common.Address, *big.Int)
 	GetBalance(common.Address) *big.Int
 
+	// Staking
+	SetStaking(addr common.Address, stakingFrom uint64, stakingRandomNumbers []common.Hash)
+
 	GetNonce(common.Address) uint64
 	SetNonce(common.Address, uint64)
 
