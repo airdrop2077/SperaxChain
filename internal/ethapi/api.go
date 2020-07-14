@@ -738,6 +738,9 @@ type CallArgs struct {
 	GasPrice *hexutil.Big    `json:"gasPrice"`
 	Value    *hexutil.Big    `json:"value"`
 	Data     *hexutil.Bytes  `json:"data"`
+
+	StakingFrom          *hexutil.Uint64 `json:"stakingFrom"`
+	StakingRandomNumbers []*common.Hash  `json:"stakingRandomNumbers"`
 }
 
 // ToMessage converts CallArgs to the Message type used by the core evm
@@ -772,7 +775,20 @@ func (args *CallArgs) ToMessage(globalGasCap *big.Int) types.Message {
 		data = []byte(*args.Data)
 	}
 
-	msg := types.NewMessage(addr, args.To, 0, value, gas, gasPrice, data, false)
+	// Sperax staking transaction
+	stakingFrom := uint64(0)
+	if args.StakingFrom != nil {
+		stakingFrom = uint64(*args.StakingFrom)
+	}
+
+	var stakingRandomNumbers []common.Hash
+	if args.StakingRandomNumbers != nil {
+		for k := range args.StakingRandomNumbers {
+			stakingRandomNumbers = append(stakingRandomNumbers, *args.StakingRandomNumbers[k])
+		}
+	}
+
+	msg := types.NewMessage(addr, args.To, 0, value, gas, gasPrice, data, false, stakingFrom, stakingRandomNumbers)
 	return msg
 }
 
