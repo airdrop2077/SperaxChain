@@ -69,7 +69,8 @@ type Message interface {
 	Data() []byte
 
 	StakingFrom() uint64
-	StakingRandomNumbers() []common.Hash
+	StakingTo() uint64
+	StakingRoot() common.Hash
 }
 
 // ExecutionResult includes all output after executing given evm
@@ -268,7 +269,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 
 	// Sperax Staking State
 	if *msg.To() == bdls_engine.StakingAccount {
-		st.state.SetStaking(msg.From(), msg.StakingFrom(), msg.StakingRandomNumbers())
+		st.state.SetStaking(msg.From(), msg.StakingFrom(), msg.StakingTo(), msg.StakingRoot())
 	}
 
 	return &ExecutionResult{

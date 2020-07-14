@@ -412,10 +412,10 @@ func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 }
 
 // Sperax Staking
-func (s *StateDB) SetStaking(addr common.Address, stakingFrom uint64, stakingRandomNumbers []common.Hash) {
+func (s *StateDB) SetStaking(addr common.Address, stakingFrom uint64, stakingTo uint64, stakingRoot common.Hash) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
-		stateObject.SetStaking(stakingFrom, stakingRandomNumbers)
+		stateObject.SetStaking(stakingFrom, stakingTo, stakingRoot)
 	}
 }
 

@@ -52,8 +52,9 @@ type txdata struct {
 	Payload      []byte          `json:"input"    gencodec:"required"`
 
 	// Sperax Staking Extension
-	StakingFrom          uint64        `json:"stakingFrom" gencodec:"required"`
-	StakingRandomNumbers []common.Hash `json:"stakingRandomNumbers" gencodec:"required"`
+	StakingFrom uint64      `json:"stakingFrom" gencodec:"required"`
+	StakingTo   uint64      `json:"stakingTo" gencodec:"required"`
+	StakingRoot common.Hash `json:"stakingRoot" gencodec:"required"`
 
 	// Signature values
 	V *big.Int `json:"v" gencodec:"required"`
@@ -176,14 +177,15 @@ func (tx *Transaction) UnmarshalJSON(input []byte) error {
 	return nil
 }
 
-func (tx *Transaction) Data() []byte                        { return common.CopyBytes(tx.data.Payload) }
-func (tx *Transaction) Gas() uint64                         { return tx.data.GasLimit }
-func (tx *Transaction) GasPrice() *big.Int                  { return new(big.Int).Set(tx.data.Price) }
-func (tx *Transaction) Value() *big.Int                     { return new(big.Int).Set(tx.data.Amount) }
-func (tx *Transaction) Nonce() uint64                       { return tx.data.AccountNonce }
-func (tx *Transaction) CheckNonce() bool                    { return true }
-func (tx *Transaction) StakingFrom() uint64                 { return tx.data.StakingFrom }
-func (tx *Transaction) StakingRandomNumbers() []common.Hash { return tx.data.StakingRandomNumbers }
+func (tx *Transaction) Data() []byte             { return common.CopyBytes(tx.data.Payload) }
+func (tx *Transaction) Gas() uint64              { return tx.data.GasLimit }
+func (tx *Transaction) GasPrice() *big.Int       { return new(big.Int).Set(tx.data.Price) }
+func (tx *Transaction) Value() *big.Int          { return new(big.Int).Set(tx.data.Amount) }
+func (tx *Transaction) Nonce() uint64            { return tx.data.AccountNonce }
+func (tx *Transaction) CheckNonce() bool         { return true }
+func (tx *Transaction) StakingFrom() uint64      { return tx.data.StakingFrom }
+func (tx *Transaction) StakingTo() uint64        { return tx.data.StakingTo }
+func (tx *Transaction) StakingRoot() common.Hash { return tx.data.StakingRoot }
 
 // To returns the recipient address of the transaction.
 // It returns nil if the transaction is a contract creation.
@@ -225,15 +227,16 @@ func (tx *Transaction) Size() common.StorageSize {
 // XXX Rename message to something less arbitrary?
 func (tx *Transaction) AsMessage(s Signer) (Message, error) {
 	msg := Message{
-		nonce:                tx.data.AccountNonce,
-		gasLimit:             tx.data.GasLimit,
-		gasPrice:             new(big.Int).Set(tx.data.Price),
-		to:                   tx.data.Recipient,
-		amount:               tx.data.Amount,
-		data:                 tx.data.Payload,
-		checkNonce:           true,
-		stakingFrom:          tx.data.StakingFrom,
-		stakingRandomNumbers: tx.data.StakingRandomNumbers,
+		nonce:       tx.data.AccountNonce,
+		gasLimit:    tx.data.GasLimit,
+		gasPrice:    new(big.Int).Set(tx.data.Price),
+		to:          tx.data.Recipient,
+		amount:      tx.data.Amount,
+		data:        tx.data.Payload,
+		checkNonce:  true,
+		stakingFrom: tx.data.StakingFrom,
+		stakingTo:   tx.data.StakingTo,
+		stakingRoot: tx.data.StakingRoot,
 	}
 
 	var err error
@@ -404,32 +407,35 @@ type Message struct {
 	checkNonce bool
 
 	// Sperax Staking Extension
-	stakingFrom          uint64
-	stakingRandomNumbers []common.Hash
+	stakingFrom uint64
+	stakingTo   uint64
+	stakingRoot common.Hash
 }
 
-func NewMessage(from common.Address, to *common.Address, nonce uint64, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte, checkNonce bool, stakingFrom uint64, stakingRandomNumbers []common.Hash) Message {
+func NewMessage(from common.Address, to *common.Address, nonce uint64, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte, checkNonce bool, stakingFrom uint64, stakingTo uint64, stakingRoot common.Hash) Message {
 	return Message{
-		from:                 from,
-		to:                   to,
-		nonce:                nonce,
-		amount:               amount,
-		gasLimit:             gasLimit,
-		gasPrice:             gasPrice,
-		data:                 data,
-		checkNonce:           checkNonce,
-		stakingFrom:          stakingFrom,
-		stakingRandomNumbers: stakingRandomNumbers,
+		from:        from,
+		to:          to,
+		nonce:       nonce,
+		amount:      amount,
+		gasLimit:    gasLimit,
+		gasPrice:    gasPrice,
+		data:        data,
+		checkNonce:  checkNonce,
+		stakingFrom: stakingFrom,
+		stakingTo:   stakingTo,
+		stakingRoot: stakingRoot,
 	}
 }
 
-func (m Message) From() common.Address                { return m.from }
-func (m Message) To() *common.Address                 { return m.to }
-func (m Message) GasPrice() *big.Int                  { return m.gasPrice }
-func (m Message) Value() *big.Int                     { return m.amount }
-func (m Message) Gas() uint64                         { return m.gasLimit }
-func (m Message) Nonce() uint64                       { return m.nonce }
-func (m Message) Data() []byte                        { return m.data }
-func (m Message) CheckNonce() bool                    { return m.checkNonce }
-func (m Message) StakingFrom() uint64                 { return m.stakingFrom }
-func (m Message) StakingRandomNumbers() []common.Hash { return m.stakingRandomNumbers }
+func (m Message) From() common.Address     { return m.from }
+func (m Message) To() *common.Address      { return m.to }
+func (m Message) GasPrice() *big.Int       { return m.gasPrice }
+func (m Message) Value() *big.Int          { return m.amount }
+func (m Message) Gas() uint64              { return m.gasLimit }
+func (m Message) Nonce() uint64            { return m.nonce }
+func (m Message) Data() []byte             { return m.data }
+func (m Message) CheckNonce() bool         { return m.checkNonce }
+func (m Message) StakingFrom() uint64      { return m.stakingFrom }
+func (m Message) StakingTo() uint64        { return m.stakingTo }
+func (m Message) StakingRoot() common.Hash { return m.stakingRoot }
