@@ -44,6 +44,7 @@ import (
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/crypto"
+	"github.com/Sperax/SperaxChain/ethdb"
 	"github.com/Sperax/SperaxChain/event"
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/rlp"
@@ -131,13 +132,16 @@ type BDLSEngine struct {
 	processBlock  func(block *types.Block, statedb *state.StateDB) (types.Receipts, []*types.Log, uint64, error)
 	validateState func(block *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64) error
 
+	// database
+	db ethdb.Database
+
 	// mutex for fields
 	mu sync.Mutex
 }
 
 // New creates a ethereum compatible BDLS engine with account manager for signing and mux for
 // message exchanging
-func New(accountManager *accounts.Manager, mux *event.TypeMux) *BDLSEngine {
+func New(accountManager *accounts.Manager, mux *event.TypeMux, db ethdb.Database) *BDLSEngine {
 	engine := new(BDLSEngine)
 	engine.mux = mux
 	engine.accountManager = accountManager
