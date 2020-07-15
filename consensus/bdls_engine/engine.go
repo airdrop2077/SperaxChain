@@ -46,7 +46,6 @@ import (
 	"github.com/Sperax/SperaxChain/crypto"
 	"github.com/Sperax/SperaxChain/event"
 	"github.com/Sperax/SperaxChain/log"
-	"github.com/Sperax/SperaxChain/params"
 	"github.com/Sperax/SperaxChain/rlp"
 	"github.com/Sperax/SperaxChain/rpc"
 	"github.com/Sperax/bdls"
@@ -792,8 +791,3 @@ func (e *BDLSEngine) shuffleParticipants(identities []bdls.Identity, h common.Ha
 
 // Close terminates any background threads maintained by the consensus engine.
 func (e *BDLSEngine) Close() error { return nil }
-
-// mining reward computation
-func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header) {
-	state.AddBalance(header.Coinbase, new(big.Int).Mul(big.NewInt(1), big.NewInt(params.Ether)))
-}
