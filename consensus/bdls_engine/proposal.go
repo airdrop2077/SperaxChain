@@ -41,7 +41,7 @@ import (
 
 type Proposal struct {
 	Block       *types.Block `json:"block"    gencodec:"required"`
-	MerkleProof []byte       `json:"merkleProof"    gencodec:"required"`
+	MerkleProof [][]byte     `json:"merkleProof"    gencodec:"required"`
 	// Signature values
 	V *big.Int `json:"v" gencodec:"required"`
 	R *big.Int `json:"r" gencodec:"required"`
@@ -49,7 +49,7 @@ type Proposal struct {
 }
 
 type proposalMarshaling struct {
-	MerkleProof hexutil.Bytes
+	MerkleProof []hexutil.Bytes
 	V           *hexutil.Big
 	R           *hexutil.Big
 	S           *hexutil.Big

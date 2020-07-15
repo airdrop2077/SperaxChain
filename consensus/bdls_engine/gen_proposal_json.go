@@ -16,15 +16,20 @@ var _ = (*proposalMarshaling)(nil)
 // MarshalJSON marshals as JSON.
 func (p Proposal) MarshalJSON() ([]byte, error) {
 	type Proposal struct {
-		Block       *types.Block  `json:"block"    gencodec:"required"`
-		MerkleProof hexutil.Bytes `json:"merkleProof"    gencodec:"required"`
-		V           *hexutil.Big  `json:"v" gencodec:"required"`
-		R           *hexutil.Big  `json:"r" gencodec:"required"`
-		S           *hexutil.Big  `json:"s" gencodec:"required"`
+		Block       *types.Block    `json:"block"    gencodec:"required"`
+		MerkleProof []hexutil.Bytes `json:"merkleProof"    gencodec:"required"`
+		V           *hexutil.Big    `json:"v" gencodec:"required"`
+		R           *hexutil.Big    `json:"r" gencodec:"required"`
+		S           *hexutil.Big    `json:"s" gencodec:"required"`
 	}
 	var enc Proposal
 	enc.Block = p.Block
-	enc.MerkleProof = p.MerkleProof
+	if p.MerkleProof != nil {
+		enc.MerkleProof = make([]hexutil.Bytes, len(p.MerkleProof))
+		for k, v := range p.MerkleProof {
+			enc.MerkleProof[k] = v
+		}
+	}
 	enc.V = (*hexutil.Big)(p.V)
 	enc.R = (*hexutil.Big)(p.R)
 	enc.S = (*hexutil.Big)(p.S)
@@ -34,11 +39,11 @@ func (p Proposal) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON unmarshals from JSON.
 func (p *Proposal) UnmarshalJSON(input []byte) error {
 	type Proposal struct {
-		Block       *types.Block   `json:"block"    gencodec:"required"`
-		MerkleProof *hexutil.Bytes `json:"merkleProof"    gencodec:"required"`
-		V           *hexutil.Big   `json:"v" gencodec:"required"`
-		R           *hexutil.Big   `json:"r" gencodec:"required"`
-		S           *hexutil.Big   `json:"s" gencodec:"required"`
+		Block       *types.Block    `json:"block"    gencodec:"required"`
+		MerkleProof []hexutil.Bytes `json:"merkleProof"    gencodec:"required"`
+		V           *hexutil.Big    `json:"v" gencodec:"required"`
+		R           *hexutil.Big    `json:"r" gencodec:"required"`
+		S           *hexutil.Big    `json:"s" gencodec:"required"`
 	}
 	var dec Proposal
 	if err := json.Unmarshal(input, &dec); err != nil {
@@ -51,7 +56,10 @@ func (p *Proposal) UnmarshalJSON(input []byte) error {
 	if dec.MerkleProof == nil {
 		return errors.New("missing required field 'merkleProof' for Proposal")
 	}
-	p.MerkleProof = *dec.MerkleProof
+	p.MerkleProof = make([][]byte, len(dec.MerkleProof))
+	for k, v := range dec.MerkleProof {
+		p.MerkleProof[k] = v
+	}
 	if dec.V == nil {
 		return errors.New("missing required field 'v' for Proposal")
 	}
