@@ -145,6 +145,7 @@ func New(accountManager *accounts.Manager, mux *event.TypeMux, db ethdb.Database
 	engine := new(BDLSEngine)
 	engine.mux = mux
 	engine.accountManager = accountManager
+	engine.db = db
 
 	// create an ephermal key for verification
 	priv, err := crypto.GenerateKey()
