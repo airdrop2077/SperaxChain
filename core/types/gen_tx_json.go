@@ -16,19 +16,18 @@ var _ = (*txdataMarshaling)(nil)
 // MarshalJSON marshals as JSON.
 func (t txdata) MarshalJSON() ([]byte, error) {
 	type txdata struct {
-		AccountNonce hexutil.Uint64  `json:"nonce"    gencodec:"required"`
-		Price        *hexutil.Big    `json:"gasPrice" gencodec:"required"`
-		GasLimit     hexutil.Uint64  `json:"gas"      gencodec:"required"`
-		Recipient    *common.Address `json:"to"       rlp:"nil"`
-		Amount       *hexutil.Big    `json:"value"    gencodec:"required"`
-		Payload      hexutil.Bytes   `json:"input"    gencodec:"required"`
-		StakingFrom  uint64          `json:"stakingFrom" gencodec:"required"`
-		StakingTo    uint64          `json:"stakingTo" gencodec:"required"`
-		StakingRoot  common.Hash     `json:"stakingRoot" gencodec:"required"`
-		V            *hexutil.Big    `json:"v" gencodec:"required"`
-		R            *hexutil.Big    `json:"r" gencodec:"required"`
-		S            *hexutil.Big    `json:"s" gencodec:"required"`
-		Hash         *common.Hash    `json:"hash" rlp:"-"`
+		AccountNonce         hexutil.Uint64  `json:"nonce"    gencodec:"required"`
+		Price                *hexutil.Big    `json:"gasPrice" gencodec:"required"`
+		GasLimit             hexutil.Uint64  `json:"gas"      gencodec:"required"`
+		Recipient            *common.Address `json:"to"       rlp:"nil"`
+		Amount               *hexutil.Big    `json:"value"    gencodec:"required"`
+		Payload              hexutil.Bytes   `json:"input"    gencodec:"required"`
+		StakingFrom          uint64          `json:"stakingFrom" gencodec:"required"`
+		StakingRandomNumbers []common.Hash   `json:"stakingRandomNumbers" gencodec:"required"`
+		V                    *hexutil.Big    `json:"v" gencodec:"required"`
+		R                    *hexutil.Big    `json:"r" gencodec:"required"`
+		S                    *hexutil.Big    `json:"s" gencodec:"required"`
+		Hash                 *common.Hash    `json:"hash" rlp:"-"`
 	}
 	var enc txdata
 	enc.AccountNonce = hexutil.Uint64(t.AccountNonce)
@@ -38,8 +37,7 @@ func (t txdata) MarshalJSON() ([]byte, error) {
 	enc.Amount = (*hexutil.Big)(t.Amount)
 	enc.Payload = t.Payload
 	enc.StakingFrom = t.StakingFrom
-	enc.StakingTo = t.StakingTo
-	enc.StakingRoot = t.StakingRoot
+	enc.StakingRandomNumbers = t.StakingRandomNumbers
 	enc.V = (*hexutil.Big)(t.V)
 	enc.R = (*hexutil.Big)(t.R)
 	enc.S = (*hexutil.Big)(t.S)
@@ -50,19 +48,18 @@ func (t txdata) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON unmarshals from JSON.
 func (t *txdata) UnmarshalJSON(input []byte) error {
 	type txdata struct {
-		AccountNonce *hexutil.Uint64 `json:"nonce"    gencodec:"required"`
-		Price        *hexutil.Big    `json:"gasPrice" gencodec:"required"`
-		GasLimit     *hexutil.Uint64 `json:"gas"      gencodec:"required"`
-		Recipient    *common.Address `json:"to"       rlp:"nil"`
-		Amount       *hexutil.Big    `json:"value"    gencodec:"required"`
-		Payload      *hexutil.Bytes  `json:"input"    gencodec:"required"`
-		StakingFrom  *uint64         `json:"stakingFrom" gencodec:"required"`
-		StakingTo    *uint64         `json:"stakingTo" gencodec:"required"`
-		StakingRoot  *common.Hash    `json:"stakingRoot" gencodec:"required"`
-		V            *hexutil.Big    `json:"v" gencodec:"required"`
-		R            *hexutil.Big    `json:"r" gencodec:"required"`
-		S            *hexutil.Big    `json:"s" gencodec:"required"`
-		Hash         *common.Hash    `json:"hash" rlp:"-"`
+		AccountNonce         *hexutil.Uint64 `json:"nonce"    gencodec:"required"`
+		Price                *hexutil.Big    `json:"gasPrice" gencodec:"required"`
+		GasLimit             *hexutil.Uint64 `json:"gas"      gencodec:"required"`
+		Recipient            *common.Address `json:"to"       rlp:"nil"`
+		Amount               *hexutil.Big    `json:"value"    gencodec:"required"`
+		Payload              *hexutil.Bytes  `json:"input"    gencodec:"required"`
+		StakingFrom          *uint64         `json:"stakingFrom" gencodec:"required"`
+		StakingRandomNumbers []common.Hash   `json:"stakingRandomNumbers" gencodec:"required"`
+		V                    *hexutil.Big    `json:"v" gencodec:"required"`
+		R                    *hexutil.Big    `json:"r" gencodec:"required"`
+		S                    *hexutil.Big    `json:"s" gencodec:"required"`
+		Hash                 *common.Hash    `json:"hash" rlp:"-"`
 	}
 	var dec txdata
 	if err := json.Unmarshal(input, &dec); err != nil {
@@ -95,14 +92,10 @@ func (t *txdata) UnmarshalJSON(input []byte) error {
 		return errors.New("missing required field 'stakingFrom' for txdata")
 	}
 	t.StakingFrom = *dec.StakingFrom
-	if dec.StakingTo == nil {
-		return errors.New("missing required field 'stakingTo' for txdata")
+	if dec.StakingRandomNumbers == nil {
+		return errors.New("missing required field 'stakingRandomNumbers' for txdata")
 	}
-	t.StakingTo = *dec.StakingTo
-	if dec.StakingRoot == nil {
-		return errors.New("missing required field 'stakingRoot' for txdata")
-	}
-	t.StakingRoot = *dec.StakingRoot
+	t.StakingRandomNumbers = dec.StakingRandomNumbers
 	if dec.V == nil {
 		return errors.New("missing required field 'v' for txdata")
 	}

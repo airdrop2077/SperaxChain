@@ -739,9 +739,8 @@ type CallArgs struct {
 	Value    *hexutil.Big    `json:"value"`
 	Data     *hexutil.Bytes  `json:"data"`
 
-	StakingFrom *hexutil.Uint64 `json:"stakingFrom"`
-	StakingTo   *hexutil.Uint64 `json:"stakingTo"`
-	StakingRoot *common.Hash    `json:"stakingRoot"`
+	StakingFrom          *hexutil.Uint64 `json:"stakingFrom"`
+	StakingRandomNumbers []*common.Hash  `json:"stakingRandomNumbers"`
 }
 
 // ToMessage converts CallArgs to the Message type used by the core evm
@@ -782,17 +781,14 @@ func (args *CallArgs) ToMessage(globalGasCap *big.Int) types.Message {
 		stakingFrom = uint64(*args.StakingFrom)
 	}
 
-	stakingTo := uint64(0)
-	if args.StakingTo != nil {
-		stakingTo = uint64(*args.StakingTo)
+	var stakingRandomNumbers []common.Hash
+	if args.StakingRandomNumbers != nil {
+		for k := range args.StakingRandomNumbers {
+			stakingRandomNumbers = append(stakingRandomNumbers, *args.StakingRandomNumbers[k])
+		}
 	}
 
-	var stakingRoot common.Hash
-	if args.StakingRoot != nil {
-		stakingRoot = *args.StakingRoot
-	}
-
-	msg := types.NewMessage(addr, args.To, 0, value, gas, gasPrice, data, false, stakingFrom, stakingTo, stakingRoot)
+	msg := types.NewMessage(addr, args.To, 0, value, gas, gasPrice, data, false, stakingFrom, stakingRandomNumbers)
 	return msg
 }
 

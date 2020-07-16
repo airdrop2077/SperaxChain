@@ -100,13 +100,12 @@ func (s *stateObject) empty() bool {
 // Account is the Ethereum consensus representation of accounts.
 // These objects are stored in the main account trie.
 type Account struct {
-	Nonce       uint64
-	Balance     *big.Int
-	Root        common.Hash // merkle root of the storage trie
-	CodeHash    []byte
-	StakingFrom uint64
-	StakingTo   uint64
-	StakingRoot common.Hash
+	Nonce                uint64
+	Balance              *big.Int
+	Root                 common.Hash // merkle root of the storage trie
+	CodeHash             []byte
+	StakingFrom          uint64
+	StakingRandomNumbers []common.Hash
 }
 
 // newObject creates a state object.
@@ -414,20 +413,18 @@ func (s *stateObject) setBalance(amount *big.Int) {
 	s.data.Balance = amount
 }
 
-func (s *stateObject) SetStaking(stakingFrom uint64, stakingTo uint64, stakingRoot common.Hash) {
+func (s *stateObject) SetStaking(stakingFrom uint64, stakingRandomNumbers []common.Hash) {
 	s.db.journal.append(stakingChange{
-		account:         &s.address,
-		prevStakingFrom: s.data.StakingFrom,
-		prevStakingTo:   s.data.StakingTo,
-		prevStakingRoot: s.data.StakingRoot,
+		account:                  &s.address,
+		prevStakingFrom:          s.data.StakingFrom,
+		prevStakingRandomNumbers: s.data.StakingRandomNumbers,
 	})
-	s.setStaking(stakingFrom, stakingTo, stakingRoot)
+	s.setStaking(stakingFrom, stakingRandomNumbers)
 }
 
-func (s *stateObject) setStaking(stakingFrom uint64, stakingTo uint64, stakingRoot common.Hash) {
+func (s *stateObject) setStaking(stakingFrom uint64, stakingRandomNumbers []common.Hash) {
 	s.data.StakingFrom = stakingFrom
-	s.data.StakingTo = stakingTo
-	s.data.StakingRoot = stakingRoot
+	s.data.StakingRandomNumbers = stakingRandomNumbers
 }
 
 // Return the gas back to the origin. Used by the Virtual machine or Closures
