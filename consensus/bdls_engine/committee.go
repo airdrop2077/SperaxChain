@@ -44,19 +44,11 @@ import (
 )
 
 var (
-	// block 0 random number
-	W0 = crypto.Keccak256Hash(hexutil.MustDecode("0x3243F6A8885A308D313198A2E037073"))
-	// potential propser expectation
-	E1 = big.NewInt(5)
-	// BFT committee expectationA
-	E2 = big.NewInt(50)
-
-	// unit of staking SPA
-	Alpha = big.NewInt(100000)
-	// Max unsigned integer 256-bit
+	W0         = crypto.Keccak256Hash(hexutil.MustDecode("0x3243F6A8885A308D313198A2E037073"))
+	E1         = big.NewInt(5)      // potential propser expectation
+	E2         = big.NewInt(50)     // BFT committee expectationA
+	Alpha      = big.NewInt(100000) // unit of staking SPA
 	MaxUint256 = big.NewFloat(0).SetInt(big.NewInt(0).SetBytes([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}))
-	// sending token to this address will be treated as staking
-	StakingAccount = common.Address{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
 )
 
 // RandAtBlock calculates random number W based on block information

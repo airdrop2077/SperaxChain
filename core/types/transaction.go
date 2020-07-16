@@ -51,10 +51,6 @@ type txdata struct {
 	Amount       *big.Int        `json:"value"    gencodec:"required"`
 	Payload      []byte          `json:"input"    gencodec:"required"`
 
-	// Sperax Staking Extension
-	StakingFrom          uint64        `json:"stakingFrom" gencodec:"required"`
-	stakingRandomNumbers []common.Hash `json:"stakingRandomNumbers" gencodec:"required"`
-
 	// Signature values
 	V *big.Int `json:"v" gencodec:"required"`
 	R *big.Int `json:"r" gencodec:"required"`
