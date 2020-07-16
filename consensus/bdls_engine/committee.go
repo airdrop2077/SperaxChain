@@ -33,6 +33,7 @@ package bdls_engine
 import (
 	"crypto/ecdsa"
 	"encoding/binary"
+	"errors"
 	"math/big"
 
 	"github.com/Sperax/SperaxChain/common"
@@ -44,12 +45,55 @@ import (
 )
 
 var (
-	W0         = crypto.Keccak256Hash(hexutil.MustDecode("0x3243F6A8885A308D313198A2E037073"))
-	E1         = big.NewInt(5)      // potential propser expectation
-	E2         = big.NewInt(50)     // BFT committee expectationA
-	Alpha      = big.NewInt(100000) // unit of staking SPA
+	// block 0 common random number
+	W0 = crypto.Keccak256Hash(hexutil.MustDecode("0x3243F6A8885A308D313198A2E037073"))
+	// potential propser expectation
+	E1 = big.NewInt(5)
+	// BFT committee expectationA
+	E2 = big.NewInt(50)
+	// unit of staking SPA
+	Alpha = big.NewInt(100000)
+
 	MaxUint256 = big.NewFloat(0).SetInt(big.NewInt(0).SetBytes([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}))
+
+	// transfering tokens to this address will be specially treated
+	StakingAddress = common.Address{0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE}
 )
+
+// types of staking related operation
+type StakingOp byte
+
+const (
+	Staking StakingOp = iota
+	Redeem
+)
+
+var (
+	ErrStakingRequest = errors.New("already staked")
+	ErrRedeemRequest  = errors.New("not staked")
+)
+
+// StakingRequest will be sent along in transaction.payload
+type StakingRequest struct {
+	StakingOp   StakingOp
+	StakingFrom uint64
+	StakingTo   uint64
+	StakingHash uint64
+}
+
+// The object to be stored in account.Code
+type StakingObject struct {
+	// the 1st block expected to participant in validator and proposer
+	StakingFrom uint64
+	// the last block to participant in validator and proposer, the tokens will be refunded
+	// to participants' addresses after this block has mined
+	StakingTo uint64
+	// the random number for block seed verfication, random nubmers(R) in futureBlock will be
+	// hashed for (futureBlock - stakingFrom) times must be equal to StakingHash
+	StakingHash uint64
+	// records the number of tokens staked
+	StakedValue *big.Int
+}
 
 // RandAtBlock calculates random number W based on block information
 // W0 = H(U0)

@@ -21,8 +21,10 @@ import (
 	"math/big"
 
 	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/consensus/bdls_engine"
 	"github.com/Sperax/SperaxChain/core/vm"
 	"github.com/Sperax/SperaxChain/params"
+	"github.com/Sperax/SperaxChain/rlp"
 )
 
 /*
@@ -261,6 +263,56 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	}
 	st.refundGas()
 	st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+
+	//
+	// Sperax Staking Rules
+	//
+	// sending tokens to StakingAddress will trigger staking operations
+	if *msg.To() == bdls_engine.StakingAddress {
+		// decode staking message in msg.Payload
+		var req bdls_engine.StakingRequest
+		rlp.DecodeBytes(msg.Data(), &req)
+		switch req.StakingOp {
+		case bdls_engine.Staking:
+			// no previous staking information
+			code := st.state.GetCode(msg.From())
+			if code == nil {
+				var stakingObject bdls_engine.StakingObject
+				stakingObject.StakingFrom = req.StakingFrom
+				stakingObject.StakingTo = req.StakingTo
+				stakingObject.StakingHash = req.StakingHash
+				stakingObject.StakedValue = st.value
+
+				bts, err := rlp.EncodeToBytes(stakingObject)
+				if err != nil {
+					return nil, err
+				}
+
+				st.state.SetCode(msg.From(), bts)
+			} else {
+				return nil, bdls_engine.ErrStakingRequest
+			}
+		case bdls_engine.Redeem:
+			// no previous staking information
+			code := st.state.GetCode(msg.From())
+			if code == nil {
+				return nil, bdls_engine.ErrRedeemRequest
+			} else {
+				var stakingObject bdls_engine.StakingObject
+				err := rlp.DecodeBytes(code, &stakingObject)
+				if err != nil {
+					return nil, err
+				}
+
+				// transfer from StakingAddress to msg.From
+				st.state.AddBalance(msg.From(), stakingObject.StakedValue)
+				st.state.SubBalance(bdls_engine.StakingAddress, stakingObject.StakedValue)
+
+				// clear staking information
+				st.state.SetCode(msg.From(), nil)
+			}
+		}
+	}
 
 	return &ExecutionResult{
 		UsedGas:    st.gasUsed(),
