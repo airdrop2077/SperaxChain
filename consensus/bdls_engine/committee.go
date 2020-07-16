@@ -31,6 +31,7 @@
 package bdls_engine
 
 import (
+	"crypto/ecdsa"
 	"encoding/binary"
 	"math/big"
 
@@ -91,7 +92,7 @@ func (e *BDLSEngine) IsProposer(height uint64, W []byte, R common.Hash, numStake
 	}
 
 	// compute H
-	hasher := sha3.NewLegacyKeccak256()
+	hasher := sha3.New256()
 	binary.Write(hasher, binary.LittleEndian, height)
 	binary.Write(hasher, binary.LittleEndian, 0)
 	hasher.Write(R[:])
@@ -106,4 +107,34 @@ func (e *BDLSEngine) IsProposer(height uint64, W []byte, R common.Hash, numStake
 		return true
 	}
 	return false
+}
+
+// stakingRandom deterministically derives the random number for height, based on the last staking height and private key
+// lastHash  = H(H(privatekey + lastHeight) *G)
+func (e *BDLSEngine) stakingRandom(priv *ecdsa.PrivateKey, lastHeight uint64, height uint64) []byte {
+	// illegal parameters
+	if height > lastHeight || priv == nil {
+		return nil
+	}
+
+	// H(privatekey + lastHeight)
+	hasher := sha3.New256()
+	hasher.Write(priv.D.Bytes())
+	binary.Write(hasher, binary.LittleEndian, lastHeight)
+
+	// H(privatekey + lastHeight) *G
+	x, y := crypto.S256().ScalarBaseMult(hasher.Sum(nil))
+
+	// H(H(privatekey + lastHeight) *G)
+	hasher = sha3.New256()
+	hasher.Write(x.Bytes())
+	hasher.Write(y.Bytes())
+
+	// hashchain
+	for i := lastHeight - 1; i >= height; i-- {
+		// hashing recursively
+		hasher.Write(hasher.Sum(nil))
+	}
+
+	return hasher.Sum(nil)
 }
