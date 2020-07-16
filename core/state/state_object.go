@@ -100,12 +100,10 @@ func (s *stateObject) empty() bool {
 // Account is the Ethereum consensus representation of accounts.
 // These objects are stored in the main account trie.
 type Account struct {
-	Nonce                uint64
-	Balance              *big.Int
-	Root                 common.Hash // merkle root of the storage trie
-	CodeHash             []byte
-	StakingFrom          uint64
-	StakingRandomNumbers []common.Hash
+	Nonce    uint64
+	Balance  *big.Int
+	Root     common.Hash // merkle root of the storage trie
+	CodeHash []byte
 }
 
 // newObject creates a state object.
@@ -411,20 +409,6 @@ func (s *stateObject) SetBalance(amount *big.Int) {
 
 func (s *stateObject) setBalance(amount *big.Int) {
 	s.data.Balance = amount
-}
-
-func (s *stateObject) SetStaking(stakingFrom uint64, stakingRandomNumbers []common.Hash) {
-	s.db.journal.append(stakingChange{
-		account:                  &s.address,
-		prevStakingFrom:          s.data.StakingFrom,
-		prevStakingRandomNumbers: s.data.StakingRandomNumbers,
-	})
-	s.setStaking(stakingFrom, stakingRandomNumbers)
-}
-
-func (s *stateObject) setStaking(stakingFrom uint64, stakingRandomNumbers []common.Hash) {
-	s.data.StakingFrom = stakingFrom
-	s.data.StakingRandomNumbers = stakingRandomNumbers
 }
 
 // Return the gas back to the origin. Used by the Virtual machine or Closures

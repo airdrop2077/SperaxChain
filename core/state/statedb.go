@@ -411,14 +411,6 @@ func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 	}
 }
 
-// Sperax Staking
-func (s *StateDB) SetStaking(addr common.Address, stakingFrom uint64, stakingRandomNumbers []common.Hash) {
-	stateObject := s.GetOrNewStateObject(addr)
-	if stateObject != nil {
-		stateObject.SetStaking(stakingFrom, stakingRandomNumbers)
-	}
-}
-
 // SetStorage replaces the entire storage for the specified account with given
 // storage. This function should only be used for debugging.
 func (s *StateDB) SetStorage(addr common.Address, storage map[common.Hash]common.Hash) {

@@ -21,7 +21,6 @@ import (
 	"math/big"
 
 	"github.com/Sperax/SperaxChain/common"
-	"github.com/Sperax/SperaxChain/consensus/bdls_engine"
 	"github.com/Sperax/SperaxChain/core/vm"
 	"github.com/Sperax/SperaxChain/params"
 )
@@ -67,9 +66,6 @@ type Message interface {
 	Nonce() uint64
 	CheckNonce() bool
 	Data() []byte
-
-	StakingFrom() uint64
-	StakingRandomNumbers() []common.Hash
 }
 
 // ExecutionResult includes all output after executing given evm
@@ -265,11 +261,6 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	}
 	st.refundGas()
 	st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
-
-	// Sperax Staking State
-	if *msg.To() == bdls_engine.StakingAccount {
-		st.state.SetStaking(msg.From(), msg.StakingFrom(), msg.StakingRandomNumbers())
-	}
 
 	return &ExecutionResult{
 		UsedGas:    st.gasUsed(),

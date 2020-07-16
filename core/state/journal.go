@@ -130,13 +130,6 @@ type (
 	touchChange struct {
 		account *common.Address
 	}
-
-	// Sperax Staking change
-	stakingChange struct {
-		account                  *common.Address
-		prevStakingFrom          uint64
-		prevStakingRandomNumbers []common.Hash
-	}
 )
 
 func (ch createObjectChange) revert(s *StateDB) {
@@ -180,16 +173,6 @@ func (ch touchChange) dirtied() *common.Address {
 	return ch.account
 }
 
-// Staking change
-func (ch stakingChange) revert(s *StateDB) {
-	s.getStateObject(*ch.account).setStaking(ch.prevStakingFrom, ch.prevStakingRandomNumbers)
-}
-
-func (ch stakingChange) dirtied() *common.Address {
-	return ch.account
-}
-
-//
 func (ch balanceChange) revert(s *StateDB) {
 	s.getStateObject(*ch.account).setBalance(ch.prev)
 }
