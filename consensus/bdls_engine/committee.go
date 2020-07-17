@@ -61,18 +61,19 @@ var (
 	StakingAddress = common.Address{0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE}
 )
 
-// types of staking related operation
-type StakingOp byte
-
-const (
-	Staking StakingOp = iota
-	Redeem
-)
-
 var (
 	ErrStakingRequest       = errors.New("already staked")
 	ErrStakingMinimumTokens = errors.New("staking has less than minimum tokens")
 	ErrRedeemRequest        = errors.New("not staked")
+)
+
+// types of staking related operation
+type StakingOp byte
+
+// Staking Operations
+const (
+	Staking = StakingOp(0x00)
+	Redeem  = StakingOp(0xFF)
 )
 
 // StakingRequest will be sent along in transaction.payload
