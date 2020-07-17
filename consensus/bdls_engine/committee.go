@@ -157,18 +157,13 @@ func (e *BDLSEngine) IsProposer(height uint64, W []byte, R common.Hash, numStake
 	return false
 }
 
-// stakingRandom deterministically derives the random number for height, based on the last staking height and private key
-// lastHash  = H(H(privatekey + lastHeight) *G)
-func (e *BDLSEngine) stakingRandom(priv *ecdsa.PrivateKey, lastHeight uint64, height uint64) []byte {
-	// illegal parameters
-	if height > lastHeight || priv == nil {
-		return nil
-	}
-
-	// H(privatekey + lastHeight)
+// deriveStakingSeed deterministically derives the random number for height, based on the staking from height and private key
+// lastHash  = H(H(privatekey + stakingFrom) *G)
+func (e *BDLSEngine) deriveStakingSeed(priv *ecdsa.PrivateKey, stakingFrom uint64) []byte {
+	// H(privatekey + stakingFrom)
 	hasher := sha3.New256()
 	hasher.Write(priv.D.Bytes())
-	binary.Write(hasher, binary.LittleEndian, lastHeight)
+	binary.Write(hasher, binary.LittleEndian, stakingFrom)
 
 	// H(privatekey + lastHeight) *G
 	x, y := crypto.S256().ScalarBaseMult(hasher.Sum(nil))
@@ -177,12 +172,19 @@ func (e *BDLSEngine) stakingRandom(priv *ecdsa.PrivateKey, lastHeight uint64, he
 	hasher = sha3.New256()
 	hasher.Write(x.Bytes())
 	hasher.Write(y.Bytes())
+	return hasher.Sum(nil)
+}
 
-	// hashchain
-	for i := lastHeight - 1; i >= height; i-- {
-		// hashing recursively
-		hasher.Write(hasher.Sum(nil))
+// compute hash recursively for n(n>=0) times
+func (e *BDLSEngine) hashChain(hash []byte, n int) []byte {
+	if n == 0 {
+		return hash
 	}
 
+	hasher := sha3.New256()
+	hasher.Write(hash)
+	for i := 1; i < n; i++ {
+		hasher.Write(hasher.Sum(nil))
+	}
 	return hasher.Sum(nil)
 }
