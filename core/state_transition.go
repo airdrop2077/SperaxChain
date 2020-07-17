@@ -282,6 +282,11 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 				}
 			}
 
+			// minimum staking requirement
+			if st.value.Cmp(bdls_engine.Alpha) == -1 {
+				return nil, bdls_engine.ErrStakingMinimumTokens
+			}
+
 			// no previous staking information
 			var staker bdls_engine.Staker
 			staker.StakingFrom = req.StakingFrom

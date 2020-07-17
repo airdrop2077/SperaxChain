@@ -41,6 +41,7 @@ import (
 	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/crypto"
+	"github.com/Sperax/SperaxChain/params"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -52,7 +53,7 @@ var (
 	// BFT committee expectationA
 	E2 = big.NewInt(50)
 	// unit of staking SPA
-	Alpha = big.NewInt(100000)
+	Alpha = new(big.Int).Mul(big.NewInt(100000), big.NewInt(params.Ether))
 
 	MaxUint256 = big.NewFloat(0).SetInt(big.NewInt(0).SetBytes([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}))
 
@@ -69,8 +70,9 @@ const (
 )
 
 var (
-	ErrStakingRequest = errors.New("already staked")
-	ErrRedeemRequest  = errors.New("not staked")
+	ErrStakingRequest       = errors.New("already staked")
+	ErrStakingMinimumTokens = errors.New("staking has less than minimum tokens")
+	ErrRedeemRequest        = errors.New("not staked")
 )
 
 // StakingRequest will be sent along in transaction.payload
