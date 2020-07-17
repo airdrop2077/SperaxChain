@@ -265,49 +265,70 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		// this procedure will bypass EVM
 		var req bdls_engine.StakingRequest
 		rlp.DecodeBytes(msg.Data(), &req)
+
+		// Decode from StakingAddress's Code field
+		code := st.state.GetCode(bdls_engine.StakingAddress)
+		var stakingObject bdls_engine.StakingObject
+		err := rlp.DecodeBytes(code, &stakingObject)
+		if err != nil {
+			return nil, err
+		}
+
 		switch req.StakingOp {
 		case bdls_engine.Staking:
-			// no previous staking information
-			code := st.state.GetCode(msg.From())
-			if code == nil {
-				var stakingObject bdls_engine.StakingObject
-				stakingObject.StakingFrom = req.StakingFrom
-				stakingObject.StakingTo = req.StakingTo
-				stakingObject.StakingHash = req.StakingHash
-				stakingObject.StakedValue = st.value
-
-				bts, err := rlp.EncodeToBytes(stakingObject)
-				if err != nil {
-					return nil, err
+			for k := range stakingObject.Stakers {
+				if stakingObject.Stakers[k].Address == msg.From() {
+					return nil, bdls_engine.ErrStakingRequest
 				}
-
-				// transfer from msg.From to StakingAddress manually
-				st.state.AddBalance(bdls_engine.StakingAddress, st.value)
-				st.state.SubBalance(msg.From(), st.value)
-
-				st.state.SetCode(msg.From(), bts)
-			} else {
-				return nil, bdls_engine.ErrStakingRequest
 			}
+
+			// no previous staking information
+			var staker bdls_engine.Staker
+			staker.StakingFrom = req.StakingFrom
+			staker.StakingTo = req.StakingTo
+			staker.StakingHash = req.StakingHash
+			staker.StakedValue = st.value
+
+			// transfer from msg.From to StakingAddress manually
+			st.state.AddBalance(bdls_engine.StakingAddress, st.value)
+			st.state.SubBalance(msg.From(), st.value)
+
+			// update StakingObject
+			stakingObject.Stakers = append(stakingObject.Stakers, staker)
+			bts, err := rlp.EncodeToBytes(stakingObject)
+			if err != nil {
+				return nil, err
+			}
+			st.state.SetCode(bdls_engine.StakingAddress, bts)
+
 		case bdls_engine.Redeem:
-			// no previous staking information
-			code := st.state.GetCode(msg.From())
-			if code == nil {
-				return nil, bdls_engine.ErrRedeemRequest
-			} else {
-				var stakingObject bdls_engine.StakingObject
-				err := rlp.DecodeBytes(code, &stakingObject)
-				if err != nil {
-					return nil, err
+			idx := -1
+			var staker *bdls_engine.Staker
+			for k := range stakingObject.Stakers {
+				if stakingObject.Stakers[k].Address == msg.From() {
+					idx = k
+					staker = &stakingObject.Stakers[k]
+					break
 				}
-
-				// transfer from StakingAddress to msg.From
-				st.state.AddBalance(msg.From(), stakingObject.StakedValue)
-				st.state.SubBalance(bdls_engine.StakingAddress, stakingObject.StakedValue)
-
-				// clear staking information
-				st.state.SetCode(msg.From(), nil)
 			}
+
+			if idx == -1 {
+				return nil, bdls_engine.ErrRedeemRequest
+			}
+
+			// transfer from StakingAddress to msg.From
+			st.state.AddBalance(msg.From(), staker.StakedValue)
+			st.state.SubBalance(bdls_engine.StakingAddress, staker.StakedValue)
+
+			// clear staker's information after redeeming
+			stakingObject.Stakers = append(stakingObject.Stakers[:idx], stakingObject.Stakers[idx+1:]...)
+
+			// update StakingObject
+			bts, err := rlp.EncodeToBytes(stakingObject)
+			if err != nil {
+				return nil, err
+			}
+			st.state.SetCode(bdls_engine.StakingAddress, bts)
 		}
 	} else {
 		// Increment the nonce for the next transaction

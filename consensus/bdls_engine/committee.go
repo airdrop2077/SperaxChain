@@ -81,18 +81,27 @@ type StakingRequest struct {
 	StakingHash uint64
 }
 
-// The object to be stored in account.Code
-type StakingObject struct {
+// Staker & StakingObject are the structures stored in
+// StakingAddress's Account.Code for staking related information
+// A single Staker
+type Staker struct {
+	// the Staker's address
+	Address common.Address
 	// the 1st block expected to participant in validator and proposer
 	StakingFrom uint64
 	// the last block to participant in validator and proposer, the tokens will be refunded
 	// to participants' addresses after this block has mined
 	StakingTo uint64
-	// the random number for block seed verfication, random nubmers(R) in futureBlock will be
-	// hashed for (futureBlock - stakingFrom) times must be equal to StakingHash
+	// StakingHash is the last hash in hashchain,  random nubmers(R) in futureBlock
+	// will be hashed for (futureBlock - stakingFrom) times to match with StakingHash.
 	StakingHash uint64
 	// records the number of tokens staked
 	StakedValue *big.Int
+}
+
+// The object to be stored in StakingAddress's Account.Code
+type StakingObject struct {
+	Stakers []Staker // staker's, expired stakers will automatically be removed
 }
 
 // RandAtBlock calculates random number W based on block information
