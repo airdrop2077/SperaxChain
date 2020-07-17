@@ -256,20 +256,13 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	)
 	if contractCreation {
 		ret, _, st.gas, vmerr = st.evm.Create(sender, st.data, st.gas, st.value)
-	} else {
+	} else if *msg.To() == bdls_engine.StakingAddress {
 		// Increment the nonce for the next transaction
 		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-		ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
-	}
-	st.refundGas()
-	st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
-
-	//
-	// Sperax Staking Rules
-	//
-	// sending tokens to StakingAddress will trigger staking operations
-	if *msg.To() == bdls_engine.StakingAddress {
+		// Sperax Staking Rules
+		// sending tokens to StakingAddress will trigger staking operations
 		// decode staking message in msg.Payload
+		// this procedure will bypass EVM
 		var req bdls_engine.StakingRequest
 		rlp.DecodeBytes(msg.Data(), &req)
 		switch req.StakingOp {
@@ -287,6 +280,10 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 				if err != nil {
 					return nil, err
 				}
+
+				// transfer from msg.From to StakingAddress manually
+				st.state.AddBalance(bdls_engine.StakingAddress, st.value)
+				st.state.SubBalance(msg.From(), st.value)
 
 				st.state.SetCode(msg.From(), bts)
 			} else {
@@ -312,7 +309,13 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 				st.state.SetCode(msg.From(), nil)
 			}
 		}
+	} else {
+		// Increment the nonce for the next transaction
+		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+		ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
 	}
+	st.refundGas()
+	st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
 
 	return &ExecutionResult{
 		UsedGas:    st.gasUsed(),
