@@ -51,15 +51,7 @@ var (
 		ByzantiumBlock:      big.NewInt(0),
 		ConstantinopleBlock: big.NewInt(0),
 		PetersburgBlock:     big.NewInt(0),
-		BDLS: &BDLSConfig{
-			Participants: []common.Address{
-				// Initial validators
-				common.HexToAddress("0xf2580391fe8a83366ed550de4e45af1714d74b8d"),
-				common.HexToAddress("0x066aaff9e575302365b7862dcebd4a5a65f75f5f"),
-				common.HexToAddress("0x3f80e8718d8e17a1768b467f193a6fbeaa6236e3"),
-				common.HexToAddress("0x29d3fbe3e7983a41d0e6d984c480ceedb3c251fd"),
-			},
-		},
+		BDLS:                &BDLSConfig{},
 	}
 
 	// TestnetChainConfig is the chain parameters to run a node on the test network.
@@ -72,15 +64,7 @@ var (
 		ByzantiumBlock:      big.NewInt(0),
 		ConstantinopleBlock: big.NewInt(0),
 		PetersburgBlock:     big.NewInt(0),
-		BDLS: &BDLSConfig{
-			Participants: []common.Address{
-				// Initial validators
-				common.HexToAddress("0xf2580391fe8a83366ed550de4e45af1714d74b8d"),
-				common.HexToAddress("0x066aaff9e575302365b7862dcebd4a5a65f75f5f"),
-				common.HexToAddress("0x3f80e8718d8e17a1768b467f193a6fbeaa6236e3"),
-				common.HexToAddress("0x29d3fbe3e7983a41d0e6d984c480ceedb3c251fd"),
-			},
-		},
+		BDLS:                &BDLSConfig{},
 	}
 
 	// AllEthashProtocolChanges contains every protocol change (EIPs) introduced
@@ -179,7 +163,6 @@ type ChainConfig struct {
 // BDLSConfig is the consensus engine configs for BDLS  based sealing.
 type BDLSConfig struct {
 	// The initial participants
-	Participants []common.Address
 }
 
 // String implements the stringer interface, returning the consensus engine details.

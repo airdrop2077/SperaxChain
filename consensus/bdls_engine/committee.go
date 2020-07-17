@@ -39,9 +39,11 @@ import (
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/common/hexutil"
 	"github.com/Sperax/SperaxChain/consensus"
+	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/crypto"
 	"github.com/Sperax/SperaxChain/params"
+	"github.com/Sperax/SperaxChain/rlp"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -105,6 +107,20 @@ type Staker struct {
 // The object to be stored in StakingAddress's Account.Code
 type StakingObject struct {
 	Stakers []Staker // staker's, expired stakers will automatically be removed
+}
+
+// GetStakingObject returns the stakingObject at some state
+func (e *BDLSEngine) GetStakingObject(state *state.StateDB) (*StakingObject, error) {
+	var stakingObject StakingObject
+	// retrieve committe data structure from code
+	code := state.GetCode(StakingAddress)
+	if code != nil {
+		err := rlp.DecodeBytes(code, &stakingObject)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &stakingObject, nil
 }
 
 // RandAtBlock calculates random number W based on block information

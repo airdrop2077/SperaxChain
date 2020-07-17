@@ -301,12 +301,23 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 
 	// TODO: to set the participants based on some rules.
 	// currently it's fixed to initial validator
-	participants := chain.Config().BDLS.Participants
-	// type conversion in BDLS core
-	for k := range participants {
-		var identity bdls.Identity
-		copy(identity[:], participants[k][:])
-		config.Participants = append(config.Participants, identity)
+	state, err := e.stateAt(header.ParentHash)
+	if err != nil {
+		return errors.New("Error in getting the block's parent's state")
+	}
+
+	stakingObject, err := e.GetStakingObject(state)
+	if err != nil {
+		return errors.New("Error in getting staking Object")
+	}
+
+	for k := range stakingObject.Stakers {
+		staker := &stakingObject.Stakers[k]
+		if staker.StakingTo >= header.Number.Uint64() {
+			var identity bdls.Identity
+			copy(identity[:], staker.Address.Bytes())
+			config.Participants = append(config.Participants, identity)
+		}
 	}
 	e.shuffleParticipants(config.Participants, parent.Hash())
 
@@ -379,7 +390,6 @@ func (e *BDLSEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *ty
 // Note, the method returns immediately and will send the result async. More
 // than one result may also be returned depending on the consensus algorithm.
 func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
-	// TODO: check my role (validator or proposer)
 	go e.consensusTask(chain, block, results, stop)
 	return nil
 }
@@ -429,6 +439,18 @@ WAIT_FOR_PRIVATEKEY:
 
 	// start new consensus round
 	e.mu.Lock()
+
+	// TODO(xtaci): correctly set participants based on rules
+	state, err := e.stateAt(block.Header().ParentHash)
+	if err != nil {
+		log.Error("consensusTask - Error in getting the block's parent's state", "parentHash", block.Header().ParentHash.Hex(), "err", err)
+		return
+	}
+	stakingObject, err := e.GetStakingObject(state)
+	if err != nil {
+		log.Error("consensusTask - Error in getting staking Object", "parentHash", block.Header().ParentHash.Hex(), "err", err)
+		return
+	}
 
 	// step 1. prepare callbacks(closures)
 	// we need to prepare 3 closures for this height, one to track proposals from local or remote,
@@ -548,9 +570,9 @@ WAIT_FOR_PRIVATEKEY:
 
 			// step 4. record or replace this block, the coinbase has verified against signature in VerifyProposal
 			signer := crypto.PubkeyToAddress(*signed.PublicKey(e.ephermalKey.Curve))
-			participants := chain.Config().BDLS.Participants
-			for k := range participants {
-				if participants[k] == signer { // valid participants
+			for k := range stakingObject.Stakers {
+				staker := &stakingObject.Stakers[k]
+				if staker.Address == signer { // valid participants
 					// try to check if previous proposals has been rejected by consensus core
 					var effectiveBlocks []*types.Block
 					for _, pBlock := range knownProposals[signer] {
@@ -596,13 +618,13 @@ WAIT_FOR_PRIVATEKEY:
 		MessageOutCallback: messageOutCallback,
 	}
 
-	// TODO(xtaci): correctly set participants based on rules
-	participants := chain.Config().BDLS.Participants
-	// identity conversion from common.Address
-	for k := range participants {
-		var identity bdls.Identity
-		copy(identity[:], participants[k][:])
-		config.Participants = append(config.Participants, identity)
+	for k := range stakingObject.Stakers {
+		staker := &stakingObject.Stakers[k]
+		if staker.StakingTo >= block.NumberU64() {
+			var identity bdls.Identity
+			copy(identity[:], staker.Address.Bytes())
+			config.Participants = append(config.Participants, identity)
+		}
 	}
 
 	e.shuffleParticipants(config.Participants, e.RandAtBlock(chain, block))
