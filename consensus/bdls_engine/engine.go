@@ -289,8 +289,8 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		return consensus.ErrUnknownAncestor
 	}
 
-	// step 0. Check decision field is not nil
-	if len(header.Decision) == 0 {
+	// step 0. Check proof field is not nil
+	if len(header.Proof) == 0 {
 		return errEmptyDecision
 	}
 
@@ -341,7 +341,7 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 	}
 
 	// step 5. validate decide message to the block
-	err = consensus.ValidateDecideMessage(header.Decision, sealHash)
+	err = consensus.ValidateDecideMessage(header.Proof, sealHash)
 	if err != nil {
 		log.Debug("VerifySeal", "consensus..ValidateDecideMessage", err)
 		return err
@@ -370,8 +370,38 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 		header.Time = uint64(time.Now().Unix())
 	}
 
+	// TODO(xtaci): correctly set participants based on rules
+	state, err := e.stateAt(header.ParentHash)
+	if err != nil {
+		log.Error("consensusTask - Error in getting the block's parent's state", "parentHash", header.ParentHash.Hex(), "err", err)
+		return errors.New("stateAt")
+	}
+	stakingObject, err := e.GetStakingObject(state)
+	if err != nil {
+		log.Error("consensusTask - Error in getting staking Object", "parentHash", header.ParentHash.Hex(), "err", err)
+		return errors.New("GetStakingObject")
+	}
 	// set W
 	header.W = e.RandAtBlock(chain, header)
+
+	// set R
+	privateKey := e.waitForPrivateKey(header.Coinbase, nil)
+	for k := range stakingObject.Stakers {
+		staker := stakingObject.Stakers[k]
+		if staker.Address == header.Coinbase {
+			seed := e.deriveStakingSeed(privateKey, staker.StakingFrom)
+			header.R = common.BytesToHash(e.hashChain(seed, header.Number.Uint64()-staker.StakingFrom))
+			break
+		}
+	}
+
+	// set proposer's Proof
+	sign, err := crypto.Sign(header.Hash().Bytes(), privateKey)
+	if err != nil {
+		log.Error("cyrpto.sign", "error", err)
+		return err
+	}
+	header.Proof = sign
 
 	return nil
 }
@@ -409,27 +439,23 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 	return nil
 }
 
-// a consensus task for a specific block
-func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) {
+func (e *BDLSEngine) waitForPrivateKey(coinbase common.Address, stop <-chan struct{}) *ecdsa.PrivateKey {
 	// get to private key from account manager
-	var privateKey *ecdsa.PrivateKey
-WAIT_FOR_PRIVATEKEY:
 	for {
 		select {
 		case <-stop:
-			results <- nil
-			return
+			return nil
 		default:
-			log.Debug("looking for the wallet of coinbase:", "coinbase", block.Coinbase())
+			log.Debug("looking for the wallet of coinbase:", "coinbase", coinbase)
 			e.mu.Lock()
-			wallet, err := e.accountManager.Find(accounts.Account{Address: block.Coinbase()})
+			wallet, err := e.accountManager.Find(accounts.Account{Address: coinbase})
 			if err != nil {
 				e.mu.Unlock()
-				log.Error("cannot find the wallet of coinbase", "coinbase", block.Coinbase())
-				return
+				log.Error("cannot find the wallet of coinbase", "coinbase", coinbase)
+				return nil
 			}
 
-			priv, err := wallet.GetPrivateKey(accounts.Account{Address: block.Coinbase()})
+			priv, err := wallet.GetPrivateKey(accounts.Account{Address: coinbase})
 			if err != nil {
 				e.mu.Unlock()
 				<-time.After(time.Second) // wait for a second before retry
@@ -437,11 +463,14 @@ WAIT_FOR_PRIVATEKEY:
 			}
 			e.mu.Unlock()
 
-			privateKey = priv
-			break WAIT_FOR_PRIVATEKEY
+			return priv
 		}
 	}
+}
 
+// a consensus task for a specific block
+func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) {
+	privateKey := e.waitForPrivateKey(block.Coinbase(), stop)
 	// time compensation to avoid fast block generation
 	delay := time.Unix(int64(block.Header().Time), 0).Sub(time.Now())
 	// wait for the timestamp of header, use this to adjust the block period
@@ -558,61 +587,55 @@ WAIT_FOR_PRIVATEKEY:
 				return false
 			}
 
-			// step 1. verify header
 			header := blk.Header()
+			// verify the block number
+			if header.Number.Uint64() != block.Number().Uint64() {
+				log.Warn("mismatched block number", "actual", header.Number.Uint64(), "expected", block.Number().Uint64())
+				return false
+			}
+
+			// verify header fields
 			if err := e.verifyHeader(chain, header, nil); err != nil {
 				log.Error("verifyHeader", "err", err)
 				return false
 			}
 
-			// verify if the coinbase is the valid proposer
-			if !e.IsProposer(chain, header, stakingObject) {
-				log.Error("invalid proposer at given height", "height", header.Number, "proposer", header.Coinbase)
-				return false
-			}
-
-			// extra check that the decision field is 0-length
-			if len(header.Decision) != 0 {
-				log.Error("non-empty decision field in proposed block", "decision", header.Decision)
-				return false
-			}
-
-			// step 2. compare hash with block in auxdata
+			// ensure the hash is to the block in auxdata
 			if header.Hash() != common.BytesToHash(m.State) {
 				log.Error("messageValidator auxdata hash", "block hash", header.Hash(), "state hash", common.BytesToHash(m.State))
 				return false
 			}
 
-			// step 3. validate the proposed block content
-			if !e.verifyProposal(&blk) {
-				log.Error("verify Proposal block failed")
+			// ensure it's a valid proposer
+			if !e.verifyProposer(chain, stakingObject, header) {
+				log.Error("verifyProposer failed")
 				return false
 			}
 
-			// step 4. record or replace this block, the coinbase has verified against signature in VerifyProposal
-			signer := crypto.PubkeyToAddress(*signed.PublicKey(e.ephermalKey.Curve))
-			for k := range stakingObject.Stakers {
-				staker := &stakingObject.Stakers[k]
-				if staker.Address == signer { // valid participants
-					// try to check if previous proposals has been rejected by consensus core
-					var effectiveBlocks []*types.Block
-					for _, pBlock := range knownProposals[signer] {
-						if pBlock.Hash() == blk.Hash() { // remove the duplicated previous proposals
-							continue
-						} else if c.HasProposed(pBlock.Hash().Bytes()) { // effective proposal
-							effectiveBlocks = append(effectiveBlocks, pBlock)
-						}
-					}
+			// validate the states of transactions
+			if !e.verifyStates(&blk) {
+				log.Error("verifyStates failed")
+				return false
+			}
 
-					// always record current proposal of this signer
-					effectiveBlocks = append(effectiveBlocks, &blk)
-					knownProposals[signer] = effectiveBlocks
-					return true
+			// try to check if previous proposals has been rejected by consensus core
+			var effectiveBlocks []*types.Block
+			for _, pBlock := range knownProposals[block.Coinbase()] {
+				if pBlock.Hash() == blk.Hash() { // remove the duplicated previous proposals
+					continue
+				} else if c.HasProposed(pBlock.Hash().Bytes()) { // effective proposal
+					effectiveBlocks = append(effectiveBlocks, pBlock)
 				}
 			}
 
-			log.Error("cannot find signer in participant", "addr", signer)
-			return false
+			// always record latest proposal of a block
+			effectiveBlocks = append(effectiveBlocks, &blk)
+			knownProposals[blk.Coinbase()] = effectiveBlocks
+
+			// if the incoming block in <roundchange> message is valid
+			// propose this block to consensus
+			c.Propose(header.Hash().Bytes())
+			return true
 		}
 
 		return true
@@ -677,6 +700,11 @@ WAIT_FOR_PRIVATEKEY:
 	updateTick := time.NewTicker(20 * time.Millisecond)
 	defer updateTick.Stop()
 
+	// if i'm the proposer, propose the block
+	if e.IsProposer(chain, block.Header(), stakingObject) {
+		consensus.Propose(block.Hash().Bytes())
+	}
+
 	// the core consensus message loop
 	log.Warn("CONSENSUS TASK STARTED", "coinbase", block.Coinbase(), "height", block.NumberU64())
 	for {
@@ -689,7 +717,8 @@ WAIT_FOR_PRIVATEKEY:
 					log.Error("proto.Unmarshal", "err", err)
 				}
 
-				switch em.Type { // depends on message types
+				// we add an extra encapsulation for consensus contents
+				switch em.Type {
 				case EngineMessageType_Proposal:
 					var blk types.Block
 					err := rlp.DecodeBytes(em.Message, &blk)
@@ -698,10 +727,28 @@ WAIT_FOR_PRIVATEKEY:
 						continue
 					}
 
-					// validate proposer's block
-					// check block's parent
-					if !e.verifyProposal(&blk) {
-						log.Error("verify Proposal block failed")
+					header := blk.Header()
+					// verify the block number
+					if header.Number.Uint64() != block.Number().Uint64() {
+						log.Warn("mismatched block number", "actual", header.Number.Uint64(), "expected", block.Number().Uint64())
+						continue
+					}
+
+					// verify header fields
+					if err := e.verifyHeader(chain, header, nil); err != nil {
+						log.Error("verifyHeader", "err", err)
+						continue
+					}
+
+					// ensure it's a valid proposer
+					if !e.verifyProposer(chain, stakingObject, header) {
+						log.Error("verifyProposer failed")
+						continue
+					}
+
+					// validate the states of transactions
+					if !e.verifyStates(&blk) {
+						log.Error("verifyStates failed")
 						continue
 					}
 
@@ -730,7 +777,7 @@ WAIT_FOR_PRIVATEKEY:
 							}
 
 							// store the the proof in block header
-							header.Decision = bts
+							header.Proof = bts
 
 							// broadcast the mined block if i'm the proposer
 							mined := newblock.WithSeal(header)
@@ -753,8 +800,37 @@ WAIT_FOR_PRIVATEKEY:
 	return
 }
 
-// VerifyProposalBlock implements blockchain specific block validator
-func (e *BDLSEngine) verifyProposal(block *types.Block) bool {
+// verify the proposer in block header
+func (e *BDLSEngine) verifyProposer(chain consensus.ChainReader, stakingObject *StakingObject, header *types.Header) bool {
+	// ensure the coinbase is a valid proposer
+	if !e.IsProposer(chain, header, stakingObject) {
+		log.Error("invalid proposer at given height", "height", header.Number, "proposer", header.Coinbase)
+		return false
+	}
+
+	// ensure the block proposer is identical to coinbase
+	copyHeader := types.CopyHeader(header)
+	copyHeader.Proof = nil
+	pk, err := crypto.Ecrecover(copyHeader.Hash().Bytes(), header.Proof)
+	if err != nil {
+		log.Error("ecrecover", "err", err)
+		return false
+	}
+	if !crypto.VerifySignature(pk, copyHeader.Hash().Bytes(), header.Proof) {
+		log.Error("verify signature")
+		return false
+	}
+
+	pubkey, _ := crypto.DecompressPubkey(pk)
+	signer := crypto.PubkeyToAddress(*pubkey)
+	if signer != header.Coinbase {
+		log.Error("signer do not match coinbase", "signer", pubkey, "coinbase", header.Coinbase)
+	}
+	return true
+}
+
+// verify states in block
+func (e *BDLSEngine) verifyStates(block *types.Block) bool {
 	// TODO: match proposer set
 
 	// check bad block
@@ -802,7 +878,7 @@ func (e *BDLSEngine) verifyProposal(block *types.Block) bool {
 // SealHash returns the hash of a block prior to it being sealed.
 func (e *BDLSEngine) SealHash(header *types.Header) (hash common.Hash) {
 	copied := types.CopyHeader(header)
-	copied.Decision = nil
+	copied.Proof = nil
 	return copied.Hash()
 }
 

@@ -83,9 +83,11 @@ type Header struct {
 	Extra       []byte         `json:"extraData"        gencodec:"required"`
 	MixDigest   common.Hash    `json:"mixHash"`
 	Nonce       BlockNonce     `json:"nonce"`
-	Decision    []byte         `json:"decision"        gencodec:"required"`
-	R           common.Hash    `json:"R"        gencodec:"required"`
-	W           common.Hash    `json:"W"        gencodec:"required"`
+
+	// Sperax Consensus Extension
+	Proof []byte      `json:"proof"        gencodec:"required"` // proof could be signature of proposer or decide proof
+	R     common.Hash `json:"R"        gencodec:"required"`
+	W     common.Hash `json:"W"        gencodec:"required"`
 }
 
 // field type overrides for gencodec
@@ -96,7 +98,7 @@ type headerMarshaling struct {
 	GasUsed    hexutil.Uint64
 	Time       hexutil.Uint64
 	Extra      hexutil.Bytes
-	Decision   hexutil.Bytes
+	Proof      hexutil.Bytes
 	Hash       common.Hash `json:"hash"` // adds call to Hash() in MarshalJSON
 }
 
@@ -111,7 +113,7 @@ var headerSize = common.StorageSize(reflect.TypeOf(Header{}).Size())
 // Size returns the approximate memory used by all internal contents. It is used
 // to approximate and limit the memory consumption of various caches.
 func (h *Header) Size() common.StorageSize {
-	return headerSize + common.StorageSize(len(h.Decision)+len(h.Extra)+(h.Difficulty.BitLen()+h.Number.BitLen())/8)
+	return headerSize + common.StorageSize(len(h.Proof)+len(h.Extra)+(h.Difficulty.BitLen()+h.Number.BitLen())/8)
 }
 
 // SanityCheck checks a few basic things -- these checks are way beyond what
@@ -130,7 +132,7 @@ func (h *Header) SanityCheck() error {
 	if eLen := len(h.Extra); eLen > 100*1024 {
 		return fmt.Errorf("too large block extradata: size %d", eLen)
 	}
-	if eLen := len(h.Decision); eLen > 1024*1024 {
+	if eLen := len(h.Proof); eLen > 1024*1024 {
 		return fmt.Errorf("too large block decision: size %d", eLen)
 	}
 
@@ -260,9 +262,9 @@ func CopyHeader(h *Header) *Header {
 		cpy.Extra = make([]byte, len(h.Extra))
 		copy(cpy.Extra, h.Extra)
 	}
-	if len(h.Decision) > 0 {
-		cpy.Decision = make([]byte, len(h.Decision))
-		copy(cpy.Decision, h.Decision)
+	if len(h.Proof) > 0 {
+		cpy.Proof = make([]byte, len(h.Proof))
+		copy(cpy.Proof, h.Proof)
 	}
 	return &cpy
 }
@@ -329,7 +331,7 @@ func (b *Block) TxHash() common.Hash      { return b.header.TxHash }
 func (b *Block) ReceiptHash() common.Hash { return b.header.ReceiptHash }
 func (b *Block) UncleHash() common.Hash   { return b.header.UncleHash }
 func (b *Block) Extra() []byte            { return common.CopyBytes(b.header.Extra) }
-func (b *Block) Decision() []byte         { return common.CopyBytes(b.header.Decision) }
+func (b *Block) Decision() []byte         { return common.CopyBytes(b.header.Proof) }
 func (b *Block) R() common.Hash           { return b.header.R }
 func (b *Block) W() common.Hash           { return b.header.W }
 
