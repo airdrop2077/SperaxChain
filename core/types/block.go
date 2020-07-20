@@ -85,6 +85,7 @@ type Header struct {
 	Nonce       BlockNonce     `json:"nonce"`
 	Decision    []byte         `json:"decision"        gencodec:"required"`
 	R           common.Hash    `json:"R"        gencodec:"required"`
+	W           common.Hash    `json:"W"        gencodec:"required"`
 }
 
 // field type overrides for gencodec
@@ -330,6 +331,7 @@ func (b *Block) UncleHash() common.Hash   { return b.header.UncleHash }
 func (b *Block) Extra() []byte            { return common.CopyBytes(b.header.Extra) }
 func (b *Block) Decision() []byte         { return common.CopyBytes(b.header.Decision) }
 func (b *Block) R() common.Hash           { return b.header.R }
+func (b *Block) W() common.Hash           { return b.header.W }
 
 func (b *Block) Header() *Header { return CopyHeader(b.header) }
 

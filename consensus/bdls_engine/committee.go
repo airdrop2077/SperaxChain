@@ -133,14 +133,13 @@ func (e *BDLSEngine) RandAtBlock(chain consensus.ChainReader, header *types.Head
 		return W0
 	}
 
-	// call RandAtABlock recursivly
 	hasher := sha3.NewLegacyKeccak256()
+
+	// derive Wj from Pj-1 & Wj-1
 	prevBlock := chain.GetBlock(header.ParentHash, header.Number.Uint64()-1)
 	coinbase := prevBlock.Coinbase()
 	hasher.Write(coinbase[:])
-	// TODO: if W has written in block header, then we can stop recursion.
-	prevW := e.RandAtBlock(chain, prevBlock.Header())
-	hasher.Write(prevW[:])
+	hasher.Write(prevBlock.W().Bytes()) // write Wj-1
 	return common.BytesToHash(hasher.Sum(nil))
 }
 

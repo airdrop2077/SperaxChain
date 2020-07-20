@@ -73,6 +73,8 @@ var (
 	errUnknownBlock = errors.New("unknown block")
 	// errInvalidDifficulty is returned if the difficulty of a block is not 1
 	errInvalidDifficulty = errors.New("invalid difficulty")
+	// errInvalidW
+	errInvalidW = errors.New("invalid W")
 	// errInvalidUncleHash is returned if a block contains an non-empty uncle list.
 	errInvalidUncleHash = errors.New("non empty uncle hash")
 	// errInvalidNonce is returned if a block's nonce is invalid
@@ -219,6 +221,11 @@ func (e *BDLSEngine) verifyHeader(chain consensus.ChainReader, header *types.Hea
 		return errInvalidDifficulty
 	}
 
+	// Verify W has correctly set
+	if e.RandAtBlock(chain, header) != header.W {
+		return errInvalidW
+	}
+
 	// Ensure that the block's timestamp isn't too close to it's parent
 	var parent *types.Header
 	if len(parents) > 0 {
@@ -362,6 +369,9 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 	if header.Time < uint64(time.Now().Unix()) {
 		header.Time = uint64(time.Now().Unix())
 	}
+
+	// set W
+	header.W = e.RandAtBlock(chain, header)
 
 	return nil
 }
