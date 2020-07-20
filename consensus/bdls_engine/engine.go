@@ -439,8 +439,8 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 	return nil
 }
 
+// waitForPrivateKey gets private key from account manager
 func (e *BDLSEngine) waitForPrivateKey(coinbase common.Address, stop <-chan struct{}) *ecdsa.PrivateKey {
-	// get to private key from account manager
 	for {
 		select {
 		case <-stop:
