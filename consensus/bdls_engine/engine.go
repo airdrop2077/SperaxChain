@@ -34,6 +34,7 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"errors"
+	fmt "fmt"
 	"math/big"
 	"sync"
 	"time"
@@ -299,8 +300,8 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		PubKeyToIdentity: PubKeyToIdentity,
 	}
 
-	// TODO: to set the participants based on some rules.
-	// currently it's fixed to initial validator
+	// step 3. check if the coinbase is a valid proposer at given height
+	// NOTE(xtaci): the state is related to some HEIGHT
 	state, err := e.stateAt(header.ParentHash)
 	if err != nil {
 		return errors.New("Error in getting the block's parent's state")
@@ -311,6 +312,11 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		return errors.New("Error in getting staking Object")
 	}
 
+	if !e.IsProposer(chain, header, stakingObject) {
+		return errors.New(fmt.Sprint("Not a valid proposer at height", header.Number))
+	}
+
+	// step 4. create the consensus object along with participants to validate decide message
 	for k := range stakingObject.Stakers {
 		staker := &stakingObject.Stakers[k]
 		if staker.StakingTo >= header.Number.Uint64() {
@@ -321,14 +327,13 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 	}
 	e.shuffleParticipants(config.Participants, parent.Hash())
 
-	// step 3. create the consensus object to validate decide message
 	consensus, err := bdls.NewConsensus(config)
 	if err != nil {
 		log.Error("VerifySeal", "bdls.NewConsensus", err)
 		return err
 	}
 
-	// step 4. validate decide message to the block
+	// step 5. validate decide message to the block
 	err = consensus.ValidateDecideMessage(header.Decision, sealHash)
 	if err != nil {
 		log.Debug("VerifySeal", "consensus..ValidateDecideMessage", err)
@@ -550,6 +555,12 @@ WAIT_FOR_PRIVATEKEY:
 				return false
 			}
 
+			// verify if the coinbase is the valid proposer
+			if !e.IsProposer(chain, header, stakingObject) {
+				log.Error("invalid proposer at given height", "height", header.Number, "proposer", header.Coinbase)
+				return false
+			}
+
 			// extra check that the decision field is 0-length
 			if len(header.Decision) != 0 {
 				log.Error("non-empty decision field in proposed block", "decision", header.Decision)
@@ -627,7 +638,7 @@ WAIT_FOR_PRIVATEKEY:
 		}
 	}
 
-	e.shuffleParticipants(config.Participants, e.RandAtBlock(chain, block))
+	e.shuffleParticipants(config.Participants, e.RandAtBlock(chain, block.Header()))
 	e.mu.Unlock()
 
 	// step 3. create the consensus object

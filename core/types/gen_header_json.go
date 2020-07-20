@@ -32,6 +32,7 @@ func (h Header) MarshalJSON() ([]byte, error) {
 		MixDigest   common.Hash    `json:"mixHash"`
 		Nonce       BlockNonce     `json:"nonce"`
 		Decision    hexutil.Bytes  `json:"decision"        gencodec:"required"`
+		R           common.Hash    `json:"R"        gencodec:"required"`
 		Hash        common.Hash    `json:"hash"`
 	}
 	var enc Header
@@ -51,6 +52,7 @@ func (h Header) MarshalJSON() ([]byte, error) {
 	enc.MixDigest = h.MixDigest
 	enc.Nonce = h.Nonce
 	enc.Decision = h.Decision
+	enc.R = h.R
 	enc.Hash = h.Hash()
 	return json.Marshal(&enc)
 }
@@ -74,6 +76,7 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		MixDigest   *common.Hash    `json:"mixHash"`
 		Nonce       *BlockNonce     `json:"nonce"`
 		Decision    *hexutil.Bytes  `json:"decision"        gencodec:"required"`
+		R           *common.Hash    `json:"R"        gencodec:"required"`
 	}
 	var dec Header
 	if err := json.Unmarshal(input, &dec); err != nil {
@@ -141,5 +144,9 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		return errors.New("missing required field 'decision' for Header")
 	}
 	h.Decision = *dec.Decision
+	if dec.R == nil {
+		return errors.New("missing required field 'R' for Header")
+	}
+	h.R = *dec.R
 	return nil
 }

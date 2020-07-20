@@ -298,6 +298,9 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			st.state.AddBalance(bdls_engine.StakingAddress, st.value)
 			st.state.SubBalance(msg.From(), st.value)
 
+			// trace total staking
+			stakingObject.TotalStaked.Add(stakingObject.TotalStaked, st.value)
+
 			// update StakingObject
 			stakingObject.Stakers = append(stakingObject.Stakers, staker)
 			bts, err := rlp.EncodeToBytes(stakingObject)
@@ -325,6 +328,8 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			st.state.AddBalance(msg.From(), staker.StakedValue)
 			st.state.SubBalance(bdls_engine.StakingAddress, staker.StakedValue)
 
+			// trace total staking
+			stakingObject.TotalStaked.Sub(stakingObject.TotalStaked, staker.StakedValue)
 			// clear staker's information after redeeming
 			stakingObject.Stakers = append(stakingObject.Stakers[:idx], stakingObject.Stakers[idx+1:]...)
 
