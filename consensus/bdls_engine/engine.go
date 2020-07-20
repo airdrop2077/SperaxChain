@@ -290,7 +290,7 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 	}
 
 	// step 0. Check proof field is not nil
-	if len(header.Proof) == 0 {
+	if len(header.Decision) == 0 {
 		return errEmptyDecision
 	}
 
@@ -341,7 +341,7 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 	}
 
 	// step 5. validate decide message to the block
-	err = consensus.ValidateDecideMessage(header.Proof, sealHash)
+	err = consensus.ValidateDecideMessage(header.Decision, sealHash)
 	if err != nil {
 		log.Debug("VerifySeal", "consensus..ValidateDecideMessage", err)
 		return err
@@ -395,13 +395,13 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 		}
 	}
 
-	// set proposer's Proof
+	// set proposer's signature
 	sign, err := crypto.Sign(header.Hash().Bytes(), privateKey)
 	if err != nil {
 		log.Error("cyrpto.sign", "error", err)
 		return err
 	}
-	header.Proof = sign
+	header.Signature = sign
 
 	return nil
 }
@@ -468,6 +468,36 @@ func (e *BDLSEngine) waitForPrivateKey(coinbase common.Address, stop <-chan stru
 	}
 }
 
+// verify the proposal block
+func (e *BDLSEngine) verifyProposal(chain consensus.ChainReader, block *types.Block, height uint64, stakingObject *StakingObject) bool {
+	header := block.Header()
+	// verify the block number
+	if header.Number.Uint64() != height {
+		log.Warn("mismatched block number", "actual", header.Number.Uint64(), "expected", height)
+		return false
+	}
+
+	// verify header fields
+	if err := e.verifyHeader(chain, header, nil); err != nil {
+		log.Error("verifyHeader", "err", err)
+		return false
+	}
+
+	// ensure it's a valid proposer
+	if !e.verifyProposer(chain, stakingObject, header) {
+		log.Error("verifyProposer failed")
+		return false
+	}
+
+	// validate the states of transactions
+	if !e.verifyStates(block) {
+		log.Error("verifyStates failed")
+		return false
+	}
+
+	return true
+}
+
 // a consensus task for a specific block
 func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) {
 	privateKey := e.waitForPrivateKey(block.Coinbase(), stop)
@@ -502,12 +532,12 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	// messages with proposed blocks from remote.
 
 	// known proposed blocks from each participants' <roundchange> messages
-	knownProposals := make(map[common.Address][]*types.Block)
+	allKeptBlocks := make(map[common.Address][]*types.Block)
 
 	// to lookup the block for current consensus height
 	lookupProposal := func(hash common.Hash) *types.Block {
 		// loop to find the block
-		for _, blocks := range knownProposals {
+		for _, blocks := range allKeptBlocks {
 			for _, b := range blocks {
 				if b.Hash() == hash {
 					return b
@@ -526,15 +556,8 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 			// as proposal.
 			blockHash := common.BytesToHash(m.State)
 			var outblock *types.Block
-
-			// find blocks & assembly to auxdata
-			if blockHash == block.Hash() {
-				// locally proposed block
-				outblock = block
-			} else {
-				// externally proposed block
-				outblock = lookupProposal(blockHash)
-			}
+			// externally proposed block
+			outblock = lookupProposal(blockHash)
 
 			// impossible situation here, all outgoing proposals in <roundchange>
 			// are to be known.
@@ -580,61 +603,45 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		case bdls.MessageType_RoundChange:
 			// For incoming <roundchange> message(proposal), we should validate the block sent
 			// via sp.AuxData field, ahead of consensus processing.
-			var blk types.Block
-			err := rlp.DecodeBytes(signed.AuxData, &blk)
+			var proposal types.Block
+			err := rlp.DecodeBytes(signed.AuxData, &proposal)
 			if err != nil {
 				log.Error("messageValidator", "rlp.DecodeBytes", err)
 				return false
 			}
 
-			header := blk.Header()
-			// verify the block number
-			if header.Number.Uint64() != block.Number().Uint64() {
-				log.Warn("mismatched block number", "actual", header.Number.Uint64(), "expected", block.Number().Uint64())
-				return false
-			}
-
-			// verify header fields
-			if err := e.verifyHeader(chain, header, nil); err != nil {
-				log.Error("verifyHeader", "err", err)
-				return false
-			}
-
 			// ensure the hash is to the block in auxdata
-			if header.Hash() != common.BytesToHash(m.State) {
-				log.Error("messageValidator auxdata hash", "block hash", header.Hash(), "state hash", common.BytesToHash(m.State))
+			if proposal.Hash() != common.BytesToHash(m.State) {
+				log.Error("messageValidator auxdata hash", "block hash", proposal.Hash(), "state hash", common.BytesToHash(m.State))
 				return false
 			}
 
-			// ensure it's a valid proposer
-			if !e.verifyProposer(chain, stakingObject, header) {
-				log.Error("verifyProposer failed")
+			// verify proposal
+			if !e.verifyProposal(chain, &proposal, block.NumberU64(), stakingObject) {
+				log.Error("messageValidator verifyProposal failed")
 				return false
 			}
 
-			// validate the states of transactions
-			if !e.verifyStates(&blk) {
-				log.Error("verifyStates failed")
-				return false
-			}
-
-			// try to check if previous proposals has been rejected by consensus core
-			var effectiveBlocks []*types.Block
-			for _, pBlock := range knownProposals[block.Coinbase()] {
-				if pBlock.Hash() == blk.Hash() { // remove the duplicated previous proposals
-					continue
-				} else if c.HasProposed(pBlock.Hash().Bytes()) { // effective proposal
-					effectiveBlocks = append(effectiveBlocks, pBlock)
+			// A simple DoS prevention mechanism:
+			// 1. Remove previously kept blocks which has NOT been accepted in consensus.
+			// 2. Always record the latest proposal from a proposer, before consensus continues
+			var keptBlocks []*types.Block
+			var repeated bool
+			for _, pBlock := range allKeptBlocks[block.Coinbase()] {
+				if c.HasProposed(pBlock.Hash().Bytes()) {
+					keptBlocks = append(keptBlocks, pBlock)
+					// repeated valid block
+					if pBlock.Hash() == proposal.Hash() {
+						repeated = true
+					}
 				}
 			}
 
-			// always record latest proposal of a block
-			effectiveBlocks = append(effectiveBlocks, &blk)
-			knownProposals[blk.Coinbase()] = effectiveBlocks
+			if !repeated { // record latest proposal of a block
+				keptBlocks = append(keptBlocks, &proposal)
+			}
+			allKeptBlocks[proposal.Coinbase()] = keptBlocks
 
-			// if the incoming block in <roundchange> message is valid
-			// propose this block to consensus
-			c.Propose(header.Hash().Bytes())
 			return true
 		}
 
@@ -702,11 +709,16 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 
 	// if i'm the proposer, propose the block
 	if e.IsProposer(chain, block.Header(), stakingObject) {
+		allKeptBlocks[block.Coinbase()] = append(allKeptBlocks[block.Coinbase()], block)
 		consensus.Propose(block.Hash().Bytes())
 	}
 
+	// TODO(xtaci) if i'm the committee member
+
 	// the core consensus message loop
 	log.Warn("CONSENSUS TASK STARTED", "coinbase", block.Coinbase(), "height", block.NumberU64())
+
+	var proposed bool
 	for {
 		select {
 		case obj := <-consensusMessageChan: // consensus message
@@ -720,40 +732,26 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 				// we add an extra encapsulation for consensus contents
 				switch em.Type {
 				case EngineMessageType_Proposal:
-					var blk types.Block
-					err := rlp.DecodeBytes(em.Message, &blk)
-					if err != nil {
-						log.Error("proposerMessage", "rlp.DecodeBytes", err)
-						continue
+					if !proposed {
+						var proposal types.Block
+						err := rlp.DecodeBytes(em.Message, &proposal)
+						if err != nil {
+							log.Error("proposerMessage", "rlp.DecodeBytes", err)
+							continue
+						}
+
+						// verify proposal
+						if !e.verifyProposal(chain, &proposal, block.NumberU64(), stakingObject) {
+							log.Error("messageValidator verifyProposal failed")
+							continue
+						}
+
+						// record & propose the block from a proposer
+						allKeptBlocks[proposal.Coinbase()] = append(allKeptBlocks[proposal.Coinbase()], &proposal)
+						consensus.Propose(proposal.Hash().Bytes())
+						proposed = true
 					}
 
-					header := blk.Header()
-					// verify the block number
-					if header.Number.Uint64() != block.Number().Uint64() {
-						log.Warn("mismatched block number", "actual", header.Number.Uint64(), "expected", block.Number().Uint64())
-						continue
-					}
-
-					// verify header fields
-					if err := e.verifyHeader(chain, header, nil); err != nil {
-						log.Error("verifyHeader", "err", err)
-						continue
-					}
-
-					// ensure it's a valid proposer
-					if !e.verifyProposer(chain, stakingObject, header) {
-						log.Error("verifyProposer failed")
-						continue
-					}
-
-					// validate the states of transactions
-					if !e.verifyStates(&blk) {
-						log.Error("verifyStates failed")
-						continue
-					}
-
-					// confirmed a valid 3rd-party block, propose
-					consensus.Propose(block.Hash().Bytes())
 				case EngineMessageType_Consensus:
 					err := consensus.ReceiveMessage(em.Message, time.Now()) // input to core
 					if err != nil {
@@ -777,7 +775,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 							}
 
 							// store the the proof in block header
-							header.Proof = bts
+							header.Decision = bts
 
 							// broadcast the mined block if i'm the proposer
 							mined := newblock.WithSeal(header)
@@ -810,13 +808,14 @@ func (e *BDLSEngine) verifyProposer(chain consensus.ChainReader, stakingObject *
 
 	// ensure the block proposer is identical to coinbase
 	copyHeader := types.CopyHeader(header)
-	copyHeader.Proof = nil
-	pk, err := crypto.Ecrecover(copyHeader.Hash().Bytes(), header.Proof)
+	copyHeader.Signature = nil
+	copyHeader.Decision = nil
+	pk, err := crypto.Ecrecover(copyHeader.Hash().Bytes(), header.Signature)
 	if err != nil {
 		log.Error("ecrecover", "err", err)
 		return false
 	}
-	if !crypto.VerifySignature(pk, copyHeader.Hash().Bytes(), header.Proof) {
+	if !crypto.VerifySignature(pk, copyHeader.Hash().Bytes(), header.Signature) {
 		log.Error("verify signature")
 		return false
 	}
@@ -878,7 +877,7 @@ func (e *BDLSEngine) verifyStates(block *types.Block) bool {
 // SealHash returns the hash of a block prior to it being sealed.
 func (e *BDLSEngine) SealHash(header *types.Header) (hash common.Hash) {
 	copied := types.CopyHeader(header)
-	copied.Proof = nil
+	copied.Decision = nil
 	return copied.Hash()
 }
 

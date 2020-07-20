@@ -44,6 +44,6 @@ type API struct {
 
 func (api *API) SealHash(header *types.Header) (hash common.Hash) {
 	copied := types.CopyHeader(header)
-	copied.Proof = nil
+	copied.Decision = nil
 	return copied.Hash()
 }
