@@ -191,6 +191,77 @@ func (e *BDLSEngine) IsProposer(chain consensus.ChainReader, header *types.Heade
 	return false
 }
 
+// Count number of votes for a validator
+func (e *BDLSEngine) CountVotes(chain consensus.ChainReader, header *types.Header, stakingObject *StakingObject) uint64 {
+	var numStaked *big.Int
+	var totalStaked *big.Int
+	for k := range stakingObject.Stakers {
+		staker := stakingObject.Stakers[k]
+		if staker.Address == header.Coinbase {
+			if header.Number.Uint64() <= staker.StakingFrom {
+				log.Error("header block number is smaller than which the proposer announced(stakingFrom)")
+				return 0
+			} else if common.BytesToHash(e.hashChain(staker.StakingHash.Bytes(), header.Number.Uint64()-staker.StakingFrom)) != header.R {
+				// verify hashchain
+				log.Error("Invalid random number specified in the header.R")
+				return 0
+			} else {
+				numStaked = staker.StakedValue
+				totalStaked = stakingObject.TotalStaked
+				break
+			}
+		}
+	}
+
+	W := e.RandAtBlock(chain, header)
+	// compute p'
+	// p' = E2* numStaked /totalStaked
+	p := big.NewFloat(0).SetInt(E2)
+	p.Mul(p, big.NewFloat(0).SetInt(Alpha))
+	p.Quo(p, big.NewFloat(0).SetInt(totalStaked))
+
+	maxVotes := numStaked.Uint64() / Alpha.Uint64()
+
+	// compute validator's hash
+	validatorHash := e.validatorHash(header.Number.Uint64(), header.R, W)
+
+	// calculate H/MaxUint256
+	h := big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(validatorHash.Bytes()))
+	h.Quo(h, MaxUint256)
+
+	var votes uint64
+	binominal := big.NewInt(0)
+	for i := uint64(1); i < maxVotes; i++ {
+		// computes binomial
+		sum := big.NewFloat(0)
+		for j := uint64(0); j <= i; j++ {
+			coefficient := big.NewFloat(float64(binominal.Binomial(int64(maxVotes), int64(j)).Uint64()))
+			a := Pow(p, j)
+			b := Pow(big.NewFloat(0.0).Sub(big.NewFloat(1.0), p), maxVotes-j)
+			r := big.NewFloat(0.0)
+			r.Mul(a, b)
+			r.Mul(r, coefficient)
+			sum.Add(sum, r)
+		}
+
+		// effective vote
+		if sum.Cmp(h) == 1 {
+			votes = i
+		}
+
+	}
+
+	return votes
+}
+
+func Pow(a *big.Float, e uint64) *big.Float {
+	result := big.NewFloat(0.0).Copy(a)
+	for i := uint64(0); i < e-1; i++ {
+		result = big.NewFloat(0.0).Mul(result, a)
+	}
+	return result
+}
+
 // proposerHash computes a hash for proposer's random number
 func (e *BDLSEngine) proposerHash(height uint64, R common.Hash, W common.Hash) common.Hash {
 	hasher := sha3.New256()
