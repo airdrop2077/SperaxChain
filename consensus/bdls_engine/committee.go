@@ -177,15 +177,11 @@ func (e *BDLSEngine) IsProposer(chain consensus.ChainReader, header *types.Heade
 		max = big.NewFloat(0)
 	}
 
-	// compute H
-	hasher := sha3.New256()
-	binary.Write(hasher, binary.LittleEndian, header.Number.Uint64())
-	binary.Write(hasher, binary.LittleEndian, 0)
-	hasher.Write(header.R.Bytes())
-	hasher.Write(W.Bytes())
+	// compute proposer hash
+	proposerHash := e.proposerHash(header.Number.Uint64(), header.R, W)
 
 	// calculate H/MaxUint256
-	h := big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(hasher.Sum(nil)))
+	h := big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(proposerHash.Bytes()))
 	h.Quo(h, MaxUint256)
 
 	// prob compare
@@ -193,6 +189,28 @@ func (e *BDLSEngine) IsProposer(chain consensus.ChainReader, header *types.Heade
 		return true
 	}
 	return false
+}
+
+// proposerHash computes a hash for proposer's random number
+func (e *BDLSEngine) proposerHash(height uint64, R common.Hash, W common.Hash) common.Hash {
+	hasher := sha3.New256()
+	binary.Write(hasher, binary.LittleEndian, height)
+	binary.Write(hasher, binary.LittleEndian, 0)
+	hasher.Write(R.Bytes())
+	hasher.Write(W.Bytes())
+
+	return common.BytesToHash(hasher.Sum(nil))
+}
+
+// validatorHash computes a hash for validator's random number
+func (e *BDLSEngine) validatorHash(height uint64, R common.Hash, W common.Hash) common.Hash {
+	hasher := sha3.New256()
+	binary.Write(hasher, binary.LittleEndian, height)
+	binary.Write(hasher, binary.LittleEndian, 1)
+	hasher.Write(R.Bytes())
+	hasher.Write(W.Bytes())
+
+	return common.BytesToHash(hasher.Sum(nil))
 }
 
 // deriveStakingSeed deterministically derives the random number for height, based on the staking from height and private key
