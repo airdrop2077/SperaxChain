@@ -229,17 +229,17 @@ func (e *BDLSEngine) CountVotes(chain consensus.ChainReader, header *types.Heade
 	h := big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(validatorHash.Bytes()))
 	h.Quo(h, MaxUint256)
 
+	// find the minium possible votes
 	var votes uint64
 	binominal := big.NewInt(0)
-	for i := uint64(1); i < maxVotes; i++ {
+	for i := maxVotes; i >= uint64(1); i-- {
 		// computes binomial
 		sum := big.NewFloat(0)
 		for j := uint64(0); j <= i; j++ {
 			coefficient := big.NewFloat(float64(binominal.Binomial(int64(maxVotes), int64(j)).Uint64()))
 			a := Pow(p, j)
-			b := Pow(big.NewFloat(0.0).Sub(big.NewFloat(1.0), p), maxVotes-j)
-			r := big.NewFloat(0.0)
-			r.Mul(a, b)
+			b := Pow(big.NewFloat(0).Sub(big.NewFloat(1), p), maxVotes-j)
+			r := big.NewFloat(0).Mul(a, b)
 			r.Mul(r, coefficient)
 			sum.Add(sum, r)
 		}
@@ -248,7 +248,6 @@ func (e *BDLSEngine) CountVotes(chain consensus.ChainReader, header *types.Heade
 		if sum.Cmp(h) == 1 {
 			votes = i
 		}
-
 	}
 
 	return votes
