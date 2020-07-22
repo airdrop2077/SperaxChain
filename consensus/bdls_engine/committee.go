@@ -193,7 +193,7 @@ func (e *BDLSEngine) IsProposer(chain consensus.ChainReader, header *types.Heade
 }
 
 // Count number of votes for a validator
-func (e *BDLSEngine) CountVotes(chain consensus.ChainReader, header *types.Header, validator common.Address, stakingObject *StakingObject) uint64 {
+func (e *BDLSEngine) CountVotes(chain consensus.ChainReader, header *types.Header, validator common.Address, validatorR common.Hash, stakingObject *StakingObject) uint64 {
 	var numStaked *big.Int
 	var totalStaked *big.Int
 	for k := range stakingObject.Stakers {
@@ -224,7 +224,7 @@ func (e *BDLSEngine) CountVotes(chain consensus.ChainReader, header *types.Heade
 	maxVotes := numStaked.Uint64() / Alpha.Uint64()
 
 	// compute validator's hash
-	validatorHash := e.validatorHash(header.Number.Uint64(), header.R, W)
+	validatorHash := e.validatorHash(header.Number.Uint64(), validatorR, W)
 
 	// calculate H/MaxUint256
 	h := big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(validatorHash.Bytes()))
@@ -233,7 +233,7 @@ func (e *BDLSEngine) CountVotes(chain consensus.ChainReader, header *types.Heade
 	// find the minium possible votes
 	var votes uint64
 	binominal := big.NewInt(0)
-	for i := maxVotes; i >= uint64(1); i-- {
+	for i := uint64(0); i <= maxVotes; i++ {
 		// computes binomial
 		sum := big.NewFloat(0)
 		for j := uint64(0); j <= i; j++ {

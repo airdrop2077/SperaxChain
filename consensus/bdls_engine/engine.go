@@ -501,8 +501,11 @@ func (e *BDLSEngine) verifyProposal(chain consensus.ChainReader, block *types.Bl
 // a consensus task for a specific block
 func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) {
 	privateKey := e.waitForPrivateKey(block.Coinbase(), stop)
+	publicKey := privateKey.PublicKey
+	address := crypto.PubkeyToAddress(publicKey)
 	// time compensation to avoid fast block generation
 	delay := time.Unix(int64(block.Header().Time), 0).Sub(time.Now())
+
 	// wait for the timestamp of header, use this to adjust the block period
 	select {
 	case <-time.After(delay):
@@ -513,8 +516,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 
 	// start new consensus round
 	e.mu.Lock()
-
-	// TODO(xtaci): correctly set participants based on rules
+	// retrieve staking object at parent height
 	state, err := e.stateAt(block.Header().ParentHash)
 	if err != nil {
 		log.Error("consensusTask - Error in getting the block's parent's state", "parentHash", block.Header().ParentHash.Hex(), "err", err)
@@ -526,6 +528,16 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		return
 	}
 
+	// derive signer's random number for this proposer or block signer
+	var signerRandom []byte
+	for k := range stakingObject.Stakers {
+		staker := stakingObject.Stakers[k]
+		if staker.Address == address {
+			seed := e.deriveStakingSeed(privateKey, staker.StakingFrom)
+			signerRandom = e.hashChain(seed, block.NumberU64()-staker.StakingFrom)
+			break
+		}
+	}
 	// step 1. prepare callbacks(closures)
 	// we need to prepare 3 closures for this height, one to track proposals from local or remote,
 	// one to exchange the message from consensus core to p2p module, one to validate consensus
@@ -571,7 +583,10 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 			if err != nil {
 				log.Error("messageOutCallBack", "rlp.EncodeToBytes", err)
 			}
+
+			// set auxdata & random number
 			signed.AuxData = blockData
+			signed.RN = signerRandom
 		}
 
 		// all outgoing signed message will be delivered to ProtocolManager
@@ -594,7 +609,8 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	messageValidator := func(c *bdls.Consensus, m *bdls.Message, signed *bdls.SignedProto) bool {
 		log.Debug("consensus received message", "type", m.Type)
 		// clear all auxdata before consensus processing,
-		// we don't want the consensus core to keep this external field
+		// we don't want the consensus core to keep this external field AuxData
+		// but we will keep RN field
 		defer func() {
 			signed.AuxData = nil
 		}()
@@ -614,6 +630,20 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 			if proposal.Hash() != common.BytesToHash(m.State) {
 				log.Error("messageValidator auxdata hash", "block hash", proposal.Hash(), "state hash", common.BytesToHash(m.State))
 				return false
+			}
+
+			// verify R
+			signerAddress := crypto.PubkeyToAddress(*signed.PublicKey(bdls.S256Curve))
+			for k := range stakingObject.Stakers {
+				staker := stakingObject.Stakers[k]
+				if staker.Address == signerAddress {
+					// hash RN for currentBlock - stakingFrom times
+					R := e.hashChain(signed.RN, proposal.NumberU64()-staker.StakingFrom)
+					if common.BytesToHash(R) != staker.StakingHash {
+						log.Error("R verification failed", "R", R, "proposal block number", proposal.NumberU64(), "staking from", staker.StakingFrom)
+						return false
+					}
+				}
 			}
 
 			// verify proposal
