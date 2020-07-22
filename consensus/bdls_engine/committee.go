@@ -193,12 +193,12 @@ func (e *BDLSEngine) IsProposer(chain consensus.ChainReader, header *types.Heade
 }
 
 // Count number of votes for a validator
-func (e *BDLSEngine) CountVotes(chain consensus.ChainReader, header *types.Header, stakingObject *StakingObject) uint64 {
+func (e *BDLSEngine) CountVotes(chain consensus.ChainReader, header *types.Header, validator common.Address, stakingObject *StakingObject) uint64 {
 	var numStaked *big.Int
 	var totalStaked *big.Int
 	for k := range stakingObject.Stakers {
 		staker := stakingObject.Stakers[k]
-		if staker.Address == header.Coinbase {
+		if staker.Address == validator {
 			if header.Number.Uint64() <= staker.StakingFrom {
 				log.Error("header block number is smaller than which the proposer announced(stakingFrom)")
 				return 0
@@ -254,6 +254,7 @@ func (e *BDLSEngine) CountVotes(chain consensus.ChainReader, header *types.Heade
 	return votes
 }
 
+// Pow calculates a^e
 func Pow(a *big.Float, e uint64) *big.Float {
 	result := big.NewFloat(0.0).Copy(a)
 	for i := uint64(0); i < e-1; i++ {

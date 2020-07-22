@@ -87,7 +87,7 @@ type Header struct {
 	// Sperax Consensus Extension
 	Signature []byte      `json:"proof"        gencodec:"required"` // proposer's signature
 	Decision  []byte      `json:"proof"        gencodec:"required"` // consensus's decide
-	R         common.Hash `json:"R"        gencodec:"required"`
+	R         common.Hash `json:"R"        gencodec:"required"`     // proposer's random number
 	W         common.Hash `json:"W"        gencodec:"required"`
 }
 
