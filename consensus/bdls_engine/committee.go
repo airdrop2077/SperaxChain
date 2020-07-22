@@ -49,6 +49,7 @@ import (
 )
 
 var (
+	Coin = []byte("Sperax")
 	// block 0 common random number
 	W0 = crypto.Keccak256Hash(hexutil.MustDecode("0x3243F6A8885A308D313198A2E037073"))
 	// potential propser expectation
@@ -267,6 +268,7 @@ func (e *BDLSEngine) proposerHash(height uint64, R common.Hash, W common.Hash) c
 	binary.Write(hasher, binary.LittleEndian, height)
 	binary.Write(hasher, binary.LittleEndian, 0)
 	hasher.Write(R.Bytes())
+	hasher.Write(Coin)
 	hasher.Write(W.Bytes())
 
 	return common.BytesToHash(hasher.Sum(nil))
@@ -278,6 +280,7 @@ func (e *BDLSEngine) validatorHash(height uint64, R common.Hash, W common.Hash) 
 	binary.Write(hasher, binary.LittleEndian, height)
 	binary.Write(hasher, binary.LittleEndian, 1)
 	hasher.Write(R.Bytes())
+	hasher.Write(Coin)
 	hasher.Write(W.Bytes())
 
 	return common.BytesToHash(hasher.Sum(nil))
