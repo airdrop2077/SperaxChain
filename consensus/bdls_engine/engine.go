@@ -324,15 +324,7 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 	}
 
 	// step 4. create the consensus object along with participants to validate decide message
-	for k := range stakingObject.Stakers {
-		staker := &stakingObject.Stakers[k]
-		if staker.StakingTo >= header.Number.Uint64() {
-			var identity bdls.Identity
-			copy(identity[:], staker.Address.Bytes())
-			config.Participants = append(config.Participants, identity)
-		}
-	}
-	e.shuffleParticipants(config.Participants, parent.Hash())
+	config.Participants = e.CreateValidators(chain, header, stakingObject)
 
 	consensus, err := bdls.NewConsensus(config)
 	if err != nil {
@@ -671,17 +663,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		// consensus message will be routed through engine
 		MessageOutCallback: messageOutCallback,
 	}
-
-	for k := range stakingObject.Stakers {
-		staker := &stakingObject.Stakers[k]
-		if staker.StakingTo >= block.NumberU64() {
-			var identity bdls.Identity
-			copy(identity[:], staker.Address.Bytes())
-			config.Participants = append(config.Participants, identity)
-		}
-	}
-
-	e.shuffleParticipants(config.Participants, e.RandAtBlock(chain, block.Header()))
+	config.Participants = e.CreateValidators(chain, block.Header(), stakingObject)
 	e.mu.Unlock()
 
 	// step 3. create the consensus object
@@ -898,21 +880,6 @@ func (e *BDLSEngine) APIs(chain consensus.ChainReader) []rpc.API {
 		Service:   &API{chain: chain, engine: e},
 		Public:    true,
 	}}
-}
-
-// shuffle participants based on a given hash as seed
-func (e *BDLSEngine) shuffleParticipants(identities []bdls.Identity, h common.Hash) {
-	bigJ := big.NewInt(0)
-	seed := big.NewInt(0).SetBytes(h.Bytes())
-	for i := len(identities) - 1; i >= 1; i-- {
-		// the next random variable will be the hash of the previous variable
-		seed.SetBytes(crypto.Keccak256(seed.Bytes()))
-		bigJ.Mod(seed, big.NewInt(int64(i+1)))
-		j := bigJ.Int64()
-		//log.Debug("swap", "i", i, "j", j)
-		identities[i], identities[j] = identities[j], identities[i]
-	}
-	return
 }
 
 // Close terminates any background threads maintained by the consensus engine.

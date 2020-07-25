@@ -45,6 +45,7 @@ import (
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/params"
 	"github.com/Sperax/SperaxChain/rlp"
+	"github.com/Sperax/bdls"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -193,24 +194,10 @@ func (e *BDLSEngine) IsProposer(chain consensus.ChainReader, header *types.Heade
 }
 
 // ValidatorVotes counts the number of votes for a validator
-func (e *BDLSEngine) ValidatorVotes(chain consensus.ChainReader, header *types.Header, validator common.Address, stakingObject *StakingObject) uint64 {
-	var numStaked *big.Int
-	var totalStaked *big.Int
-	var validatorR common.Hash
-	for k := range stakingObject.Stakers {
-		staker := stakingObject.Stakers[k]
-		if staker.Address == validator {
-			if header.Number.Uint64() <= staker.StakingFrom {
-				log.Debug("header block number is smaller than which the proposer announced(stakingFrom)")
-				return 0
-			} else {
-				numStaked = staker.StakedValue
-				validatorR = staker.StakingHash
-				totalStaked = stakingObject.TotalStaked
-				break
-			}
-		}
-	}
+func (e *BDLSEngine) ValidatorVotes(chain consensus.ChainReader, header *types.Header, staker *Staker, stakingObject *StakingObject) uint64 {
+	totalStaked := stakingObject.TotalStaked
+	numStaked := staker.StakedValue
+	validatorR := staker.StakingHash
 
 	W := e.RandAtBlock(chain, header)
 	// compute p'
@@ -250,6 +237,37 @@ func (e *BDLSEngine) ValidatorVotes(chain consensus.ChainReader, header *types.H
 	}
 
 	return votes
+}
+
+// CreateValidators creates an ordered list for all qualified validators with weights
+func (e *BDLSEngine) CreateValidators(chain consensus.ChainReader, header *types.Header, stakingObject *StakingObject) []bdls.Identity {
+	var validators []bdls.Identity
+
+	for k := range stakingObject.Stakers {
+		staker := stakingObject.Stakers[k]
+		if header.Number.Uint64() <= staker.StakingFrom || header.Number.Uint64() > staker.StakingTo {
+			continue
+		} else {
+			n := e.ValidatorVotes(chain, header, &staker, stakingObject)
+			for i := 0; i < int(n); i++ { // add n votes
+				var identity bdls.Identity
+				copy(identity[:], staker.Address.Bytes())
+				validators = append(validators, identity)
+			}
+		}
+	}
+
+	bigJ := big.NewInt(0)
+	seed := big.NewInt(0).SetBytes(e.RandAtBlock(chain, header).Bytes())
+	for i := len(validators) - 1; i >= 1; i-- {
+		// the next random variable will be the hash of the previous variable
+		seed.SetBytes(crypto.Keccak256(seed.Bytes()))
+		bigJ.Mod(seed, big.NewInt(int64(i+1)))
+		j := bigJ.Int64()
+		//log.Debug("swap", "i", i, "j", j)
+		validators[i], validators[j] = validators[j], validators[i]
+	}
+	return validators
 }
 
 // Pow calculates a^e
