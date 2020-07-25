@@ -49,7 +49,7 @@ import (
 )
 
 var (
-	Coin = []byte("Sperax")
+	CommonCoin = []byte("Sperax")
 	// block 0 common random number
 	W0 = crypto.Keccak256Hash(hexutil.MustDecode("0x3243F6A8885A308D313198A2E037073"))
 	// potential propser expectation
@@ -152,11 +152,11 @@ func (e *BDLSEngine) IsProposer(chain consensus.ChainReader, header *types.Heade
 		staker := stakingObject.Stakers[k]
 		if staker.Address == header.Coinbase {
 			if header.Number.Uint64() <= staker.StakingFrom {
-				log.Error("header block number is smaller than which the proposer announced(stakingFrom)")
+				log.Debug("header block number is smaller than which the proposer announced(stakingFrom)")
 				return false
 			} else if common.BytesToHash(e.hashChain(staker.StakingHash.Bytes(), header.Number.Uint64()-staker.StakingFrom)) != header.R {
 				// verify hashchain
-				log.Error("Invalid random number specified in the header.R")
+				log.Debug("Invalid random number specified in the header.R")
 				return false
 			} else {
 				numStaked = staker.StakedValue
@@ -192,22 +192,20 @@ func (e *BDLSEngine) IsProposer(chain consensus.ChainReader, header *types.Heade
 	return false
 }
 
-// Count number of votes for a validator
-func (e *BDLSEngine) CountVotes(chain consensus.ChainReader, header *types.Header, validator common.Address, validatorR common.Hash, stakingObject *StakingObject) uint64 {
+// ValidatorVotes counts the number of votes for a validator
+func (e *BDLSEngine) ValidatorVotes(chain consensus.ChainReader, header *types.Header, validator common.Address, stakingObject *StakingObject) uint64 {
 	var numStaked *big.Int
 	var totalStaked *big.Int
+	var validatorR common.Hash
 	for k := range stakingObject.Stakers {
 		staker := stakingObject.Stakers[k]
 		if staker.Address == validator {
 			if header.Number.Uint64() <= staker.StakingFrom {
-				log.Error("header block number is smaller than which the proposer announced(stakingFrom)")
-				return 0
-			} else if common.BytesToHash(e.hashChain(staker.StakingHash.Bytes(), header.Number.Uint64()-staker.StakingFrom)) != header.R {
-				// verify hashchain
-				log.Error("Invalid random number specified in the header.R")
+				log.Debug("header block number is smaller than which the proposer announced(stakingFrom)")
 				return 0
 			} else {
 				numStaked = staker.StakedValue
+				validatorR = staker.StakingHash
 				totalStaked = stakingObject.TotalStaked
 				break
 			}
@@ -269,7 +267,7 @@ func (e *BDLSEngine) proposerHash(height uint64, R common.Hash, W common.Hash) c
 	binary.Write(hasher, binary.LittleEndian, height)
 	binary.Write(hasher, binary.LittleEndian, 0)
 	hasher.Write(R.Bytes())
-	hasher.Write(Coin)
+	hasher.Write(CommonCoin)
 	hasher.Write(W.Bytes())
 
 	return common.BytesToHash(hasher.Sum(nil))
@@ -281,7 +279,7 @@ func (e *BDLSEngine) validatorHash(height uint64, R common.Hash, W common.Hash) 
 	binary.Write(hasher, binary.LittleEndian, height)
 	binary.Write(hasher, binary.LittleEndian, 1)
 	hasher.Write(R.Bytes())
-	hasher.Write(Coin)
+	hasher.Write(CommonCoin)
 	hasher.Write(W.Bytes())
 
 	return common.BytesToHash(hasher.Sum(nil))
