@@ -31,10 +31,12 @@
 package bdls_engine
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"encoding/binary"
 	"errors"
 	"math/big"
+	"sort"
 
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/common/hexutil"
@@ -239,35 +241,58 @@ func (e *BDLSEngine) ValidatorVotes(chain consensus.ChainReader, header *types.H
 	return votes
 }
 
+type orderedValidator struct {
+	identity bdls.Identity
+	hash     common.Hash
+}
+
+type SortableValidators []orderedValidator
+
+func (s SortableValidators) Len() int { return len(s) }
+func (s SortableValidators) Less(i, j int) bool {
+	return bytes.Compare(s[i].hash.Bytes(), s[j].hash.Bytes()) == -1
+}
+func (s SortableValidators) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+
+// validatorHash computes a hash for validator's random number
+func (ov SortableValidators) Hash(height uint64, R common.Hash, W common.Hash) common.Hash {
+	hasher := sha3.New256()
+	binary.Write(hasher, binary.LittleEndian, height)
+	binary.Write(hasher, binary.LittleEndian, 1)
+	hasher.Write(R.Bytes())
+	hasher.Write(CommonCoin)
+	hasher.Write(W.Bytes())
+
+	return common.BytesToHash(hasher.Sum(nil))
+}
+
 // CreateValidators creates an ordered list for all qualified validators with weights
 func (e *BDLSEngine) CreateValidators(chain consensus.ChainReader, header *types.Header, stakingObject *StakingObject) []bdls.Identity {
-	var validators []bdls.Identity
+	var orderedValidators []orderedValidator
 
+	W := e.RandAtBlock(chain, header)
 	for k := range stakingObject.Stakers {
 		staker := stakingObject.Stakers[k]
 		if header.Number.Uint64() <= staker.StakingFrom || header.Number.Uint64() > staker.StakingTo {
 			continue
 		} else {
 			n := e.ValidatorVotes(chain, header, &staker, stakingObject)
-			for i := 0; i < int(n); i++ { // add n votes
-				var identity bdls.Identity
-				copy(identity[:], staker.Address.Bytes())
-				validators = append(validators, identity)
+			for i := uint64(0); i < n; i++ { // add n votes
+				var validator orderedValidator
+				copy(validator.identity[:], staker.Address.Bytes())
+				validator.hash = e.validatorSortingHash(staker.Address, staker.StakingHash, W, i)
+				orderedValidators = append(orderedValidators, validator)
 			}
 		}
 	}
 
-	bigJ := big.NewInt(0)
-	seed := big.NewInt(0).SetBytes(e.RandAtBlock(chain, header).Bytes())
-	for i := len(validators) - 1; i >= 1; i-- {
-		// the next random variable will be the hash of the previous variable
-		seed.SetBytes(crypto.Keccak256(seed.Bytes()))
-		bigJ.Mod(seed, big.NewInt(int64(i+1)))
-		j := bigJ.Int64()
-		//log.Debug("swap", "i", i, "j", j)
-		validators[i], validators[j] = validators[j], validators[i]
+	// sort by the hash
+	sort.Sort(SortableValidators(orderedValidators))
+	var sortedValidators []bdls.Identity
+	for i := 0; i < len(orderedValidators); i++ {
+		sortedValidators = append(sortedValidators, orderedValidators[i].identity)
 	}
-	return validators
+	return sortedValidators
 }
 
 // Pow calculates a^e
@@ -296,6 +321,18 @@ func (e *BDLSEngine) validatorHash(height uint64, R common.Hash, W common.Hash) 
 	hasher := sha3.New256()
 	binary.Write(hasher, binary.LittleEndian, height)
 	binary.Write(hasher, binary.LittleEndian, 1)
+	hasher.Write(R.Bytes())
+	hasher.Write(CommonCoin)
+	hasher.Write(W.Bytes())
+
+	return common.BytesToHash(hasher.Sum(nil))
+}
+
+// validatorSortHash computes a hash for validator's sorting hashing
+func (e *BDLSEngine) validatorSortingHash(address common.Address, R common.Hash, W common.Hash, votes uint64) common.Hash {
+	hasher := sha3.New256()
+	hasher.Write(address.Bytes())
+	binary.Write(hasher, binary.LittleEndian, votes)
 	hasher.Write(R.Bytes())
 	hasher.Write(CommonCoin)
 	hasher.Write(W.Bytes())
