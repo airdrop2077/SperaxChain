@@ -166,7 +166,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 			}
 
 			// verify proposal
-			if !e.verifyExternalProposal(chain, &proposal, block.NumberU64(), stakingObject) {
+			if !e.verifyRemoteProposal(chain, &proposal, block.NumberU64(), stakingObject) {
 				log.Error("messageValidator verifyProposal failed")
 				return false
 			}
@@ -280,7 +280,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 						}
 
 						// verify proposal
-						if !e.verifyExternalProposal(chain, &proposal, block.NumberU64(), stakingObject) {
+						if !e.verifyRemoteProposal(chain, &proposal, block.NumberU64(), stakingObject) {
 							log.Error("messageValidator verifyProposal failed")
 							continue
 						}

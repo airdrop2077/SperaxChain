@@ -388,7 +388,7 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 	// set proposer's signature
 	sign, err := crypto.Sign(header.Hash().Bytes(), privateKey)
 	if err != nil {
-		log.Error("Prepare - cyrpto.sign", "error", err)
+		log.Error("Prepare - cyrpto.Sign", "error", err)
 		return err
 	}
 	header.Signature = sign
@@ -458,8 +458,8 @@ func (e *BDLSEngine) waitForPrivateKey(coinbase common.Address, stop <-chan stru
 	}
 }
 
-// verify proposal block from external
-func (e *BDLSEngine) verifyExternalProposal(chain consensus.ChainReader, block *types.Block, height uint64, stakingObject *StakingObject) bool {
+// verify a proposed block from remote
+func (e *BDLSEngine) verifyRemoteProposal(chain consensus.ChainReader, block *types.Block, height uint64, stakingObject *StakingObject) bool {
 	header := block.Header()
 	// verify the block number
 	if header.Number.Uint64() != height {
@@ -469,19 +469,19 @@ func (e *BDLSEngine) verifyExternalProposal(chain consensus.ChainReader, block *
 
 	// verify header fields
 	if err := e.verifyHeader(chain, header, nil); err != nil {
-		log.Error("verifyHeader", "err", err)
+		log.Debug("verifyRemoteProposal - verifyHeader", "err", err)
 		return false
 	}
 
 	// ensure it's a valid proposer
 	if !e.verifyProposerField(stakingObject, header) {
-		log.Error("verifyProposer failed")
+		log.Debug("verifyRemoteProposal - verifyProposer failed")
 		return false
 	}
 
 	// validate the states of transactions
 	if !e.verifyStates(block) {
-		log.Error("verifyStates failed")
+		log.Debug("verifyRemoteProposal - verifyStates failed")
 		return false
 	}
 
@@ -492,7 +492,7 @@ func (e *BDLSEngine) verifyExternalProposal(chain consensus.ChainReader, block *
 func (e *BDLSEngine) verifyProposerField(stakingObject *StakingObject, header *types.Header) bool {
 	// Ensure the coinbase is a valid proposer
 	if !e.IsProposer(header, stakingObject) {
-		log.Error("invalid proposer at given height", "height", header.Number, "proposer", header.Coinbase)
+		log.Error("verifyProposerField - IsProposer", "height", header.Number, "proposer", header.Coinbase)
 		return false
 	}
 
@@ -502,18 +502,19 @@ func (e *BDLSEngine) verifyProposerField(stakingObject *StakingObject, header *t
 	copyHeader.Decision = nil
 	pk, err := crypto.Ecrecover(copyHeader.Hash().Bytes(), header.Signature)
 	if err != nil {
-		log.Error("ecrecover", "err", err)
+		log.Debug("verifyProposerField - ecrecover", "err", err)
 		return false
 	}
+
 	if !crypto.VerifySignature(pk, copyHeader.Hash().Bytes(), header.Signature) {
-		log.Error("verify signature")
+		log.Debug("verifyProposerField - verify signature failed")
 		return false
 	}
 
 	pubkey, _ := crypto.DecompressPubkey(pk)
 	signer := crypto.PubkeyToAddress(*pubkey)
 	if signer != header.Coinbase {
-		log.Error("signer do not match coinbase", "signer", pubkey, "coinbase", header.Coinbase)
+		log.Debug("verifyProposerField - signer do not match coinbase", "signer", pubkey, "coinbase", header.Coinbase)
 	}
 	return true
 }
@@ -523,7 +524,7 @@ func (e *BDLSEngine) verifyStates(block *types.Block) bool {
 	// check bad block
 	if e.hasBadBlock != nil {
 		if e.hasBadBlock(block.Hash()) {
-			log.Error("messageValidator", "e.hasBadBlock", block.Hash())
+			log.Debug("verifyStates - hasBadBlock", "e.hasBadBlock", block.Hash())
 			return false
 		}
 	}
@@ -531,7 +532,7 @@ func (e *BDLSEngine) verifyStates(block *types.Block) bool {
 	// check transaction trie
 	txnHash := types.DeriveSha(block.Transactions())
 	if txnHash != block.Header().TxHash {
-		log.Error("messageValidator validate transactions", "txnHash", txnHash, "Header().TxHash", block.Header().TxHash)
+		log.Debug("verifyStates - validate transactions failed", "txnHash", txnHash, "Header().TxHash", block.Header().TxHash)
 		return false
 	}
 
@@ -539,7 +540,7 @@ func (e *BDLSEngine) verifyStates(block *types.Block) bool {
 	// Get the state from this block's parent.
 	state, err := e.stateAt(block.Header().ParentHash)
 	if err != nil {
-		log.Error("verify - Error in getting the block's parent's state", "parentHash", block.Header().ParentHash.Hex(), "err", err)
+		log.Debug("verifyStates - Error in getting the block's parent's state", "parentHash", block.Header().ParentHash.Hex(), "err", err)
 		return false
 	}
 
@@ -549,13 +550,13 @@ func (e *BDLSEngine) verifyStates(block *types.Block) bool {
 	// Apply this block's transactions to update the state
 	receipts, _, usedGas, err := e.processBlock(block, state)
 	if err != nil {
-		log.Error("verify - Error in processing the block", "err", err)
+		log.Debug("verifyStates - Error in processing the block", "err", err)
 		return false
 	}
 
 	// Validate the block
 	if err := e.validateState(block, state, receipts, usedGas); err != nil {
-		log.Error("verify - Error in validating the block", "err", err)
+		log.Error("verifyStates - Error in validating the block", "err", err)
 		return false
 	}
 
@@ -572,7 +573,7 @@ func (e *BDLSEngine) SealHash(header *types.Header) (hash common.Hash) {
 // CalcDifficulty is the difficulty adjustment algorithm. It returns the difficulty
 // that a new block should have.
 func (e *BDLSEngine) CalcDifficulty(chain consensus.ChainReader, time uint64, parent *types.Header) *big.Int {
-	return new(big.Int)
+	return defaultDifficulty
 }
 
 // APIs returns the RPC APIs this consensus engine provides.
