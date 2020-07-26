@@ -48,10 +48,8 @@ import (
 	"github.com/Sperax/SperaxChain/ethdb"
 	"github.com/Sperax/SperaxChain/event"
 	"github.com/Sperax/SperaxChain/log"
-	"github.com/Sperax/SperaxChain/rlp"
 	"github.com/Sperax/SperaxChain/rpc"
 	"github.com/Sperax/bdls"
-	proto "github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -200,7 +198,6 @@ func (e *BDLSEngine) VerifyHeader(chain consensus.ChainReader, header *types.Hea
 // caller may optionally pass in a batch of parents (ascending order) to avoid
 // looking those up from the database. This is useful for concurrently verifying
 // a batch of new headers.
-// NOTE(xtaci): downloader's batch verification
 func (e *BDLSEngine) verifyHeader(chain consensus.ChainReader, header *types.Header, parents []*types.Header) error {
 	// Ensure the block's parent exist
 	number := header.Number.Uint64()
@@ -221,11 +218,6 @@ func (e *BDLSEngine) verifyHeader(chain consensus.ChainReader, header *types.Hea
 		return errInvalidDifficulty
 	}
 
-	// Verify W has correctly set
-	if e.RandAtBlock(chain, header) != header.W {
-		return errInvalidW
-	}
-
 	// Ensure that the block's timestamp isn't too close to it's parent
 	var parent *types.Header
 	if len(parents) > 0 {
@@ -240,6 +232,11 @@ func (e *BDLSEngine) verifyHeader(chain consensus.ChainReader, header *types.Hea
 		return errInvalidTimestamp
 	}
 
+	// Ensure W has correctly set
+	if e.deriveW(parent) != header.W {
+		return errInvalidW
+	}
+
 	return nil
 }
 
@@ -249,7 +246,6 @@ func (e *BDLSEngine) verifyHeader(chain consensus.ChainReader, header *types.Hea
 // the input slice).
 func (e *BDLSEngine) VerifyHeaders(chain consensus.ChainReader, headers []*types.Header, seals []bool) (chan<- struct{}, <-chan error) {
 	abort, results := make(chan struct{}), make(chan error, len(headers))
-
 	go func() {
 		for i, header := range headers {
 			err := e.verifyHeader(chain, header, headers[:i])
@@ -283,21 +279,21 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		return nil
 	}
 
-	// check parent
+	// Ensure the parent is not nil
 	parent := chain.GetHeader(header.ParentHash, number-1)
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
 	}
 
-	// step 0. Check proof field is not nil
+	// Ensure the proof field is not nil
 	if len(header.Decision) == 0 {
 		return errEmptyDecision
 	}
 
-	// step 1. Get the SealHash(without Decision field) of this header to verify against
+	// Get the SealHash(without Decision field) of this header to verify against
 	sealHash := e.SealHash(header).Bytes()
 
-	// step 2. create a consensus config to validate this message at the correct height
+	// create a consensus config to validate this message at the correct height
 	config := &bdls.Config{
 		Epoch:            time.Now(),
 		PrivateKey:       e.ephermalKey,
@@ -307,8 +303,7 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		PubKeyToIdentity: PubKeyToIdentity,
 	}
 
-	// step 3. check if the coinbase is a valid proposer at given height
-	// NOTE(xtaci): the state is related to some HEIGHT
+	// retrieve the staking object at parent height
 	state, err := e.stateAt(header.ParentHash)
 	if err != nil {
 		return errors.New("Error in getting the block's parent's state")
@@ -319,12 +314,13 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		return errors.New("Error in getting staking Object")
 	}
 
-	if !e.IsProposer(chain, header, stakingObject) {
+	// Ensure it's a valid proposer
+	if !e.IsProposer(header, stakingObject) {
 		return errors.New(fmt.Sprint("Not a valid proposer at height", header.Number))
 	}
 
-	// step 4. create the consensus object along with participants to validate decide message
-	config.Participants = e.CreateValidators(chain, header, stakingObject)
+	// create the consensus object along with participants to validate decide message
+	config.Participants = e.CreateValidators(header, stakingObject)
 
 	consensus, err := bdls.NewConsensus(config)
 	if err != nil {
@@ -332,7 +328,7 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		return err
 	}
 
-	// step 5. validate decide message to the block
+	// Ensure the block has a validate decide message
 	err = consensus.ValidateDecideMessage(header.Decision, sealHash)
 	if err != nil {
 		log.Debug("VerifySeal", "consensus..ValidateDecideMessage", err)
@@ -362,19 +358,20 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 		header.Time = uint64(time.Now().Unix())
 	}
 
-	// TODO(xtaci): correctly set participants based on rules
+	// get staking object at parent height
 	state, err := e.stateAt(header.ParentHash)
 	if err != nil {
-		log.Error("consensusTask - Error in getting the block's parent's state", "parentHash", header.ParentHash.Hex(), "err", err)
+		log.Error("Prepare - Error in getting the block's parent's state", "parentHash", header.ParentHash.Hex(), "err", err)
 		return errors.New("stateAt")
 	}
 	stakingObject, err := e.GetStakingObject(state)
 	if err != nil {
-		log.Error("consensusTask - Error in getting staking Object", "parentHash", header.ParentHash.Hex(), "err", err)
+		log.Error("Prepare - Error in getting staking Object", "parentHash", header.ParentHash.Hex(), "err", err)
 		return errors.New("GetStakingObject")
 	}
-	// set W
-	header.W = e.RandAtBlock(chain, header)
+
+	// set W based on parent block
+	header.W = e.deriveW(parent)
 
 	// set proposer's R
 	privateKey := e.waitForPrivateKey(header.Coinbase, nil)
@@ -382,6 +379,7 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 		staker := stakingObject.Stakers[k]
 		if staker.Address == header.Coinbase {
 			seed := e.deriveStakingSeed(privateKey, staker.StakingFrom)
+			// hashing chaining
 			header.R = common.BytesToHash(e.hashChain(seed, header.Number.Uint64()-staker.StakingFrom))
 			break
 		}
@@ -390,7 +388,7 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 	// set proposer's signature
 	sign, err := crypto.Sign(header.Hash().Bytes(), privateKey)
 	if err != nil {
-		log.Error("cyrpto.sign", "error", err)
+		log.Error("Prepare - cyrpto.sign", "error", err)
 		return err
 	}
 	header.Signature = sign
@@ -460,8 +458,8 @@ func (e *BDLSEngine) waitForPrivateKey(coinbase common.Address, stop <-chan stru
 	}
 }
 
-// verify the proposal block
-func (e *BDLSEngine) verifyProposal(chain consensus.ChainReader, block *types.Block, height uint64, stakingObject *StakingObject) bool {
+// verify proposal block from external
+func (e *BDLSEngine) verifyExternalProposal(chain consensus.ChainReader, block *types.Block, height uint64, stakingObject *StakingObject) bool {
 	header := block.Header()
 	// verify the block number
 	if header.Number.Uint64() != height {
@@ -476,7 +474,7 @@ func (e *BDLSEngine) verifyProposal(chain consensus.ChainReader, block *types.Bl
 	}
 
 	// ensure it's a valid proposer
-	if !e.verifyProposer(chain, stakingObject, header) {
+	if !e.verifyProposerField(stakingObject, header) {
 		log.Error("verifyProposer failed")
 		return false
 	}
@@ -490,308 +488,15 @@ func (e *BDLSEngine) verifyProposal(chain consensus.ChainReader, block *types.Bl
 	return true
 }
 
-// a consensus task for a specific block
-func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) {
-	privateKey := e.waitForPrivateKey(block.Coinbase(), stop)
-	// time compensation to avoid fast block generation
-	delay := time.Unix(int64(block.Header().Time), 0).Sub(time.Now())
-
-	// wait for the timestamp of header, use this to adjust the block period
-	select {
-	case <-time.After(delay):
-	case <-stop:
-		results <- nil
-		return
-	}
-
-	// start new consensus round
-	e.mu.Lock()
-	// retrieve staking object at parent height
-	state, err := e.stateAt(block.Header().ParentHash)
-	if err != nil {
-		log.Error("consensusTask - Error in getting the block's parent's state", "parentHash", block.Header().ParentHash.Hex(), "err", err)
-		return
-	}
-	stakingObject, err := e.GetStakingObject(state)
-	if err != nil {
-		log.Error("consensusTask - Error in getting staking Object", "parentHash", block.Header().ParentHash.Hex(), "err", err)
-		return
-	}
-
-	// step 1. prepare callbacks(closures)
-	// we need to prepare 3 closures for this height, one to track proposals from local or remote,
-	// one to exchange the message from consensus core to p2p module, one to validate consensus
-	// messages with proposed blocks from remote.
-
-	// known proposed blocks from each participants' <roundchange> messages
-	allKeptBlocks := make(map[common.Address][]*types.Block)
-
-	// to lookup the block for current consensus height
-	lookupProposal := func(hash common.Hash) *types.Block {
-		// loop to find the block
-		for _, blocks := range allKeptBlocks {
-			for _, b := range blocks {
-				if b.Hash() == hash {
-					return b
-				}
-			}
-		}
-		return nil
-	}
-
-	// mesasge out call back to handle auxcilliary messages along with the consensus message
-	messageOutCallback := func(m *bdls.Message, signed *bdls.SignedProto) {
-		log.Debug("consensus sending message", "type", m.Type)
-		switch m.Type {
-		case bdls.MessageType_RoundChange:
-			// for <roundchange> message, we need to send the corresponding block
-			// as proposal.
-			blockHash := common.BytesToHash(m.State)
-			var outblock *types.Block
-			// externally proposed block
-			outblock = lookupProposal(blockHash)
-
-			// impossible situation here, all outgoing proposals in <roundchange>
-			// are to be known.
-			if outblock == nil {
-				log.Error("cannot locate the proposed block", "hash", blockHash)
-				return
-			}
-
-			// marshal the proposal block to binary and embed it in signed.AuxData
-			blockData, err := rlp.EncodeToBytes(outblock)
-			if err != nil {
-				log.Error("messageOutCallBack", "rlp.EncodeToBytes", err)
-			}
-
-			// set auxdata & random number
-			signed.AuxData = blockData
-		}
-
-		// all outgoing signed message will be delivered to ProtocolManager
-		// and finally to send to peers.
-		bts, err := signed.Marshal()
-		if err != nil {
-			log.Error("messageOutCallback", "signed.Marshal", err)
-			return
-		}
-
-		// broadcast the message via event mux
-		err = e.mux.Post(MessageOutput(bts))
-		if err != nil {
-			log.Error("messageOutCallback", "mux.Post", err)
-			return
-		}
-	}
-
-	// message validator for incoming messages which has correctly signed
-	messageValidator := func(c *bdls.Consensus, m *bdls.Message, signed *bdls.SignedProto) bool {
-		log.Debug("consensus received message", "type", m.Type)
-		// clear all auxdata before consensus processing,
-		// we don't want the consensus core to keep this external field AuxData
-		// but we will keep RN field
-		defer func() {
-			signed.AuxData = nil
-		}()
-
-		switch m.Type {
-		case bdls.MessageType_RoundChange:
-			// For incoming <roundchange> message(proposal), we should validate the block sent
-			// via sp.AuxData field, ahead of consensus processing.
-			var proposal types.Block
-			err := rlp.DecodeBytes(signed.AuxData, &proposal)
-			if err != nil {
-				log.Error("messageValidator", "rlp.DecodeBytes", err)
-				return false
-			}
-
-			// ensure the hash is to the block in auxdata
-			if proposal.Hash() != common.BytesToHash(m.State) {
-				log.Error("messageValidator auxdata hash", "block hash", proposal.Hash(), "state hash", common.BytesToHash(m.State))
-				return false
-			}
-
-			// verify proposal
-			if !e.verifyProposal(chain, &proposal, block.NumberU64(), stakingObject) {
-				log.Error("messageValidator verifyProposal failed")
-				return false
-			}
-
-			// A simple DoS prevention mechanism:
-			// 1. Remove previously kept blocks which has NOT been accepted in consensus.
-			// 2. Always record the latest proposal from a proposer, before consensus continues
-			var keptBlocks []*types.Block
-			var repeated bool
-			for _, pBlock := range allKeptBlocks[block.Coinbase()] {
-				if c.HasProposed(pBlock.Hash().Bytes()) {
-					keptBlocks = append(keptBlocks, pBlock)
-					// repeated valid block
-					if pBlock.Hash() == proposal.Hash() {
-						repeated = true
-					}
-				}
-			}
-
-			if !repeated { // record latest proposal of a block
-				keptBlocks = append(keptBlocks, &proposal)
-			}
-			allKeptBlocks[proposal.Coinbase()] = keptBlocks
-
-			return true
-		}
-
-		return true
-	}
-
-	// step 2. setup consensus config at the given height
-	config := &bdls.Config{
-		Epoch:         time.Now(),
-		CurrentHeight: block.NumberU64() - 1,
-		PrivateKey:    privateKey,
-		StateCompare:  func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
-		StateValidate: func(s bdls.State) bool {
-			// make sure all states are known from <roundchange> exchanging
-			hash := common.BytesToHash(s)
-			if lookupProposal(hash) != nil {
-				return true
-			}
-
-			return false
-		},
-		PubKeyToIdentity: PubKeyToIdentity,
-		MessageValidator: messageValidator,
-		// consensus message will be routed through engine
-		MessageOutCallback: messageOutCallback,
-	}
-	config.Participants = e.CreateValidators(chain, block.Header(), stakingObject)
-	e.mu.Unlock()
-
-	// step 3. create the consensus object
-	consensus, err := bdls.NewConsensus(config)
-	if err != nil {
-		log.Error("bdls.NewConsensus", "err", err)
-		return
-	}
-
-	// step 5: step delay by last block timestamp
-	consensus.SetLatency(time.Second)
-
-	// step 5. create a consensus message subscriber's loop
-	// subscribe to consensus message input via event mux
-	var consensusMessageChan <-chan *event.TypeMuxEvent
-	if e.mux != nil {
-		consensusSub := e.mux.Subscribe(MessageInput{})
-		defer consensusSub.Unsubscribe()
-		consensusMessageChan = consensusSub.Chan()
-	} else {
-		log.Error("mux is nil")
-		return
-	}
-
-	// the consensus updater ticker
-	updateTick := time.NewTicker(20 * time.Millisecond)
-	defer updateTick.Stop()
-
-	// if i'm the proposer, propose the block
-	if e.IsProposer(chain, block.Header(), stakingObject) {
-		allKeptBlocks[block.Coinbase()] = append(allKeptBlocks[block.Coinbase()], block)
-		consensus.Propose(block.Hash().Bytes())
-	}
-
-	// TODO(xtaci) if i'm the committee member
-
-	// the core consensus message loop
-	log.Warn("CONSENSUS TASK STARTED", "coinbase", block.Coinbase(), "height", block.NumberU64())
-
-	var proposed bool
-	for {
-		select {
-		case obj := <-consensusMessageChan: // consensus message
-			if ev, ok := obj.Data.(MessageInput); ok {
-				var em EngineMessage
-				err := proto.Unmarshal(ev, &em)
-				if err != nil {
-					log.Error("proto.Unmarshal", "err", err)
-				}
-
-				// we add an extra encapsulation for consensus contents
-				switch em.Type {
-				case EngineMessageType_Proposal:
-					if !proposed {
-						var proposal types.Block
-						err := rlp.DecodeBytes(em.Message, &proposal)
-						if err != nil {
-							log.Error("proposerMessage", "rlp.DecodeBytes", err)
-							continue
-						}
-
-						// verify proposal
-						if !e.verifyProposal(chain, &proposal, block.NumberU64(), stakingObject) {
-							log.Error("messageValidator verifyProposal failed")
-							continue
-						}
-
-						// record & propose the block from a proposer
-						allKeptBlocks[proposal.Coinbase()] = append(allKeptBlocks[proposal.Coinbase()], &proposal)
-						consensus.Propose(proposal.Hash().Bytes())
-						proposed = true
-					}
-
-				case EngineMessageType_Consensus:
-					err := consensus.ReceiveMessage(em.Message, time.Now()) // input to core
-					if err != nil {
-						log.Debug("consensus receive:", "err", err)
-					}
-					newHeight, newRound, newState := consensus.CurrentState()
-
-					// new height confirmed, only proposer broadcast this mined block
-					if newHeight == block.NumberU64() {
-						log.Warn("CONSENSUS <decide>", "height", newHeight, "round", newRound, "hash", newHeight, newRound, common.BytesToHash(newState))
-						hash := common.BytesToHash(newState)
-
-						// every validator can finalize this block to it's local blockchain now
-						newblock := lookupProposal(hash)
-						if newblock != nil {
-							header := newblock.Header()
-							bts, err := consensus.CurrentProof().Marshal()
-							if err != nil {
-								log.Crit("consensusMessenger", "consensus.CurrentProof", err)
-								panic(err)
-							}
-
-							// store the the proof in block header
-							header.Decision = bts
-
-							// broadcast the mined block if i'm the proposer
-							mined := newblock.WithSeal(header)
-							// as block integrity is verified ahead in <roundchange> message,
-							// it's safe to stop the consensus loop now
-							results <- mined
-						}
-						return
-					}
-				}
-			}
-
-		case <-updateTick.C:
-			consensus.Update(time.Now())
-		case <-stop:
-			results <- nil
-			return
-		}
-	}
-	return
-}
-
 // verify the proposer in block header
-func (e *BDLSEngine) verifyProposer(chain consensus.ChainReader, stakingObject *StakingObject, header *types.Header) bool {
-	// ensure the coinbase is a valid proposer
-	if !e.IsProposer(chain, header, stakingObject) {
+func (e *BDLSEngine) verifyProposerField(stakingObject *StakingObject, header *types.Header) bool {
+	// Ensure the coinbase is a valid proposer
+	if !e.IsProposer(header, stakingObject) {
 		log.Error("invalid proposer at given height", "height", header.Number, "proposer", header.Coinbase)
 		return false
 	}
 
-	// ensure the block proposer is identical to coinbase
+	// Ensure the block proposer is identical to coinbase
 	copyHeader := types.CopyHeader(header)
 	copyHeader.Signature = nil
 	copyHeader.Decision = nil
@@ -815,8 +520,6 @@ func (e *BDLSEngine) verifyProposer(chain consensus.ChainReader, stakingObject *
 
 // verify states in block
 func (e *BDLSEngine) verifyStates(block *types.Block) bool {
-	// TODO: match proposer set
-
 	// check bad block
 	if e.hasBadBlock != nil {
 		if e.hasBadBlock(block.Hash()) {

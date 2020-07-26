@@ -40,7 +40,6 @@ import (
 
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/common/hexutil"
-	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/crypto"
@@ -85,9 +84,16 @@ const (
 
 // StakingRequest will be sent along in transaction.payload
 type StakingRequest struct {
-	StakingOp   StakingOp
+	// Staking or Redeem operation
+	StakingOp StakingOp
+
+	// The begining height to participate in consensus
 	StakingFrom uint64
-	StakingTo   uint64
+
+	// The ending  height to participate in consensus
+	StakingTo uint64
+
+	// The staker's hash at the height - StakingFrom
 	StakingHash common.Hash
 }
 
@@ -129,37 +135,36 @@ func (e *BDLSEngine) GetStakingObject(state *state.StateDB) (*StakingObject, err
 	return &stakingObject, nil
 }
 
-// RandAtBlock calculates random number W based on block information
+// GetW calculates random number W based on block information
 // W0 = H(U0)
 // Wj = H(Pj-1,Wj-1) for 0<j<=r,
-func (e *BDLSEngine) RandAtBlock(chain consensus.ChainReader, header *types.Header) common.Hash {
+func (e *BDLSEngine) deriveW(header *types.Header) common.Hash {
 	if header.Number.Uint64() == 0 {
 		return W0
 	}
 
 	hasher := sha3.NewLegacyKeccak256()
 
-	// derive Wj from Pj-1 & Wj-1
-	prevBlock := chain.GetBlock(header.ParentHash, header.Number.Uint64()-1)
-	coinbase := prevBlock.Coinbase()
-	hasher.Write(coinbase[:])
-	hasher.Write(prevBlock.W().Bytes()) // write Wj-1
+	// derive Wj from previous header Pj-1 & Wj-1
+	hasher.Write(header.Coinbase.Bytes())
+	hasher.Write(header.W.Bytes()) // write Wj-1
 	return common.BytesToHash(hasher.Sum(nil))
 }
 
 // H(r;0;Ri,r,0;Wr) > max{0;1 i-aip}
-func (e *BDLSEngine) IsProposer(chain consensus.ChainReader, header *types.Header, stakingObject *StakingObject) bool {
+func (e *BDLSEngine) IsProposer(header *types.Header, stakingObject *StakingObject) bool {
 	var numStaked *big.Int
 	var totalStaked *big.Int
+
+	// lookup the staker's information
 	for k := range stakingObject.Stakers {
 		staker := stakingObject.Stakers[k]
 		if staker.Address == header.Coinbase {
 			if header.Number.Uint64() <= staker.StakingFrom {
-				log.Debug("header block number is smaller than which the proposer announced(stakingFrom)")
+				log.Debug("height is not larger than the height which the proposer has announced(stakingFrom)")
 				return false
 			} else if common.BytesToHash(e.hashChain(staker.StakingHash.Bytes(), header.Number.Uint64()-staker.StakingFrom)) != header.R {
-				// verify hashchain
-				log.Debug("Invalid random number specified in the header.R")
+				log.Debug("hashchain verification failed for header.R")
 				return false
 			} else {
 				numStaked = staker.StakedValue
@@ -169,7 +174,6 @@ func (e *BDLSEngine) IsProposer(chain consensus.ChainReader, header *types.Heade
 		}
 	}
 
-	W := e.RandAtBlock(chain, header)
 	// compute p
 	p := big.NewFloat(0).SetInt(E1)
 	p.Mul(p, big.NewFloat(0).SetInt(Alpha))
@@ -182,7 +186,7 @@ func (e *BDLSEngine) IsProposer(chain consensus.ChainReader, header *types.Heade
 	}
 
 	// compute proposer hash
-	proposerHash := e.proposerHash(header.Number.Uint64(), header.R, W)
+	proposerHash := e.proposerHash(header.Number.Uint64(), header.R, header.W)
 
 	// calculate H/MaxUint256
 	h := big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(proposerHash.Bytes()))
@@ -196,12 +200,11 @@ func (e *BDLSEngine) IsProposer(chain consensus.ChainReader, header *types.Heade
 }
 
 // ValidatorVotes counts the number of votes for a validator
-func (e *BDLSEngine) ValidatorVotes(chain consensus.ChainReader, header *types.Header, staker *Staker, stakingObject *StakingObject) uint64 {
+func (e *BDLSEngine) ValidatorVotes(header *types.Header, staker *Staker, stakingObject *StakingObject) uint64 {
 	totalStaked := stakingObject.TotalStaked
 	numStaked := staker.StakedValue
 	validatorR := staker.StakingHash
 
-	W := e.RandAtBlock(chain, header)
 	// compute p'
 	// p' = E2* numStaked /totalStaked
 	p := big.NewFloat(0).SetInt(E2)
@@ -211,7 +214,7 @@ func (e *BDLSEngine) ValidatorVotes(chain consensus.ChainReader, header *types.H
 	maxVotes := numStaked.Uint64() / Alpha.Uint64()
 
 	// compute validator's hash
-	validatorHash := e.validatorHash(header.Number.Uint64(), validatorR, W)
+	validatorHash := e.validatorHash(header.Number.Uint64(), validatorR, header.W)
 
 	// calculate H/MaxUint256
 	h := big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(validatorHash.Bytes()))
@@ -267,20 +270,19 @@ func (ov SortableValidators) Hash(height uint64, R common.Hash, W common.Hash) c
 }
 
 // CreateValidators creates an ordered list for all qualified validators with weights
-func (e *BDLSEngine) CreateValidators(chain consensus.ChainReader, header *types.Header, stakingObject *StakingObject) []bdls.Identity {
+func (e *BDLSEngine) CreateValidators(header *types.Header, stakingObject *StakingObject) []bdls.Identity {
 	var orderedValidators []orderedValidator
 
-	W := e.RandAtBlock(chain, header)
 	for k := range stakingObject.Stakers {
 		staker := stakingObject.Stakers[k]
 		if header.Number.Uint64() <= staker.StakingFrom || header.Number.Uint64() > staker.StakingTo {
 			continue
 		} else {
-			n := e.ValidatorVotes(chain, header, &staker, stakingObject)
+			n := e.ValidatorVotes(header, &staker, stakingObject)
 			for i := uint64(0); i < n; i++ { // add n votes
 				var validator orderedValidator
 				copy(validator.identity[:], staker.Address.Bytes())
-				validator.hash = e.validatorSortingHash(staker.Address, staker.StakingHash, W, i)
+				validator.hash = e.validatorSortingHash(staker.Address, staker.StakingHash, header.W, i)
 				orderedValidators = append(orderedValidators, validator)
 			}
 		}
