@@ -182,7 +182,7 @@ COLLECTPROPOSAL:
 	// make sure candidateProposal is not nil
 	if candidateProposal == nil {
 		header := block.Header()
-		header.Coinbase = common.Address{}
+		header.Coinbase = StakingAddress
 		e.Prepare(chain, header)
 		candidateProposal = types.NewBlock(header, nil, nil, nil)
 	}
