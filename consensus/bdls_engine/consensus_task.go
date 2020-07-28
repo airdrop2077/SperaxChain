@@ -58,32 +58,145 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		return
 	}
 
-	// start new consensus round
-	e.mu.Lock()
 	// retrieve staking object at parent height
+	e.mu.Lock()
 	state, err := e.stateAt(block.Header().ParentHash)
 	if err != nil {
 		log.Error("consensusTask - Error in getting the block's parent's state", "parentHash", block.Header().ParentHash.Hex(), "err", err)
 		return
 	}
+	e.mu.Unlock()
+
 	stakingObject, err := e.GetStakingObject(state)
 	if err != nil {
 		log.Error("consensusTask - Error in getting staking Object", "parentHash", block.Header().ParentHash.Hex(), "err", err)
 		return
 	}
 
-	// step 1. prepare callbacks(closures)
-	// we need to prepare 3 closures for this height, one to track proposals from local or remote,
-	// one to exchange the message from consensus core to p2p module, one to validate consensus
-	// messages with proposed blocks from remote.
+	// create a consensus message subscriber's loop
+	// subscribe to consensus message input via event mux
+	var consensusMessageChan <-chan *event.TypeMuxEvent
+	if e.mux != nil {
+		consensusSub := e.mux.Subscribe(MessageInput{})
+		defer consensusSub.Unsubscribe()
+		consensusMessageChan = consensusSub.Chan()
+	} else {
+		log.Error("mux is nil")
+		return
+	}
+
+	// collect candidate blocks
+	var candidateProposal *types.Block
+
+	// if i'm the proposer, propose the block
+	if e.IsProposer(block.Header(), stakingObject) {
+		candidateProposal = block
+
+		bts, err := rlp.EncodeToBytes(block)
+		if err != nil {
+			log.Error("consensusTask", "rlp.EncodeToBytes", err)
+			return
+		}
+
+		// marshal into EngineMessage and broadcast
+		var msg EngineMessage
+		msg.Type = EngineMessageType_Proposal
+		msg.Message = bts
+
+		out, err := proto.Marshal(&msg)
+		if err != nil {
+			log.Error("consensusTask", "proto.Marshal", err)
+			return
+		}
+
+		// post this message
+		err = e.mux.Post(MessageOutput(out))
+		if err != nil {
+			log.Error("consensusTask", "mux.Post", err)
+			return
+		}
+	}
+
+	// if i'm the validator, participant in consensus
+	participants := e.CreateValidators(block.Header(), stakingObject)
+
+	// check if i'm the validator
+	// if not , return
+	var isValidator bool
+	identity := PubKeyToIdentity(&privateKey.PublicKey)
+	for k := range participants {
+		if participants[k] == identity {
+			isValidator = true // mark i'm a validator
+			break
+		}
+	}
+
+	if !isValidator {
+		return
+	}
+
+	// the proposal collection timeout
+	collectProposalTimeout := time.NewTimer(5 * time.Second)
+
+COLLECTPROPOSAL:
+	for {
+		select {
+		case obj := <-consensusMessageChan: // consensus message
+			if ev, ok := obj.Data.(MessageInput); ok {
+				var em EngineMessage
+				err := proto.Unmarshal(ev, &em)
+				if err != nil {
+					log.Error("proto.Unmarshal", "err", err)
+				}
+
+				// we add an extra encapsulation for consensus contents
+				switch em.Type {
+				case EngineMessageType_Proposal:
+					var proposal types.Block
+					err := rlp.DecodeBytes(em.Message, &proposal)
+					if err != nil {
+						log.Error("proposerMessage", "rlp.DecodeBytes", err)
+						continue
+					}
+
+					// verify proposal fields
+					if !e.verifyRemoteProposal(chain, &proposal, block.NumberU64(), stakingObject) {
+						log.Error("messageValidator verifyProposal failed")
+						continue
+					}
+
+					// record candidate blocks
+					if candidateProposal == nil {
+						candidateProposal = &proposal
+					} else if bytes.Compare(e.proposerHash(proposal.NumberU64(), proposal.R(), proposal.W()).Bytes(),
+						e.proposerHash(candidateProposal.NumberU64(), candidateProposal.R(), candidateProposal.W()).Bytes()) == 1 {
+						candidateProposal = &proposal
+					}
+				}
+			}
+		case <-collectProposalTimeout.C:
+			break COLLECTPROPOSAL
+		}
+	}
+
+	// make sure candidateProposal is not nil
+	if candidateProposal == nil {
+		header := block.Header()
+		header.Coinbase = common.Address{}
+		e.Prepare(chain, header)
+		candidateProposal = types.NewBlock(header, nil, nil, nil)
+	}
+
+	// the core consensus message loop
+	log.Warn("CONSENSUS TASK STARTED", "coinbase", candidateProposal.Coinbase(), "height", candidateProposal.NumberU64())
 
 	// known proposed blocks from each participants' <roundchange> messages
-	allKeptBlocks := make(map[common.Address][]*types.Block)
+	allBlocksInConsensus := make(map[common.Address][]*types.Block)
 
 	// to lookup the block for current consensus height
-	lookupProposal := func(hash common.Hash) *types.Block {
+	lookupConsensusBlock := func(hash common.Hash) *types.Block {
 		// loop to find the block
-		for _, blocks := range allKeptBlocks {
+		for _, blocks := range allBlocksInConsensus {
 			for _, b := range blocks {
 				if b.Hash() == hash {
 					return b
@@ -92,6 +205,11 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		}
 		return nil
 	}
+
+	// prepare callbacks(closures)
+	// we need to prepare 3 closures for this height, one to track proposals from local or remote,
+	// one to exchange the message from consensus core to p2p module, one to validate consensus
+	// messages with proposed blocks from remote.
 
 	// mesasge out call back to handle auxcilliary messages along with the consensus message
 	messageOutCallback := func(m *bdls.Message, signed *bdls.SignedProto) {
@@ -103,7 +221,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 			blockHash := common.BytesToHash(m.State)
 			var outblock *types.Block
 			// externally proposed block
-			outblock = lookupProposal(blockHash)
+			outblock = lookupConsensusBlock(blockHash)
 
 			// impossible situation here, all outgoing proposals in <roundchange>
 			// are to be known.
@@ -176,7 +294,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 			// 2. Always record the latest proposal from a proposer, before consensus continues
 			var keptBlocks []*types.Block
 			var repeated bool
-			for _, pBlock := range allKeptBlocks[block.Coinbase()] {
+			for _, pBlock := range allBlocksInConsensus[block.Coinbase()] {
 				if c.HasProposed(pBlock.Hash().Bytes()) {
 					keptBlocks = append(keptBlocks, pBlock)
 					// repeated valid block
@@ -189,7 +307,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 			if !repeated { // record latest proposal of a block
 				keptBlocks = append(keptBlocks, &proposal)
 			}
-			allKeptBlocks[proposal.Coinbase()] = keptBlocks
+			allBlocksInConsensus[proposal.Coinbase()] = keptBlocks
 
 			return true
 		}
@@ -197,7 +315,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		return true
 	}
 
-	// step 2. setup consensus config at the given height
+	// setup consensus config at the given height
 	config := &bdls.Config{
 		Epoch:         time.Now(),
 		CurrentHeight: block.NumberU64() - 1,
@@ -206,7 +324,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		StateValidate: func(s bdls.State) bool {
 			// make sure all states are known from <roundchange> exchanging
 			hash := common.BytesToHash(s)
-			if lookupProposal(hash) != nil {
+			if lookupConsensusBlock(hash) != nil {
 				return true
 			}
 
@@ -216,48 +334,27 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		MessageValidator: messageValidator,
 		// consensus message will be routed through engine
 		MessageOutCallback: messageOutCallback,
+		Participants:       participants,
 	}
-	config.Participants = e.CreateValidators(block.Header(), stakingObject)
-	e.mu.Unlock()
 
-	// step 3. create the consensus object
+	// create the consensus object
 	consensus, err := bdls.NewConsensus(config)
 	if err != nil {
 		log.Error("bdls.NewConsensus", "err", err)
 		return
 	}
-
-	// step 5: step delay by last block timestamp
+	// set expected delay
 	consensus.SetLatency(time.Second)
-
-	// step 5. create a consensus message subscriber's loop
-	// subscribe to consensus message input via event mux
-	var consensusMessageChan <-chan *event.TypeMuxEvent
-	if e.mux != nil {
-		consensusSub := e.mux.Subscribe(MessageInput{})
-		defer consensusSub.Unsubscribe()
-		consensusMessageChan = consensusSub.Chan()
-	} else {
-		log.Error("mux is nil")
-		return
-	}
 
 	// the consensus updater ticker
 	updateTick := time.NewTicker(20 * time.Millisecond)
 	defer updateTick.Stop()
 
-	// if i'm the proposer, propose the block
-	if e.IsProposer(block.Header(), stakingObject) {
-		allKeptBlocks[block.Coinbase()] = append(allKeptBlocks[block.Coinbase()], block)
-		consensus.Propose(block.Hash().Bytes())
-	}
+	// record & propose the candidate block
+	allBlocksInConsensus[candidateProposal.Coinbase()] = append(allBlocksInConsensus[candidateProposal.Coinbase()], candidateProposal)
+	consensus.Propose(candidateProposal.Hash().Bytes())
 
-	// TODO(xtaci) if i'm the committee member
-
-	// the core consensus message loop
-	log.Warn("CONSENSUS TASK STARTED", "coinbase", block.Coinbase(), "height", block.NumberU64())
-
-	var proposed bool
+	// core consensus loop
 	for {
 		select {
 		case obj := <-consensusMessageChan: // consensus message
@@ -268,29 +365,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 					log.Error("proto.Unmarshal", "err", err)
 				}
 
-				// we add an extra encapsulation for consensus contents
 				switch em.Type {
-				case EngineMessageType_Proposal:
-					if !proposed { // we only accept one valid proposal
-						var proposal types.Block
-						err := rlp.DecodeBytes(em.Message, &proposal)
-						if err != nil {
-							log.Error("proposerMessage", "rlp.DecodeBytes", err)
-							continue
-						}
-
-						// verify proposal
-						if !e.verifyRemoteProposal(chain, &proposal, block.NumberU64(), stakingObject) {
-							log.Error("messageValidator verifyProposal failed")
-							continue
-						}
-
-						// record & propose the block from a proposer
-						allKeptBlocks[proposal.Coinbase()] = append(allKeptBlocks[proposal.Coinbase()], &proposal)
-						consensus.Propose(proposal.Hash().Bytes())
-						proposed = true
-					}
-
 				case EngineMessageType_Consensus:
 					err := consensus.ReceiveMessage(em.Message, time.Now()) // input to core
 					if err != nil {
@@ -304,7 +379,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 						hash := common.BytesToHash(newState)
 
 						// every validator can finalize this block to it's local blockchain now
-						newblock := lookupProposal(hash)
+						newblock := lookupConsensusBlock(hash)
 						if newblock != nil {
 							header := newblock.Header()
 							bts, err := consensus.CurrentProof().Marshal()
