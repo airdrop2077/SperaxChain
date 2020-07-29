@@ -117,8 +117,7 @@ type Staker struct {
 
 // The object to be stored in StakingAddress's Account.Code
 type StakingObject struct {
-	Stakers     []Staker // staker's, expired stakers will automatically be removed
-	TotalStaked *big.Int
+	Stakers []Staker // staker's, expired stakers will automatically be removed
 }
 
 // GetStakingObject returns the stakingObject at some state
@@ -166,12 +165,18 @@ func (e *BDLSEngine) IsProposer(header *types.Header, stakingObject *StakingObje
 		return true
 	}
 
+	// non-empty blocks
 	var numStaked *big.Int
-	var totalStaked *big.Int
+	var totalStaked *big.Int // effective stakings
 
 	// lookup the staker's information
 	for k := range stakingObject.Stakers {
 		staker := stakingObject.Stakers[k]
+		// count effective stakings
+		if header.Number.Uint64() > staker.StakingFrom || header.Number.Uint64() <= staker.StakingTo {
+			totalStaked.Add(totalStaked, staker.StakedValue)
+		}
+
 		if staker.Address == header.Coinbase {
 			if header.Number.Uint64() <= staker.StakingFrom {
 				log.Debug("height is not larger than the height which the proposer has announced(stakingFrom)")
@@ -181,8 +186,6 @@ func (e *BDLSEngine) IsProposer(header *types.Header, stakingObject *StakingObje
 				return false
 			} else {
 				numStaked = staker.StakedValue
-				totalStaked = stakingObject.TotalStaked
-				break
 			}
 		}
 	}
@@ -213,8 +216,7 @@ func (e *BDLSEngine) IsProposer(header *types.Header, stakingObject *StakingObje
 }
 
 // ValidatorVotes counts the number of votes for a validator
-func (e *BDLSEngine) ValidatorVotes(header *types.Header, staker *Staker, stakingObject *StakingObject) uint64 {
-	totalStaked := stakingObject.TotalStaked
+func (e *BDLSEngine) ValidatorVotes(header *types.Header, staker *Staker, totalStaked *big.Int) uint64 {
 	numStaked := staker.StakedValue
 	validatorR := staker.StakingHash
 
@@ -286,12 +288,23 @@ func (ov SortableValidators) Hash(height uint64, R common.Hash, W common.Hash) c
 func (e *BDLSEngine) CreateValidators(header *types.Header, stakingObject *StakingObject) []bdls.Identity {
 	var orderedValidators []orderedValidator
 
+	// count effective stakings
+	var totalStaked *big.Int
+	for k := range stakingObject.Stakers {
+		staker := stakingObject.Stakers[k]
+		// count effective stakings
+		if header.Number.Uint64() > staker.StakingFrom || header.Number.Uint64() <= staker.StakingTo {
+			totalStaked.Add(totalStaked, staker.StakedValue)
+		}
+	}
+
+	// find validators
 	for k := range stakingObject.Stakers {
 		staker := stakingObject.Stakers[k]
 		if header.Number.Uint64() <= staker.StakingFrom || header.Number.Uint64() > staker.StakingTo {
 			continue
 		} else {
-			n := e.ValidatorVotes(header, &staker, stakingObject)
+			n := e.ValidatorVotes(header, &staker, totalStaked)
 			for i := uint64(0); i < n; i++ { // add n votes
 				var validator orderedValidator
 				copy(validator.identity[:], staker.Address.Bytes())
@@ -301,7 +314,7 @@ func (e *BDLSEngine) CreateValidators(header *types.Header, stakingObject *Staki
 		}
 	}
 
-	// sort by the hash
+	// sort by the validators based on the sorting hash
 	sort.Sort(SortableValidators(orderedValidators))
 	var sortedValidators []bdls.Identity
 	for i := 0; i < len(orderedValidators); i++ {
