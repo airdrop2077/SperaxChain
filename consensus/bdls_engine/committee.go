@@ -153,6 +153,19 @@ func (e *BDLSEngine) deriveW(header *types.Header) common.Hash {
 
 // H(r;0;Ri,r,0;Wr) > max{0;1 i-aip}
 func (e *BDLSEngine) IsProposer(header *types.Header, stakingObject *StakingObject) bool {
+	// empty block is valid proposer
+	if header.Coinbase == StakingAddress {
+		// make sure transactions are emtpy for staking miner
+		if header.TxHash != types.EmptyRootHash {
+			log.Debug("verifyProposerField for empty transactions", "header.TxHash", header.TxHash)
+			return false
+		} else if header.ReceiptHash != types.EmptyRootHash {
+			log.Debug("verifyProposerField for empty receipts", "header.ReceiptHash", header.ReceiptHash)
+			return false
+		}
+		return true
+	}
+
 	var numStaked *big.Int
 	var totalStaked *big.Int
 

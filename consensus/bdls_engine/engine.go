@@ -492,11 +492,12 @@ func (e *BDLSEngine) verifyRemoteProposal(chain consensus.ChainReader, block *ty
 func (e *BDLSEngine) verifyProposerField(stakingObject *StakingObject, header *types.Header) bool {
 	// Ensure the coinbase is a valid proposer
 	if !e.IsProposer(header, stakingObject) {
-		log.Error("verifyProposerField - IsProposer", "height", header.Number, "proposer", header.Coinbase)
+		log.Debug("verifyProposerField - IsProposer", "height", header.Number, "proposer", header.Coinbase)
 		return false
 	}
 
 	// Ensure the block proposer is identical to coinbase
+	// the signature is the hash w/o signature & decision field
 	copyHeader := types.CopyHeader(header)
 	copyHeader.Signature = nil
 	copyHeader.Decision = nil
@@ -506,16 +507,19 @@ func (e *BDLSEngine) verifyProposerField(stakingObject *StakingObject, header *t
 		return false
 	}
 
-	if !crypto.VerifySignature(pk, copyHeader.Hash().Bytes(), header.Signature) {
-		log.Debug("verifyProposerField - verify signature failed")
-		return false
-	}
-
+	// Ensure the signer is the coinbase
 	pubkey, _ := crypto.DecompressPubkey(pk)
 	signer := crypto.PubkeyToAddress(*pubkey)
 	if signer != header.Coinbase {
 		log.Debug("verifyProposerField - signer do not match coinbase", "signer", pubkey, "coinbase", header.Coinbase)
 	}
+
+	// Verify signature
+	if !crypto.VerifySignature(pk, copyHeader.Hash().Bytes(), header.Signature) {
+		log.Debug("verifyProposerField - verify signature failed")
+		return false
+	}
+
 	return true
 }
 
