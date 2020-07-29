@@ -87,7 +87,9 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 	if err != nil {
 		return
 	}
+	sharedGasFee := parentState.GetBalance(GasFeeAddress)
 
+	// share the gas fee from previous height to validators
 	if parentHeader.Decision != nil {
 		sp, err := bdls.DecodeSignedMessage(parentHeader.Decision)
 		if err != nil {
@@ -96,8 +98,7 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 		message, err := bdls.DecodeMessage(sp.Message)
 
 		if len(message.Proof) > 0 {
-			// share gas fees from last height
-			share := big.NewInt(0).Quo(parentState.GetBalance(GasFeeAddress), big.NewInt(int64(len(message.Proof))))
+			share := big.NewInt(0).Quo(sharedGasFee, big.NewInt(int64(len(message.Proof))))
 			for _, proof := range message.Proof {
 				address := crypto.PubkeyToAddress(*proof.PublicKey(crypto.S256()))
 				state.AddBalance(address, share)
@@ -105,7 +106,7 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 		}
 	}
 
-	// refund all expired staking at current state
+	// refund all expired staking tokens at current state
 	stakingObject, err := e.GetStakingObject(state)
 	if err != nil {
 		panic("Error in getting staking Object")
@@ -114,7 +115,7 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 	var stakers []Staker
 	for k := range stakingObject.Stakers {
 		staker := stakingObject.Stakers[k]
-		if header.Number.Uint64() > staker.StakingTo {
+		if header.Number.Uint64() > staker.StakingTo { // expired, refund automatically
 			state.AddBalance(staker.Address, staker.StakedValue)
 			state.SubBalance(StakingAddress, staker.StakedValue)
 		} else {
@@ -122,7 +123,7 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 		}
 	}
 
-	// staking modificiation
+	// staking state modification
 	if len(stakers) < len(stakingObject.Stakers) {
 		stakingObject.Stakers = stakers
 		// update StakingObject
