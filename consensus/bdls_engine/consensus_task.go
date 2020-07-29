@@ -118,11 +118,10 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		}
 	}
 
-	// if i'm the validator, participant in consensus
+	// derive the participants from staking object at this height
 	participants := e.CreateValidators(block.Header(), stakingObject)
 
-	// check if i'm the validator
-	// if not , return
+	// check if i'm the validator, stop here if i'm not a validator
 	var isValidator bool
 	identity := PubKeyToIdentity(&privateKey.PublicKey)
 	for k := range participants {
