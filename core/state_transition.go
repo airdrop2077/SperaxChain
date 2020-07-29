@@ -287,6 +287,11 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 				return nil, bdls_engine.ErrStakingMinimumTokens
 			}
 
+			// staking period check
+			if req.StakingTo <= req.StakingFrom {
+				return nil, bdls_engine.ErrStakingInvalidPeriod
+			}
+
 			// no previous staking information
 			var staker bdls_engine.Staker
 			staker.StakingFrom = req.StakingFrom

@@ -70,6 +70,7 @@ var (
 var (
 	ErrStakingRequest       = errors.New("already staked")
 	ErrStakingMinimumTokens = errors.New("staking has less than minimum tokens")
+	ErrStakingInvalidPeriod = errors.New("invalid staking period")
 	ErrRedeemRequest        = errors.New("not staked")
 )
 
