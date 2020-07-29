@@ -199,7 +199,7 @@ func (e *BDLSEngine) IsProposer(header *types.Header, stakingObject *StakingObje
 	}
 
 	// compute proposer hash
-	proposerHash := e.proposerHash(header.Number.Uint64(), header.R, header.W)
+	proposerHash := e.proposerHash(header)
 
 	// calculate H/MaxUint256
 	h := big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(proposerHash.Bytes()))
@@ -320,13 +320,13 @@ func Pow(a *big.Float, e uint64) *big.Float {
 }
 
 // proposerHash computes a hash for proposer's random number
-func (e *BDLSEngine) proposerHash(height uint64, R common.Hash, W common.Hash) common.Hash {
+func (e *BDLSEngine) proposerHash(header *types.Header) common.Hash {
 	hasher := sha3.New256()
-	binary.Write(hasher, binary.LittleEndian, height)
+	binary.Write(hasher, binary.LittleEndian, header.Number.Uint64())
 	binary.Write(hasher, binary.LittleEndian, 0)
-	hasher.Write(R.Bytes())
+	hasher.Write(header.R.Bytes())
 	hasher.Write(CommonCoin)
-	hasher.Write(W.Bytes())
+	hasher.Write(header.W.Bytes())
 
 	return common.BytesToHash(hasher.Sum(nil))
 }

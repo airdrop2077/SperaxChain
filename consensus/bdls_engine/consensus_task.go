@@ -168,8 +168,8 @@ COLLECTPROPOSAL:
 					// record candidate blocks
 					if candidateProposal == nil {
 						candidateProposal = &proposal
-					} else if bytes.Compare(e.proposerHash(proposal.NumberU64(), proposal.R(), proposal.W()).Bytes(),
-						e.proposerHash(candidateProposal.NumberU64(), candidateProposal.R(), candidateProposal.W()).Bytes()) == 1 {
+					} else if bytes.Compare(e.proposerHash(proposal.Header()).Bytes(),
+						e.proposerHash(candidateProposal.Header()).Bytes()) == 1 {
 						candidateProposal = &proposal
 					}
 				}
