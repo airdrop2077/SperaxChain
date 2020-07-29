@@ -33,12 +33,74 @@ package bdls_engine
 import (
 	"math/big"
 
+	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
+	"github.com/Sperax/SperaxChain/crypto"
 	"github.com/Sperax/SperaxChain/params"
+	"github.com/Sperax/bdls"
+)
+
+var (
+	// Proposer's SPA reward
+	ProposerReward       = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
+	TotalValidatorReward = new(big.Int).Mul(big.NewInt(3000), big.NewInt(params.Ether))
+	GasFeeAddress        = common.Address{0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD}
 )
 
 // mining reward computation
-func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header) {
-	state.AddBalance(header.Coinbase, new(big.Int).Mul(big.NewInt(1), big.NewInt(params.Ether)))
+func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state.StateDB, header *types.Header) {
+	if header.Coinbase == StakingAddress {
+		// ignore empty block
+		return
+	}
+
+	// Proposer's reward
+	state.AddBalance(header.Coinbase, new(big.Int).Mul(ProposerReward, big.NewInt(params.Ether)))
+
+	// Divide TotalValidatorReward evenly for current block
+	sp, err := bdls.DecodeSignedMessage(header.Decision)
+	if err != nil {
+		panic(err)
+	}
+	message, err := bdls.DecodeMessage(sp.Message)
+
+	if len(message.Proof) > 0 {
+		share := big.NewInt(0).Quo(TotalValidatorReward, big.NewInt(int64(len(message.Proof))))
+		for _, proof := range message.Proof {
+			address := crypto.PubkeyToAddress(*proof.PublicKey(crypto.S256()))
+			// each validator's reward
+			state.AddBalance(address, new(big.Int).Mul(share, big.NewInt(params.Ether)))
+		}
+	}
+
+	// Ensure the parent is not nil
+	parentHeader := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
+	if parentHeader == nil {
+		return
+	}
+
+	// retrieve the gas fee account at parent height
+	parentState, err := e.stateAt(header.ParentHash)
+	if err != nil {
+		return
+	}
+
+	if parentHeader.Decision != nil {
+		sp, err := bdls.DecodeSignedMessage(parentHeader.Decision)
+		if err != nil {
+			panic(err)
+		}
+		message, err := bdls.DecodeMessage(sp.Message)
+
+		if len(message.Proof) > 0 {
+			// share gas fees from last height
+			share := big.NewInt(0).Quo(parentState.GetBalance(GasFeeAddress), big.NewInt(int64(len(message.Proof))))
+			for _, proof := range message.Proof {
+				address := crypto.PubkeyToAddress(*proof.PublicKey(crypto.S256()))
+				state.AddBalance(address, share)
+			}
+		}
+	}
 }

@@ -283,7 +283,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			}
 
 			// minimum staking requirement
-			if st.value.Cmp(bdls_engine.Alpha) == -1 {
+			if st.value.Cmp(bdls_engine.StakingUnit) == -1 {
 				return nil, bdls_engine.ErrStakingMinimumTokens
 			}
 
@@ -346,7 +346,13 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
 	}
 	st.refundGas()
-	st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+
+	// Sperax
+	// 1. one half goes to proposer
+	// 2. the other half goes to all validators at next height
+	halfUsed := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()/2), st.gasPrice)
+	st.state.AddBalance(st.evm.Coinbase, halfUsed)
+	st.state.AddBalance(bdls_engine.GasFeeAddress, halfUsed)
 
 	return &ExecutionResult{
 		UsedGas:    st.gasUsed(),

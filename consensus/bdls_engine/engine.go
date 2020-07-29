@@ -402,9 +402,8 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 // Note: The block header and state database might be updated to reflect any
 // consensus rules that happen at finalization (e.g. block rewards).
 func (e *BDLSEngine) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
-	accumulateRewards(chain.Config(), state, header)
+	e.accumulateRewards(chain, state, header)
 	header.Root = state.IntermediateRoot(true)
-	header.UncleHash = nilUncleHash
 }
 
 // FinalizeAndAssemble runs any post-transaction state modifications (e.g. block
@@ -413,9 +412,8 @@ func (e *BDLSEngine) Finalize(chain consensus.ChainReader, header *types.Header,
 // Note: The block header and state database might be updated to reflect any
 // consensus rules that happen at finalization (e.g. block rewards).
 func (e *BDLSEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
-	accumulateRewards(chain.Config(), state, header)
+	e.accumulateRewards(chain, state, header)
 	header.Root = state.IntermediateRoot(true)
-	header.UncleHash = nilUncleHash
 	return types.NewBlock(header, txs, nil, receipts), nil
 }
 

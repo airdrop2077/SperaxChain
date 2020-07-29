@@ -59,12 +59,12 @@ var (
 	// BFT committee expectationA
 	E2 = big.NewInt(50)
 	// unit of staking SPA
-	Alpha = new(big.Int).Mul(big.NewInt(100000), big.NewInt(params.Ether))
-
-	MaxUint256 = big.NewFloat(0).SetInt(big.NewInt(0).SetBytes([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}))
-
+	StakingUnit = new(big.Int).Mul(big.NewInt(100000), big.NewInt(params.Ether))
 	// transfering tokens to this address will be specially treated
 	StakingAddress = common.Address{0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE}
+
+	// max unsigned 256-bit integer
+	MaxUint256 = big.NewFloat(0).SetInt(big.NewInt(0).SetBytes([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}))
 )
 
 var (
@@ -189,7 +189,7 @@ func (e *BDLSEngine) IsProposer(header *types.Header, stakingObject *StakingObje
 
 	// compute p
 	p := big.NewFloat(0).SetInt(E1)
-	p.Mul(p, big.NewFloat(0).SetInt(Alpha))
+	p.Mul(p, big.NewFloat(0).SetInt(StakingUnit))
 	p.Quo(p, big.NewFloat(0).SetInt(totalStaked))
 
 	// max{0, 1 - ai*p}
@@ -221,10 +221,10 @@ func (e *BDLSEngine) ValidatorVotes(header *types.Header, staker *Staker, stakin
 	// compute p'
 	// p' = E2* numStaked /totalStaked
 	p := big.NewFloat(0).SetInt(E2)
-	p.Mul(p, big.NewFloat(0).SetInt(Alpha))
+	p.Mul(p, big.NewFloat(0).SetInt(StakingUnit))
 	p.Quo(p, big.NewFloat(0).SetInt(totalStaked))
 
-	maxVotes := numStaked.Uint64() / Alpha.Uint64()
+	maxVotes := numStaked.Uint64() / StakingUnit.Uint64()
 
 	// compute validator's hash
 	validatorHash := e.validatorHash(header.Number.Uint64(), validatorR, header.W)
