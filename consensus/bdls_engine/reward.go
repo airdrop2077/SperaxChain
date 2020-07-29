@@ -39,6 +39,7 @@ import (
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/crypto"
 	"github.com/Sperax/SperaxChain/params"
+	"github.com/Sperax/SperaxChain/rlp"
 	"github.com/Sperax/bdls"
 )
 
@@ -102,5 +103,33 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 				state.AddBalance(address, share)
 			}
 		}
+	}
+
+	// refund all expired staking at current state
+	stakingObject, err := e.GetStakingObject(state)
+	if err != nil {
+		panic("Error in getting staking Object")
+	}
+
+	var stakers []Staker
+	for k := range stakingObject.Stakers {
+		staker := stakingObject.Stakers[k]
+		if header.Number.Uint64() > staker.StakingTo {
+			state.AddBalance(staker.Address, staker.StakedValue)
+			state.SubBalance(StakingAddress, staker.StakedValue)
+		} else {
+			stakers = append(stakers, staker)
+		}
+	}
+
+	// staking modificiation
+	if len(stakers) < len(stakingObject.Stakers) {
+		stakingObject.Stakers = stakers
+		// update StakingObject
+		bts, err := rlp.EncodeToBytes(stakingObject)
+		if err != nil {
+			panic(err)
+		}
+		state.SetCode(StakingAddress, bts)
 	}
 }
