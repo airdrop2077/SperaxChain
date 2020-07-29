@@ -85,11 +85,12 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		return
 	}
 
-	// collect candidate blocks
+	// record candidate blocks
 	var candidateProposal *types.Block
 
 	// if i'm the proposer, propose the block
 	if e.IsProposer(block.Header(), stakingObject) {
+		// record the candidate block which I proposed
 		candidateProposal = block
 
 		bts, err := rlp.EncodeToBytes(block)
@@ -138,7 +139,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	// the proposal collection timeout
 	collectProposalTimeout := time.NewTimer(5 * time.Second)
 
-COLLECTPROPOSAL:
+PROPOSAL_COLLECTION:
 	for {
 		select {
 		case obj := <-consensusMessageChan: // consensus message
@@ -168,14 +169,29 @@ COLLECTPROPOSAL:
 					// record candidate blocks
 					if candidateProposal == nil {
 						candidateProposal = &proposal
-					} else if bytes.Compare(e.proposerHash(proposal.Header()).Bytes(),
-						e.proposerHash(candidateProposal.Header()).Bytes()) == 1 {
+						continue
+					}
+
+					proposalHash := e.proposerHash(proposal.Header()).Bytes()
+					candidateHash := e.proposerHash(candidateProposal.Header()).Bytes()
+
+					// replacement algorithm
+					// non-empty block has priority over empty blocks
+					if candidateProposal.Coinbase() == StakingAddress && proposal.Coinbase() == StakingAddress { // both emtpy
+						if bytes.Compare(proposalHash, candidateHash) == 1 {
+							candidateProposal = &proposal
+						}
+					} else if candidateProposal.Coinbase() == StakingAddress && proposal.Coinbase() != StakingAddress { // new proposal is not empty
 						candidateProposal = &proposal
+					} else if candidateProposal.Coinbase() != StakingAddress && proposal.Coinbase() != StakingAddress { // both not empty
+						if bytes.Compare(proposalHash, candidateHash) == 1 {
+							candidateProposal = &proposal
+						}
 					}
 				}
 			}
 		case <-collectProposalTimeout.C:
-			break COLLECTPROPOSAL
+			break PROPOSAL_COLLECTION
 		}
 	}
 
