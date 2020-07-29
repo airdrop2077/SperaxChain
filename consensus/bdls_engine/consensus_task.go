@@ -44,6 +44,10 @@ import (
 	proto "github.com/gogo/protobuf/proto"
 )
 
+var (
+	proposalCollectTimeout = 5 * time.Second
+)
+
 // a consensus task for a specific block
 func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) {
 	privateKey := e.waitForPrivateKey(block.Coinbase(), stop)
@@ -136,7 +140,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	}
 
 	// the proposal collection timeout
-	collectProposalTimeout := time.NewTimer(5 * time.Second)
+	collectProposalTimeout := time.NewTimer(proposalCollectTimeout)
 
 PROPOSAL_COLLECTION:
 	for {
@@ -335,7 +339,22 @@ PROPOSAL_COLLECTION:
 		Epoch:         time.Now(),
 		CurrentHeight: block.NumberU64() - 1,
 		PrivateKey:    privateKey,
-		StateCompare:  func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
+		StateCompare: func(a bdls.State, b bdls.State) int {
+			blockA := lookupConsensusBlock(common.BytesToHash(a))
+			blockB := lookupConsensusBlock(common.BytesToHash(a))
+			blockAHash := e.proposerHash(blockA.Header()).Bytes()
+			blockBHash := e.proposerHash(blockB.Header()).Bytes()
+
+			// block comparision algorithm
+			if (blockA.Coinbase() == StakingAddress && blockB.Coinbase() == StakingAddress) || (blockA.Coinbase() != StakingAddress && blockB.Coinbase() != StakingAddress) { // both emtpy or both non-empty
+				return bytes.Compare(blockAHash, blockBHash)
+			} else if blockA.Coinbase() == StakingAddress && blockB.Coinbase() != StakingAddress { // non empty block is larger
+				return -1
+			} else if blockA.Coinbase() != StakingAddress && blockB.Coinbase() == StakingAddress {
+				return 1
+			}
+			return 0
+		},
 		StateValidate: func(s bdls.State) bool {
 			// make sure all states are known from <roundchange> exchanging
 			hash := common.BytesToHash(s)
