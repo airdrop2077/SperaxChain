@@ -124,7 +124,7 @@ type StakingObject struct {
 // GetStakingObject returns the stakingObject at some state
 func (e *BDLSEngine) GetStakingObject(state *state.StateDB) (*StakingObject, error) {
 	var stakingObject StakingObject
-	// retrieve committe data structure from code
+	// retrieve staking object from account.Code
 	code := state.GetCode(StakingAddress)
 	if code != nil {
 		err := rlp.DecodeBytes(code, &stakingObject)
@@ -145,9 +145,9 @@ func (e *BDLSEngine) deriveW(header *types.Header) common.Hash {
 
 	hasher := sha3.NewLegacyKeccak256()
 
-	// derive Wj from previous header Pj-1 & Wj-1
+	// derive Wj from Pj-1 & Wj-1
 	hasher.Write(header.Coinbase.Bytes())
-	hasher.Write(header.W.Bytes()) // write Wj-1
+	hasher.Write(header.W.Bytes())
 	return common.BytesToHash(hasher.Sum(nil))
 }
 
@@ -179,8 +179,8 @@ func (e *BDLSEngine) IsProposer(header *types.Header, stakingObject *StakingObje
 		}
 
 		if staker.Address == header.Coinbase {
-			if header.Number.Uint64() <= staker.StakingFrom {
-				log.Debug("height is not larger than the height which the proposer has announced(stakingFrom)")
+			if header.Number.Uint64() <= staker.StakingFrom || header.Number.Uint64() > staker.StakingTo {
+				log.Debug("invalid staking period")
 				return false
 			} else if common.BytesToHash(e.hashChain(staker.StakingHash.Bytes(), header.Number.Uint64()-staker.StakingFrom)) != header.R {
 				log.Debug("hashchain verification failed for header.R")
@@ -369,8 +369,8 @@ func (e *BDLSEngine) validatorSortingHash(address common.Address, R common.Hash,
 	return common.BytesToHash(hasher.Sum(nil))
 }
 
-// deriveStakingSeed deterministically derives the random number for height, based on the staking from height and private key
-// lastHash  = H(H(privatekey + stakingFrom) *G)
+// deriveStakingSeed deterministically derives the pseudo-random number with height and private key
+// seed := H(H(privatekey,stakingFrom) *G)
 func (e *BDLSEngine) deriveStakingSeed(priv *ecdsa.PrivateKey, stakingFrom uint64) []byte {
 	// H(privatekey + stakingFrom)
 	hasher := sha3.New256()
@@ -389,14 +389,11 @@ func (e *BDLSEngine) deriveStakingSeed(priv *ecdsa.PrivateKey, stakingFrom uint6
 
 // compute hash recursively for n(n>=0) times
 func (e *BDLSEngine) hashChain(hash []byte, n uint64) []byte {
-	if n == 0 {
-		return hash
-	}
-
+	lastHash := hash
 	hasher := sha3.New256()
-	hasher.Write(hash)
-	for i := uint64(1); i < n; i++ {
-		hasher.Write(hasher.Sum(nil))
+	for i := uint64(0); i < n; i++ {
+		hasher.Write(lastHash)
+		lastHash = hasher.Sum(nil)
 	}
-	return hasher.Sum(nil)
+	return lastHash
 }
