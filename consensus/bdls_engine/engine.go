@@ -373,14 +373,16 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 	// set W based on parent block
 	header.W = e.deriveW(parent)
 
-	// set proposer's R
+	// try to set proposer's R
 	privateKey := e.waitForPrivateKey(header.Coinbase, nil)
 	for k := range stakingObject.Stakers {
 		staker := stakingObject.Stakers[k]
 		if staker.Address == header.Coinbase {
-			seed := e.deriveStakingSeed(privateKey, staker.StakingFrom)
-			// hashing chaining
-			header.R = common.BytesToHash(e.hashChain(seed, header.Number.Uint64()-staker.StakingFrom))
+			if header.Number.Uint64() > staker.StakingFrom || header.Number.Uint64() <= staker.StakingTo {
+				// set R only if it's in a valid staking period
+				seed := e.deriveStakingSeed(privateKey, staker.StakingFrom)
+				header.R = common.BytesToHash(e.hashChain(seed, header.Number.Uint64()-staker.StakingFrom))
+			}
 			break
 		}
 	}
@@ -461,7 +463,7 @@ func (e *BDLSEngine) verifyRemoteProposal(chain consensus.ChainReader, block *ty
 	header := block.Header()
 	// verify the block number
 	if header.Number.Uint64() != height {
-		log.Warn("mismatched block number", "actual", header.Number.Uint64(), "expected", height)
+		log.Debug("verifyRemoteProposal - mismatched block number", "actual", header.Number.Uint64(), "expected", height)
 		return false
 	}
 
@@ -494,6 +496,13 @@ func (e *BDLSEngine) verifyProposerField(stakingObject *StakingObject, header *t
 		return false
 	}
 
+	// if it's empty proposal, omit signature verification
+	if header.Coinbase == StakingAddress && len(header.Signature) == 0 {
+		return true
+	}
+
+	// otherwise we need to verify the signature of the proposer
+
 	// Ensure the block proposer is identical to coinbase
 	// the signature is the hash w/o signature & decision field
 	copyHeader := types.CopyHeader(header)
@@ -510,6 +519,7 @@ func (e *BDLSEngine) verifyProposerField(stakingObject *StakingObject, header *t
 	signer := crypto.PubkeyToAddress(*pubkey)
 	if signer != header.Coinbase {
 		log.Debug("verifyProposerField - signer do not match coinbase", "signer", pubkey, "coinbase", header.Coinbase)
+		return false
 	}
 
 	// Verify signature

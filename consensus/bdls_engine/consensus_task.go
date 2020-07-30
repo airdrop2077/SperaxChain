@@ -46,6 +46,7 @@ import (
 
 var (
 	proposalCollectTimeout = 5 * time.Second
+	expectedLatency        = time.Second
 )
 
 // a consensus task for a specific block
@@ -53,6 +54,18 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	privateKey := e.waitForPrivateKey(block.Coinbase(), stop)
 	// time compensation to avoid fast block generation
 	delay := time.Unix(int64(block.Header().Time), 0).Sub(time.Now())
+
+	// create a consensus message subscriber's loop
+	// subscribe to consensus message input via event mux
+	var consensusMessageChan <-chan *event.TypeMuxEvent
+	if e.mux != nil {
+		consensusSub := e.mux.Subscribe(MessageInput{})
+		defer consensusSub.Unsubscribe()
+		consensusMessageChan = consensusSub.Chan()
+	} else {
+		log.Error("mux is nil")
+		return
+	}
 
 	// wait for the timestamp of header, use this to adjust the block period
 	select {
@@ -77,19 +90,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		return
 	}
 
-	// create a consensus message subscriber's loop
-	// subscribe to consensus message input via event mux
-	var consensusMessageChan <-chan *event.TypeMuxEvent
-	if e.mux != nil {
-		consensusSub := e.mux.Subscribe(MessageInput{})
-		defer consensusSub.Unsubscribe()
-		consensusMessageChan = consensusSub.Chan()
-	} else {
-		log.Error("mux is nil")
-		return
-	}
-
-	// record candidate blocks
+	// the candidate block before consensus begins
 	var candidateProposal *types.Block
 
 	// if i'm the proposer, propose the block
@@ -139,7 +140,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		return
 	}
 
-	// the proposal collection timeout
+	// prepare the maximum proposal by collecting proposals from proposers
 	collectProposalTimeout := time.NewTimer(proposalCollectTimeout)
 
 PROPOSAL_COLLECTION:
@@ -150,7 +151,8 @@ PROPOSAL_COLLECTION:
 				var em EngineMessage
 				err := proto.Unmarshal(ev, &em)
 				if err != nil {
-					log.Error("proto.Unmarshal", "err", err)
+					log.Debug("proposal collection", "proto.Unmarshal", err)
+					continue
 				}
 
 				// we add an extra encapsulation for consensus contents
@@ -159,13 +161,13 @@ PROPOSAL_COLLECTION:
 					var proposal types.Block
 					err := rlp.DecodeBytes(em.Message, &proposal)
 					if err != nil {
-						log.Error("proposerMessage", "rlp.DecodeBytes", err)
+						log.Debug("proposal collection", "rlp.DecodeBytes", err)
 						continue
 					}
 
 					// verify proposal fields
 					if !e.verifyRemoteProposal(chain, &proposal, block.NumberU64(), stakingObject) {
-						log.Error("messageValidator verifyProposal failed")
+						log.Debug("proposal collection - verifyRemoteProposal failed")
 						continue
 					}
 
@@ -175,11 +177,11 @@ PROPOSAL_COLLECTION:
 						continue
 					}
 
+					// replacement algorithm, keep the one with maximum hash
+					// non-empty block has priority over empty blocks
 					proposalHash := e.proposerHash(proposal.Header()).Bytes()
 					candidateHash := e.proposerHash(candidateProposal.Header()).Bytes()
 
-					// replacement algorithm
-					// non-empty block has priority over empty blocks
 					if candidateProposal.Coinbase() == StakingAddress && proposal.Coinbase() == StakingAddress { // both emtpy
 						if bytes.Compare(proposalHash, candidateHash) == 1 {
 							candidateProposal = &proposal
@@ -203,10 +205,11 @@ PROPOSAL_COLLECTION:
 		header := block.Header()
 		header.Coinbase = StakingAddress
 		e.Prepare(chain, header)
+		// create an empty block to propose
 		candidateProposal = types.NewBlock(header, nil, nil, nil)
 	}
 
-	// the core consensus message loop
+	// BEGIN THE CORE CONSENSUS MESSAGE LOOP
 	log.Warn("CONSENSUS TASK STARTED", "coinbase", candidateProposal.Coinbase(), "height", candidateProposal.NumberU64())
 
 	// known proposed blocks from each participants' <roundchange> messages
@@ -255,7 +258,7 @@ PROPOSAL_COLLECTION:
 				log.Error("messageOutCallBack", "rlp.EncodeToBytes", err)
 			}
 
-			// set auxdata & random number
+			// set auxdata
 			signed.AuxData = blockData
 		}
 
@@ -292,19 +295,19 @@ PROPOSAL_COLLECTION:
 			var proposal types.Block
 			err := rlp.DecodeBytes(signed.AuxData, &proposal)
 			if err != nil {
-				log.Error("messageValidator", "rlp.DecodeBytes", err)
+				log.Debug("messageValidator", "rlp.DecodeBytes", err)
 				return false
 			}
 
 			// ensure the hash is to the block in auxdata
 			if proposal.Hash() != common.BytesToHash(m.State) {
-				log.Error("messageValidator auxdata hash", "block hash", proposal.Hash(), "state hash", common.BytesToHash(m.State))
+				log.Debug("messageValidator auxdata hash", "block hash", proposal.Hash(), "state hash", common.BytesToHash(m.State))
 				return false
 			}
 
 			// verify proposal
 			if !e.verifyRemoteProposal(chain, &proposal, block.NumberU64(), stakingObject) {
-				log.Error("messageValidator verifyProposal failed")
+				log.Debug("messageValidator verifyProposal failed")
 				return false
 			}
 
@@ -346,7 +349,8 @@ PROPOSAL_COLLECTION:
 			blockBHash := e.proposerHash(blockB.Header()).Bytes()
 
 			// block comparision algorithm
-			if (blockA.Coinbase() == StakingAddress && blockB.Coinbase() == StakingAddress) || (blockA.Coinbase() != StakingAddress && blockB.Coinbase() != StakingAddress) { // both emtpy or both non-empty
+			if (blockA.Coinbase() == StakingAddress && blockB.Coinbase() == StakingAddress) || (blockA.Coinbase() != StakingAddress && blockB.Coinbase() != StakingAddress) {
+				// both emtpy or both non-empty
 				return bytes.Compare(blockAHash, blockBHash)
 			} else if blockA.Coinbase() == StakingAddress && blockB.Coinbase() != StakingAddress { // non empty block is larger
 				return -1
@@ -377,8 +381,8 @@ PROPOSAL_COLLECTION:
 		log.Error("bdls.NewConsensus", "err", err)
 		return
 	}
-	// set expected delay
-	consensus.SetLatency(time.Second)
+	// set expected latency
+	consensus.SetLatency(expectedLatency)
 
 	// the consensus updater ticker
 	updateTick := time.NewTicker(20 * time.Millisecond)
