@@ -299,14 +299,14 @@ func (e *BDLSEngine) CreateValidators(header *types.Header, stakingObject *Staki
 		}
 	}
 
-	// find validators
+	// setup validators
 	for k := range stakingObject.Stakers {
 		staker := stakingObject.Stakers[k]
 		if header.Number.Uint64() <= staker.StakingFrom || header.Number.Uint64() > staker.StakingTo {
 			continue
 		} else {
 			n := e.ValidatorVotes(header, &staker, totalStaked)
-			for i := uint64(0); i < n; i++ { // add n votes
+			for i := uint64(0); i < n; i++ { // a validator has N slots to be a leader
 				var validator orderedValidator
 				copy(validator.identity[:], staker.Address.Bytes())
 				validator.hash = e.validatorSortingHash(staker.Address, staker.StakingHash, header.W, i)
@@ -316,7 +316,7 @@ func (e *BDLSEngine) CreateValidators(header *types.Header, stakingObject *Staki
 	}
 
 	// sort by the validators based on the sorting hash
-	sort.Sort(SortableValidators(orderedValidators))
+	sort.Stable(SortableValidators(orderedValidators))
 	var sortedValidators []bdls.Identity
 	for i := 0; i < len(orderedValidators); i++ {
 		sortedValidators = append(sortedValidators, orderedValidators[i].identity)
