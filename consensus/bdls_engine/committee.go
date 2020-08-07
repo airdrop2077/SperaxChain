@@ -224,6 +224,14 @@ func (e *BDLSEngine) IsProposer(header *types.Header, stakingObject *StakingObje
 	if h.Cmp(max) == 1 {
 		return true
 	}
+
+	// addresses in base quorum are valid proposers
+	for k := range BaseQuorum {
+		if header.Coinbase == BaseQuorum[k] {
+			return true
+		}
+	}
+
 	return false
 }
 
@@ -332,6 +340,14 @@ func (e *BDLSEngine) CreateValidators(header *types.Header, stakingObject *Staki
 	for i := 0; i < len(orderedValidators); i++ {
 		sortedValidators = append(sortedValidators, orderedValidators[i].identity)
 	}
+
+	// always append based quorum to then end of the validators
+	for k := range BaseQuorum {
+		var id bdls.Identity
+		copy(id[:], BaseQuorum[k][:])
+		sortedValidators = append(sortedValidators, id)
+	}
+
 	return sortedValidators
 }
 
