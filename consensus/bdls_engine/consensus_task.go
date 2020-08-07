@@ -406,7 +406,11 @@ PROPOSAL_COLLECTION:
 	// core consensus loop
 	for {
 		select {
-		case obj := <-consensusMessageChan: // consensus message
+		case obj, ok := <-consensusMessageChan: // consensus message
+			if !ok {
+				return
+			}
+
 			if ev, ok := obj.Data.(MessageInput); ok {
 				var em EngineMessage
 				err := proto.Unmarshal(ev, &em)

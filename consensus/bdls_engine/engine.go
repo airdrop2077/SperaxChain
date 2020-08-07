@@ -73,6 +73,8 @@ var (
 	errInvalidDifficulty = errors.New("invalid difficulty")
 	// errInvalidW
 	errInvalidW = errors.New("invalid W")
+	// errInvalidSignature
+	errInvalidSignature = errors.New("invalid proposer signature in block header")
 	// errInvalidUncleHash is returned if a block contains an non-empty uncle list.
 	errInvalidUncleHash = errors.New("non empty uncle hash")
 	// errInvalidNonce is returned if a block's nonce is invalid
@@ -235,6 +237,11 @@ func (e *BDLSEngine) verifyHeader(chain consensus.ChainReader, header *types.Hea
 	// Ensure W has correctly set
 	if e.deriveW(parent) != header.W {
 		return errInvalidW
+	}
+
+	// Ensure the signature is not empty
+	if len(header.Signature) != crypto.SignatureLength {
+		return errInvalidSignature
 	}
 
 	return nil
