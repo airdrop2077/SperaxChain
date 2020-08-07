@@ -51,6 +51,17 @@ import (
 )
 
 var (
+	// Base Quorum is the quorum to make sure blockchain can generate new blocks
+	// while no other validators are running.
+	BaseQuorum = []common.Address{
+		common.HexToAddress("f2580391fe8a83366ed550de4e45af1714d74b8d"),
+		common.HexToAddress("066aaff9e575302365b7862dcebd4a5a65f75f5f"),
+		common.HexToAddress("3f80e8718d8e17a1768b467f193a6fbeaa6236e3"),
+		common.HexToAddress("29d3fbe3e7983a41d0e6d984c480ceedb3c251fd"),
+	}
+)
+
+var (
 	CommonCoin = []byte("Sperax")
 	// block 0 common random number
 	W0 = crypto.Keccak256Hash(hexutil.MustDecode("0x3243F6A8885A308D313198A2E037073"))
