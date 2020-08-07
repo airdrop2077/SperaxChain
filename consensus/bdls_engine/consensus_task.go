@@ -270,8 +270,19 @@ PROPOSAL_COLLECTION:
 			return
 		}
 
+		// marshal into EngineMessage and broadcast
+		var msg EngineMessage
+		msg.Type = EngineMessageType_Consensus
+		msg.Message = bts
+
+		out, err := proto.Marshal(&msg)
+		if err != nil {
+			log.Error("consensusTask", "proto.Marshal", err)
+			return
+		}
+
 		// broadcast the message via event mux
-		err = e.mux.Post(MessageOutput(bts))
+		err = e.mux.Post(MessageOutput(out))
 		if err != nil {
 			log.Error("messageOutCallback", "mux.Post", err)
 			return

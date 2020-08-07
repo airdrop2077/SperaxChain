@@ -224,6 +224,20 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		recommit = minRecommitInterval
 	}
 
+	// NOTE(xtaci): set BDLS specific block validator
+	if bdls, ok := worker.engine.(*bdls_engine.BDLSEngine); ok {
+		bdls.SetBlockValidator(worker.chain.HasBadBlock,
+			func(block *types.Block, state *state.StateDB) (types.Receipts, []*types.Log, uint64, error) {
+				return worker.chain.Processor().Process(block, state, *worker.chain.GetVMConfig())
+			},
+			func(block *types.Block, state *state.StateDB, receipts types.Receipts, usedGas uint64) error {
+				return worker.chain.Validator().ValidateState(block, state, receipts, usedGas)
+			},
+			func(hash common.Hash) (*state.StateDB, error) {
+				stateRoot := worker.chain.GetHeaderByHash(hash).Root
+				return worker.chain.StateAt(stateRoot)
+			})
+	}
 	go worker.mainLoop()
 	go worker.newWorkLoop(recommit)
 	go worker.resultLoop()
@@ -286,20 +300,6 @@ func (w *worker) pendingBlock() *types.Block {
 
 // start sets the running status as 1 and triggers new work submitting.
 func (w *worker) start() {
-	// NOTE(xtaci): set BDLS specific block validator
-	if bdls, ok := w.engine.(*bdls_engine.BDLSEngine); ok {
-		bdls.SetBlockValidator(w.chain.HasBadBlock,
-			func(block *types.Block, state *state.StateDB) (types.Receipts, []*types.Log, uint64, error) {
-				return w.chain.Processor().Process(block, state, *w.chain.GetVMConfig())
-			},
-			func(block *types.Block, state *state.StateDB, receipts types.Receipts, usedGas uint64) error {
-				return w.chain.Validator().ValidateState(block, state, receipts, usedGas)
-			},
-			func(hash common.Hash) (*state.StateDB, error) {
-				stateRoot := w.chain.GetHeaderByHash(hash).Root
-				return w.chain.StateAt(stateRoot)
-			})
-	}
 
 	atomic.StoreInt32(&w.running, 1)
 	w.startCh <- struct{}{}

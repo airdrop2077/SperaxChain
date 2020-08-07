@@ -64,7 +64,7 @@ var (
 var (
 	CommonCoin = []byte("Sperax")
 	// block 0 common random number
-	W0 = crypto.Keccak256Hash(hexutil.MustDecode("0x3243F6A8885A308D313198A2E037073"))
+	W0 = crypto.Keccak256Hash(hexutil.MustDecode("0x03243F6A8885A308D313198A2E037073"))
 	// potential propser expectation
 	E1 = big.NewInt(5)
 	// BFT committee expectationA
@@ -178,15 +178,15 @@ func (e *BDLSEngine) IsProposer(header *types.Header, stakingObject *StakingObje
 	}
 
 	// non-empty blocks
-	var numStaked *big.Int
-	var totalStaked *big.Int // effective stakings
+	numStaked := big.NewFloat(0)
+	totalStaked := big.NewFloat(0) // effective stakings
 
 	// lookup the staker's information
 	for k := range stakingObject.Stakers {
 		staker := stakingObject.Stakers[k]
 		// count effective stakings
 		if header.Number.Uint64() > staker.StakingFrom || header.Number.Uint64() <= staker.StakingTo {
-			totalStaked.Add(totalStaked, staker.StakedValue)
+			totalStaked.Add(totalStaked, big.NewFloat(0).SetInt(staker.StakedValue))
 		}
 
 		if staker.Address == header.Coinbase {
@@ -197,32 +197,35 @@ func (e *BDLSEngine) IsProposer(header *types.Header, stakingObject *StakingObje
 				log.Debug("hashchain verification failed for header.R")
 				return false
 			} else {
-				numStaked = staker.StakedValue
+				numStaked = big.NewFloat(0).SetInt(staker.StakedValue)
 			}
 		}
 	}
 
-	// compute p
-	p := big.NewFloat(0).SetInt(E1)
-	p.Mul(p, big.NewFloat(0).SetInt(StakingUnit))
-	p.Quo(p, big.NewFloat(0).SetInt(totalStaked))
+	// if there's staking
+	if totalStaked.Sign() == 1 {
+		// compute p
+		p := big.NewFloat(0).SetInt(E1)
+		p.Mul(p, big.NewFloat(0).SetInt(StakingUnit))
+		p.Quo(p, totalStaked)
 
-	// max{0, 1 - ai*p}
-	max := p.Sub(big.NewFloat(1), p.Mul(big.NewFloat(0).SetInt(numStaked), p))
-	if max.Cmp(big.NewFloat(0)) != 1 {
-		max = big.NewFloat(0)
-	}
+		// max{0, 1 - ai*p}
+		max := p.Sub(big.NewFloat(1), p.Mul(numStaked, p))
+		if max.Cmp(big.NewFloat(0)) != 1 {
+			max = big.NewFloat(0)
+		}
 
-	// compute proposer hash
-	proposerHash := e.proposerHash(header)
+		// compute proposer hash
+		proposerHash := e.proposerHash(header)
 
-	// calculate H/MaxUint256
-	h := big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(proposerHash.Bytes()))
-	h.Quo(h, MaxUint256)
+		// calculate H/MaxUint256
+		h := big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(proposerHash.Bytes()))
+		h.Quo(h, MaxUint256)
 
-	// prob compare
-	if h.Cmp(max) == 1 {
-		return true
+		// prob compare
+		if h.Cmp(max) == 1 {
+			return true
+		}
 	}
 
 	// addresses in base quorum are valid proposers

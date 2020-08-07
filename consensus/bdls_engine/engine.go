@@ -358,42 +358,8 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 		header.Time = uint64(time.Now().Unix())
 	}
 
-	// get staking object at parent height
-	state, err := e.stateAt(header.ParentHash)
-	if err != nil {
-		log.Error("Prepare - Error in getting the block's parent's state", "parentHash", header.ParentHash.Hex(), "err", err)
-		return errors.New("stateAt")
-	}
-	stakingObject, err := e.GetStakingObject(state)
-	if err != nil {
-		log.Error("Prepare - Error in getting staking Object", "parentHash", header.ParentHash.Hex(), "err", err)
-		return errors.New("GetStakingObject")
-	}
-
 	// set W based on parent block
 	header.W = e.deriveW(parent)
-
-	// try to set proposer's R
-	privateKey := e.waitForPrivateKey(header.Coinbase, nil)
-	for k := range stakingObject.Stakers {
-		staker := stakingObject.Stakers[k]
-		if staker.Address == header.Coinbase {
-			if header.Number.Uint64() > staker.StakingFrom || header.Number.Uint64() <= staker.StakingTo {
-				// set R only if it's in a valid staking period
-				seed := e.deriveStakingSeed(privateKey, staker.StakingFrom)
-				header.R = common.BytesToHash(e.hashChain(seed, header.Number.Uint64()-staker.StakingFrom))
-			}
-			break
-		}
-	}
-
-	// set proposer's signature
-	sign, err := crypto.Sign(header.Hash().Bytes(), privateKey)
-	if err != nil {
-		log.Error("Prepare - cyrpto.Sign", "error", err)
-		return err
-	}
-	header.Signature = sign
 
 	return nil
 }
@@ -425,7 +391,38 @@ func (e *BDLSEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *ty
 // Note, the method returns immediately and will send the result async. More
 // than one result may also be returned depending on the consensus algorithm.
 func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
-	go e.consensusTask(chain, block, results, stop)
+	header := block.Header()
+	// try to set proposer's R
+	privateKey := e.waitForPrivateKey(header.Coinbase, nil)
+	if privateKey != nil {
+		// get staking object at parent height
+		state, _ := e.stateAt(header.ParentHash)
+		stakingObject, _ := e.GetStakingObject(state)
+
+		// set R only if it's in a valid staking period
+		for k := range stakingObject.Stakers {
+			staker := stakingObject.Stakers[k]
+			if staker.Address == header.Coinbase {
+				if header.Number.Uint64() > staker.StakingFrom || header.Number.Uint64() <= staker.StakingTo {
+					seed := e.deriveStakingSeed(privateKey, staker.StakingFrom)
+					header.R = common.BytesToHash(e.hashChain(seed, header.Number.Uint64()-staker.StakingFrom))
+				}
+				break
+			}
+		}
+
+		// set proposer's signature
+		hash := header.Hash().Bytes()
+		sign, err := crypto.Sign(hash, privateKey)
+		if err != nil {
+			log.Error("Seal", "Sign", err, "sign:", sign)
+		}
+
+		// seal the block, and enter consensus
+		header.Signature = sign
+		sealed := block.WithSeal(header)
+		go e.consensusTask(chain, sealed, results, stop)
+	}
 	return nil
 }
 
@@ -505,26 +502,33 @@ func (e *BDLSEngine) verifyProposerField(stakingObject *StakingObject, header *t
 
 	// Ensure the block proposer is identical to coinbase
 	// the signature is the hash w/o signature & decision field
-	copyHeader := types.CopyHeader(header)
-	copyHeader.Signature = nil
-	copyHeader.Decision = nil
-	pk, err := crypto.Ecrecover(copyHeader.Hash().Bytes(), header.Signature)
+	unSealedHeader := types.CopyHeader(header)
+	unSealedHeader.Signature = nil
+	unSealedHeader.Decision = nil
+
+	hash := unSealedHeader.Hash().Bytes()
+
+	// Ensure the signer is the coinbase
+	pubkey, err := crypto.SigToPub(hash, header.Signature)
 	if err != nil {
-		log.Debug("verifyProposerField - ecrecover", "err", err)
+		log.Debug("verifyProposerField - SigToPub", "err", err)
 		return false
 	}
 
-	// Ensure the signer is the coinbase
-	pubkey, _ := crypto.DecompressPubkey(pk)
 	signer := crypto.PubkeyToAddress(*pubkey)
 	if signer != header.Coinbase {
-		log.Debug("verifyProposerField - signer do not match coinbase", "signer", pubkey, "coinbase", header.Coinbase)
+		log.Debug("verifyProposerField - signer do not match coinbase", "signer", signer, "coinbase", header.Coinbase)
 		return false
 	}
 
 	// Verify signature
-	if !crypto.VerifySignature(pk, copyHeader.Hash().Bytes(), header.Signature) {
-		log.Debug("verifyProposerField - verify signature failed")
+	pk, err := crypto.Ecrecover(hash, header.Signature)
+	if err != nil {
+		log.Debug("verifyProposerField - Ecrecover", "err", err)
+		return false
+	}
+	if !crypto.VerifySignature(pk, hash, header.Signature[:64]) {
+		log.Debug("verifyProposerField - verify signature failed", "signature", header.Signature, "hash:", hash)
 		return false
 	}
 
@@ -568,7 +572,7 @@ func (e *BDLSEngine) verifyStates(block *types.Block) bool {
 
 	// Validate the block
 	if err := e.validateState(block, state, receipts, usedGas); err != nil {
-		log.Error("verifyStates - Error in validating the block", "err", err)
+		log.Debug("verifyStates - Error in validating the block", "err", err)
 		return false
 	}
 
