@@ -287,6 +287,8 @@ PROPOSAL_COLLECTION:
 			log.Error("messageOutCallback", "mux.Post", err)
 			return
 		}
+
+		log.Debug("### messageOutCallback ###", "message type:", m.Type)
 	}
 
 	// message validator for incoming messages which has correctly signed
@@ -294,7 +296,6 @@ PROPOSAL_COLLECTION:
 		log.Debug("consensus received message", "type", m.Type)
 		// clear all auxdata before consensus processing,
 		// we don't want the consensus core to keep this external field AuxData
-		// but we will keep RN field
 		defer func() {
 			signed.AuxData = nil
 		}()
@@ -354,21 +355,28 @@ PROPOSAL_COLLECTION:
 		CurrentHeight: block.NumberU64() - 1,
 		PrivateKey:    privateKey,
 		StateCompare: func(a bdls.State, b bdls.State) int {
+			if bytes.Compare(a, b) == 0 {
+				return 0
+			}
+
 			blockA := lookupConsensusBlock(common.BytesToHash(a))
-			blockB := lookupConsensusBlock(common.BytesToHash(a))
-			blockAHash := e.proposerHash(blockA.Header()).Bytes()
-			blockBHash := e.proposerHash(blockB.Header()).Bytes()
+			blockB := lookupConsensusBlock(common.BytesToHash(b))
 
 			// block comparision algorithm
 			if (blockA.Coinbase() == StakingAddress && blockB.Coinbase() == StakingAddress) || (blockA.Coinbase() != StakingAddress && blockB.Coinbase() != StakingAddress) {
 				// both emtpy or both non-empty
-				return bytes.Compare(blockAHash, blockBHash)
-			} else if blockA.Coinbase() == StakingAddress && blockB.Coinbase() != StakingAddress { // non empty block is larger
+				blockAHash := e.proposerHash(blockA.Header()).Bytes()
+				blockBHash := e.proposerHash(blockB.Header()).Bytes()
+				v := bytes.Compare(blockAHash, blockBHash)
+				if v == 0 {
+					log.Error("state compare:", "blockA", blockA.Header(), "blockB", blockB.Header())
+				}
+				return v
+			} else if blockA.Coinbase() == StakingAddress && blockB.Coinbase() != StakingAddress { // non empty block-B is larger
 				return -1
-			} else if blockA.Coinbase() != StakingAddress && blockB.Coinbase() == StakingAddress {
-				return 1
 			}
-			return 0
+			// non empty block-A is larger
+			return 1
 		},
 		StateValidate: func(s bdls.State) bool {
 			// make sure all states are known from <roundchange> exchanging
@@ -377,6 +385,7 @@ PROPOSAL_COLLECTION:
 				return true
 			}
 
+			log.Debug("StateValidate--lookupConsensusBlock failed")
 			return false
 		},
 		PubKeyToIdentity: PubKeyToIdentity,

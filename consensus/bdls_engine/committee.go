@@ -252,7 +252,7 @@ func (e *BDLSEngine) ValidatorVotes(header *types.Header, staker *Staker, totalS
 	maxVotes := numStaked.Uint64() / StakingUnit.Uint64()
 
 	// compute validator's hash
-	validatorHash := e.validatorHash(header.Number.Uint64(), validatorR, header.W)
+	validatorHash := e.validatorHash(header.Coinbase, header.Number.Uint64(), validatorR, header.W)
 
 	// calculate H/MaxUint256
 	h := big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(validatorHash.Bytes()))
@@ -366,6 +366,7 @@ func Pow(a *big.Float, e uint64) *big.Float {
 // proposerHash computes a hash for proposer's random number
 func (e *BDLSEngine) proposerHash(header *types.Header) common.Hash {
 	hasher := sha3.New256()
+	hasher.Write(header.Coinbase.Bytes())
 	binary.Write(hasher, binary.LittleEndian, header.Number.Uint64())
 	binary.Write(hasher, binary.LittleEndian, 0)
 	hasher.Write(header.R.Bytes())
@@ -376,8 +377,9 @@ func (e *BDLSEngine) proposerHash(header *types.Header) common.Hash {
 }
 
 // validatorHash computes a hash for validator's random number
-func (e *BDLSEngine) validatorHash(height uint64, R common.Hash, W common.Hash) common.Hash {
+func (e *BDLSEngine) validatorHash(coinbase common.Address, height uint64, R common.Hash, W common.Hash) common.Hash {
 	hasher := sha3.New256()
+	hasher.Write(coinbase.Bytes())
 	binary.Write(hasher, binary.LittleEndian, height)
 	binary.Write(hasher, binary.LittleEndian, 1)
 	hasher.Write(R.Bytes())
