@@ -52,30 +52,13 @@ var (
 
 // mining reward computation
 func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state.StateDB, header *types.Header) {
-
 	if header.Coinbase == StakingAddress {
 		// ignore empty block
 		return
 	}
 
-	// Proposer's reward
+	// Reward Block Proposer
 	state.AddBalance(header.Coinbase, new(big.Int).Mul(ProposerReward, big.NewInt(params.Ether)))
-
-	// Divide TotalValidatorReward evenly for current block
-	sp, err := bdls.DecodeSignedMessage(header.Decision)
-	if err != nil {
-		panic(err)
-	}
-	message, err := bdls.DecodeMessage(sp.Message)
-
-	if len(message.Proof) > 0 {
-		share := big.NewInt(0).Quo(TotalValidatorReward, big.NewInt(int64(len(message.Proof))))
-		for _, proof := range message.Proof {
-			address := crypto.PubkeyToAddress(*proof.PublicKey(crypto.S256()))
-			// each validator's reward
-			state.AddBalance(address, new(big.Int).Mul(share, big.NewInt(params.Ether)))
-		}
-	}
 
 	// Ensure the parent is not nil
 	parentHeader := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
@@ -90,7 +73,7 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 	}
 	sharedGasFee := parentState.GetBalance(GasFeeAddress)
 
-	// share the gas fee from previous height to validators
+	// reward validators from previous block
 	if parentHeader.Decision != nil {
 		sp, err := bdls.DecodeSignedMessage(parentHeader.Decision)
 		if err != nil {
@@ -99,10 +82,13 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 		message, err := bdls.DecodeMessage(sp.Message)
 
 		if len(message.Proof) > 0 {
-			share := big.NewInt(0).Quo(sharedGasFee, big.NewInt(int64(len(message.Proof))))
+			// gas fee
+			gasFeeShare := big.NewInt(0).Quo(sharedGasFee, big.NewInt(int64(len(message.Proof))))
+			blockRewardShare := big.NewInt(0).Quo(TotalValidatorReward, big.NewInt(int64(len(message.Proof))))
 			for _, proof := range message.Proof {
 				address := crypto.PubkeyToAddress(*proof.PublicKey(crypto.S256()))
-				state.AddBalance(address, share)
+				state.AddBalance(address, gasFeeShare)
+				state.AddBalance(address, blockRewardShare)
 			}
 		}
 	}

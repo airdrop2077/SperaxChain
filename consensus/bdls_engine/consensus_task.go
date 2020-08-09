@@ -76,13 +76,11 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	}
 
 	// retrieve staking object at parent height
-	e.mu.Lock()
 	state, err := e.stateAt(block.Header().ParentHash)
 	if err != nil {
 		log.Error("consensusTask - Error in getting the block's parent's state", "parentHash", block.Header().ParentHash.Hex(), "err", err)
 		return
 	}
-	e.mu.Unlock()
 
 	stakingObject, err := e.GetStakingObject(state)
 	if err != nil {
@@ -146,7 +144,11 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 PROPOSAL_COLLECTION:
 	for {
 		select {
-		case obj := <-consensusMessageChan: // consensus message
+		case obj, ok := <-consensusMessageChan: // consensus message
+			if !ok {
+				return
+			}
+
 			if ev, ok := obj.Data.(MessageInput); ok {
 				var em EngineMessage
 				err := proto.Unmarshal(ev, &em)

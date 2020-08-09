@@ -33,10 +33,10 @@ package bdls_engine
 import (
 	"bytes"
 	"crypto/ecdsa"
+	"encoding/binary"
 	"errors"
 	fmt "fmt"
 	"math/big"
-	"sync"
 	"time"
 
 	"github.com/Sperax/SperaxChain/accounts"
@@ -50,6 +50,7 @@ import (
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/rpc"
 	"github.com/Sperax/bdls"
+	"golang.org/x/crypto/sha3"
 )
 
 const (
@@ -134,12 +135,6 @@ type BDLSEngine struct {
 	hasBadBlock   func(hash common.Hash) bool
 	processBlock  func(block *types.Block, statedb *state.StateDB) (types.Receipts, []*types.Log, uint64, error)
 	validateState func(block *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64) error
-
-	// database
-	db ethdb.Database
-
-	// mutex for fields
-	mu sync.Mutex
 }
 
 // New creates a ethereum compatible BDLS engine with account manager for signing and mux for
@@ -148,7 +143,6 @@ func New(accountManager *accounts.Manager, mux *event.TypeMux, db ethdb.Database
 	engine := new(BDLSEngine)
 	engine.mux = mux
 	engine.accountManager = accountManager
-	engine.db = db
 
 	// create an ephermal key for verification
 	priv, err := crypto.GenerateKey()
@@ -164,9 +158,6 @@ func (e *BDLSEngine) SetBlockValidator(hasBadBlock func(common.Hash) bool,
 	processBlock func(*types.Block, *state.StateDB) (types.Receipts, []*types.Log, uint64, error),
 	validateState func(*types.Block, *state.StateDB, types.Receipts, uint64) error,
 	stateAt func(hash common.Hash) (*state.StateDB, error)) {
-
-	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	e.hasBadBlock = hasBadBlock
 	e.processBlock = processBlock
@@ -187,10 +178,6 @@ func (e *BDLSEngine) Author(header *types.Header) (common.Address, error) {
 func (e *BDLSEngine) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool) error {
 	err := e.verifyHeader(chain, header, nil)
 	if err != nil {
-		return err
-	}
-
-	if err := e.VerifySeal(chain, header); err != nil {
 		return err
 	}
 	return nil
@@ -368,45 +355,13 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 	// set W based on parent block
 	header.W = e.deriveW(parent)
 
-	return nil
-}
+	// set R based on parent block
+	state, _ := e.stateAt(header.ParentHash)
+	stakingObject, _ := e.GetStakingObject(state)
 
-// Finalize runs any post-transaction state modifications (e.g. block rewards)
-// but does not assemble the block.
-//
-// Note: The block header and state database might be updated to reflect any
-// consensus rules that happen at finalization (e.g. block rewards).
-func (e *BDLSEngine) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
-	e.accumulateRewards(chain, state, header)
-	header.Root = state.IntermediateRoot(true)
-}
-
-// FinalizeAndAssemble runs any post-transaction state modifications (e.g. block
-// rewards) and assembles the final block.
-//
-// Note: The block header and state database might be updated to reflect any
-// consensus rules that happen at finalization (e.g. block rewards).
-func (e *BDLSEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
-	e.accumulateRewards(chain, state, header)
-	header.Root = state.IntermediateRoot(true)
-	return types.NewBlock(header, txs, nil, receipts), nil
-}
-
-// Seal generates a new sealing request for the given input block and pushes
-// the result into the given channel.
-//
-// Note, the method returns immediately and will send the result async. More
-// than one result may also be returned depending on the consensus algorithm.
-func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
-	header := block.Header()
-	// try to set proposer's R
+	// set R only if it's in a valid staking period
 	privateKey := e.waitForPrivateKey(header.Coinbase, nil)
 	if privateKey != nil {
-		// get staking object at parent height
-		state, _ := e.stateAt(header.ParentHash)
-		stakingObject, _ := e.GetStakingObject(state)
-
-		// set R only if it's in a valid staking period
 		for k := range stakingObject.Stakers {
 			staker := stakingObject.Stakers[k]
 			if staker.Address == header.Coinbase {
@@ -417,19 +372,68 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 				break
 			}
 		}
-
-		// set proposer's signature
-		hash := header.Hash().Bytes()
-		sign, err := crypto.Sign(hash, privateKey)
-		if err != nil {
-			log.Error("Seal", "Sign", err, "sign:", sign)
-		}
-
-		// seal the block, and enter consensus
-		header.Signature = sign
-		sealed := block.WithSeal(header)
-		go e.consensusTask(chain, sealed, results, stop)
 	}
+
+	return nil
+}
+
+// proposalHash computes the hash before it's being proposed
+func (e *BDLSEngine) proposalHash(header *types.Header, stateHash common.Hash, txHash common.Hash) []byte {
+	hasher := sha3.New256()
+	hasher.Write(header.Coinbase.Bytes())
+	binary.Write(hasher, binary.LittleEndian, header.Number.Uint64())
+	hasher.Write(header.R.Bytes())
+	hasher.Write(CommonCoin)
+	hasher.Write(header.W.Bytes())
+	hasher.Write(stateHash.Bytes()) // the state root
+	hasher.Write(txHash.Bytes())    // the txhash
+	return hasher.Sum(nil)
+}
+
+// signHeader signs the header and sets signature
+func (e *BDLSEngine) signHeader(header *types.Header, txs []*types.Transaction) {
+	// try to set proposer's R
+	privateKey := e.waitForPrivateKey(header.Coinbase, nil)
+	if privateKey != nil {
+		hash := e.proposalHash(header, header.Root, types.DeriveSha(types.Transactions(txs)))
+		sig, err := crypto.Sign(hash, privateKey)
+		if err != nil {
+			log.Error("Seal", "Sign", err, "sig:", sig)
+		}
+		header.Signature = sig
+	}
+}
+
+// Finalize runs any post-transaction state modifications (e.g. block rewards)
+// but does not assemble the block.
+//
+// Note: The block header and state database might be updated to reflect any
+// consensus rules that happen at finalization (e.g. block rewards).
+func (e *BDLSEngine) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
+	e.accumulateRewards(chain, state, header)
+	header.Root = state.IntermediateRoot(true)
+	e.signHeader(header, txs)
+}
+
+// FinalizeAndAssemble runs any post-transaction state modifications (e.g. block
+// rewards) and assembles the final block.
+//
+// Note: The block header and state database might be updated to reflect any
+// consensus rules that happen at finalization (e.g. block rewards).
+func (e *BDLSEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
+	e.accumulateRewards(chain, state, header)
+	header.Root = state.IntermediateRoot(true)
+	e.signHeader(header, txs)
+	return types.NewBlock(header, txs, nil, receipts), nil
+}
+
+// Seal generates a new sealing request for the given input block and pushes
+// the result into the given channel.
+//
+// Note, the method returns immediately and will send the result async. More
+// than one result may also be returned depending on the consensus algorithm.
+func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
+	go e.consensusTask(chain, block, results, stop)
 	return nil
 }
 
@@ -441,21 +445,17 @@ func (e *BDLSEngine) waitForPrivateKey(coinbase common.Address, stop <-chan stru
 			return nil
 		default:
 			log.Debug("looking for the wallet of coinbase:", "coinbase", coinbase)
-			e.mu.Lock()
 			wallet, err := e.accountManager.Find(accounts.Account{Address: coinbase})
 			if err != nil {
-				e.mu.Unlock()
-				log.Error("cannot find the wallet of coinbase", "coinbase", coinbase)
+				log.Debug("cannot find the wallet of coinbase", "coinbase", coinbase)
 				return nil
 			}
 
 			priv, err := wallet.GetPrivateKey(accounts.Account{Address: coinbase})
 			if err != nil {
-				e.mu.Unlock()
 				<-time.After(time.Second) // wait for a second before retry
 				continue
 			}
-			e.mu.Unlock()
 
 			return priv
 		}
@@ -506,15 +506,7 @@ func (e *BDLSEngine) verifyProposerField(stakingObject *StakingObject, header *t
 	}
 
 	// otherwise we need to verify the signature of the proposer
-
-	// Ensure the block proposer is identical to coinbase
-	// the signature is the hash w/o signature & decision field
-	unSealedHeader := types.CopyHeader(header)
-	unSealedHeader.Signature = nil
-	unSealedHeader.Decision = nil
-
-	hash := unSealedHeader.Hash().Bytes()
-
+	hash := e.proposalHash(header, header.Root, header.TxHash)
 	// Ensure the signer is the coinbase
 	pubkey, err := crypto.SigToPub(hash, header.Signature)
 	if err != nil {
@@ -524,7 +516,7 @@ func (e *BDLSEngine) verifyProposerField(stakingObject *StakingObject, header *t
 
 	signer := crypto.PubkeyToAddress(*pubkey)
 	if signer != header.Coinbase {
-		log.Debug("verifyProposerField - signer do not match coinbase", "signer", signer, "coinbase", header.Coinbase)
+		log.Debug("verifyProposerField - signer do not match coinbase", "signer", signer, "coinbase", header.Coinbase, "header", header)
 		return false
 	}
 
