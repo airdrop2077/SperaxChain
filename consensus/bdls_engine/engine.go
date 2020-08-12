@@ -360,6 +360,7 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 	stakingObject, _ := e.GetStakingObject(state)
 
 	// set R only if it's in a valid staking period
+	var hasSetR bool
 	privateKey := e.waitForPrivateKey(header.Coinbase, nil)
 	if privateKey != nil {
 		for k := range stakingObject.Stakers {
@@ -368,12 +369,22 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 				if header.Number.Uint64() > staker.StakingFrom || header.Number.Uint64() <= staker.StakingTo {
 					seed := e.deriveStakingSeed(privateKey, staker.StakingFrom)
 					header.R = common.BytesToHash(e.hashChain(seed, header.Number.Uint64()-staker.StakingFrom))
+					hasSetR = true
 				}
 				break
 			}
 		}
+
 	}
 
+	if !hasSetR {
+		for k := range BaseQuorum {
+			if header.Coinbase == BaseQuorum[k] {
+				header.R = BaseQuorumR
+				break
+			}
+		}
+	}
 	return nil
 }
 
