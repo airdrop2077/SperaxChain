@@ -437,7 +437,7 @@ PROPOSAL_COLLECTION:
 					}
 					newHeight, newRound, newState := consensus.CurrentState()
 
-					// new height confirmed, only proposer broadcast this mined block
+					// new block confirmed
 					if newHeight == block.NumberU64() {
 						log.Warn("CONSENSUS <decide>", "height", newHeight, "round", newRound, "hash", newHeight, newRound, common.BytesToHash(newState))
 						hash := common.BytesToHash(newState)
