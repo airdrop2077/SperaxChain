@@ -60,7 +60,7 @@ var (
 		common.HexToAddress("29d3fbe3e7983a41d0e6d984c480ceedb3c251fd"),
 	}
 
-	BaseQuorumR = common.BytesToHash(hexutil.MustDecode("0x53706572617844656661756c744e6f646"))
+	BaseQuorumR = common.BytesToHash(hexutil.MustDecode("0x053706572617844656661756c744e6f646"))
 )
 
 var (
