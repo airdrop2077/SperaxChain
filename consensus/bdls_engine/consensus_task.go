@@ -37,6 +37,7 @@ import (
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/core/types"
+	"github.com/Sperax/SperaxChain/crypto"
 	"github.com/Sperax/SperaxChain/event"
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/rlp"
@@ -48,6 +49,122 @@ var (
 	proposalCollectTimeout = 5 * time.Second
 	expectedLatency        = time.Second
 )
+
+// verify states in block
+func (e *BDLSEngine) verifyStates(block *types.Block) bool {
+	// check bad block
+	if e.hasBadBlock != nil {
+		if e.hasBadBlock(block.Hash()) {
+			log.Debug("verifyStates - hasBadBlock", "e.hasBadBlock", block.Hash())
+			return false
+		}
+	}
+
+	// check transaction trie
+	txnHash := types.DeriveSha(block.Transactions())
+	if txnHash != block.Header().TxHash {
+		log.Debug("verifyStates - validate transactions failed", "txnHash", txnHash, "Header().TxHash", block.Header().TxHash)
+		return false
+	}
+
+	// Process the block to verify that the transactions are valid and to retrieve the resulting state and receipts
+	// Get the state from this block's parent.
+	state, err := e.stateAt(block.Header().ParentHash)
+	if err != nil {
+		log.Debug("verifyStates - Error in getting the block's parent's state", "parentHash", block.Header().ParentHash.Hex(), "err", err)
+		return false
+	}
+
+	// Make a copy of the state
+	state = state.Copy()
+
+	// Apply this block's transactions to update the state
+	receipts, _, usedGas, err := e.processBlock(block, state)
+	if err != nil {
+		log.Debug("verifyStates - Error in processing the block", "err", err)
+		return false
+	}
+
+	// Validate the block
+	if err := e.validateState(block, state, receipts, usedGas); err != nil {
+		log.Debug("verifyStates - Error in validating the block", "err", err)
+		return false
+	}
+
+	return true
+}
+
+// verify the proposer in block header
+func (e *BDLSEngine) verifyProposerField(stakingObject *StakingObject, header *types.Header) bool {
+	// Ensure the coinbase is a valid proposer
+	if !e.IsProposer(header, stakingObject) {
+		log.Debug("verifyProposerField - IsProposer", "height", header.Number, "proposer", header.Coinbase)
+		return false
+	}
+
+	// if it's empty proposal, omit signature verification
+	if header.Coinbase == StakingAddress && len(header.Signature) == 0 {
+		return true
+	}
+
+	// otherwise we need to verify the signature of the proposer
+	hash := e.proposalHash(header, header.Root, header.TxHash)
+	// Ensure the signer is the coinbase
+	pubkey, err := crypto.SigToPub(hash, header.Signature)
+	if err != nil {
+		log.Debug("verifyProposerField - SigToPub", "err", err)
+		return false
+	}
+
+	signer := crypto.PubkeyToAddress(*pubkey)
+	if signer != header.Coinbase {
+		log.Debug("verifyProposerField - signer do not match coinbase", "signer", signer, "coinbase", header.Coinbase, "header", header)
+		return false
+	}
+
+	// Verify signature
+	pk, err := crypto.Ecrecover(hash, header.Signature)
+	if err != nil {
+		log.Debug("verifyProposerField - Ecrecover", "err", err)
+		return false
+	}
+	if !crypto.VerifySignature(pk, hash, header.Signature[:64]) {
+		log.Debug("verifyProposerField - verify signature failed", "signature", header.Signature, "hash:", hash)
+		return false
+	}
+
+	return true
+}
+
+// verify a proposed block from remote
+func (e *BDLSEngine) verifyRemoteProposal(chain consensus.ChainReader, block *types.Block, height uint64, stakingObject *StakingObject) bool {
+	header := block.Header()
+	// verify the block number
+	if header.Number.Uint64() != height {
+		log.Debug("verifyRemoteProposal - mismatched block number", "actual", header.Number.Uint64(), "expected", height)
+		return false
+	}
+
+	// verify header fields
+	if err := e.verifyHeader(chain, header, nil); err != nil {
+		log.Debug("verifyRemoteProposal - verifyHeader", "err", err)
+		return false
+	}
+
+	// ensure it's a valid proposer
+	if !e.verifyProposerField(stakingObject, header) {
+		log.Debug("verifyRemoteProposal - verifyProposer failed")
+		return false
+	}
+
+	// validate the states of transactions
+	if !e.verifyStates(block) {
+		log.Debug("verifyRemoteProposal - verifyStates failed")
+		return false
+	}
+
+	return true
+}
 
 // a consensus task for a specific block
 func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) {
