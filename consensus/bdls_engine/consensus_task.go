@@ -166,6 +166,33 @@ func (e *BDLSEngine) verifyRemoteProposal(chain consensus.ChainReader, block *ty
 	return true
 }
 
+// sendProposal
+func (e *BDLSEngine) sendProposal(block *types.Block) {
+	bts, err := rlp.EncodeToBytes(block)
+	if err != nil {
+		log.Error("consensusTask", "rlp.EncodeToBytes", err)
+		return
+	}
+
+	// marshal into EngineMessage and broadcast
+	var msg EngineMessage
+	msg.Type = EngineMessageType_Proposal
+	msg.Message = bts
+
+	out, err := proto.Marshal(&msg)
+	if err != nil {
+		log.Error("sendProposal", "proto.Marshal", err)
+		return
+	}
+
+	// post this message
+	err = e.mux.Post(MessageOutput(out))
+	if err != nil {
+		log.Error("sendProposal", "mux.Post", err)
+		return
+	}
+}
+
 // a consensus task for a specific block
 func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) {
 	privateKey := e.waitForPrivateKey(block.Coinbase(), stop)
@@ -212,31 +239,8 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	if e.IsProposer(block.Header(), stakingObject) {
 		// record the candidate block which I proposed
 		candidateProposal = block
-
-		bts, err := rlp.EncodeToBytes(block)
-		if err != nil {
-			log.Error("consensusTask", "rlp.EncodeToBytes", err)
-			return
-		}
-
-		// marshal into EngineMessage and broadcast
-		var msg EngineMessage
-		msg.Type = EngineMessageType_Proposal
-		msg.Message = bts
-
-		out, err := proto.Marshal(&msg)
-		if err != nil {
-			log.Error("consensusTask", "proto.Marshal", err)
-			return
-		}
-
-		log.Warn("PROPOSER STAGE", "PROPOSED BLOCK#", block.Hash(), "HEIGHT", block.NumberU64())
-		// post this message
-		err = e.mux.Post(MessageOutput(out))
-		if err != nil {
-			log.Error("consensusTask", "mux.Post", err)
-			return
-		}
+		// send the proposal as a proposer
+		e.sendProposal(block)
 	}
 
 	// derive the participants from staking object at this height
@@ -284,19 +288,19 @@ PROPOSAL_COLLECTION:
 					err := rlp.DecodeBytes(em.Message, &proposal)
 					if err != nil {
 						log.Debug("proposal collection", "rlp.DecodeBytes", err)
-						continue
+						continue PROPOSAL_COLLECTION
 					}
 
 					// verify proposal fields
 					if !e.verifyRemoteProposal(chain, &proposal, block.NumberU64(), stakingObject) {
 						log.Debug("proposal collection - verifyRemoteProposal failed")
-						continue
+						continue PROPOSAL_COLLECTION
 					}
 
 					// record candidate blocks
 					if candidateProposal == nil {
 						candidateProposal = &proposal
-						continue
+						continue PROPOSAL_COLLECTION
 					}
 
 					// replacement algorithm, keep the one with maximum hash
@@ -323,6 +327,7 @@ PROPOSAL_COLLECTION:
 	}
 
 	// make sure candidateProposal is not nil
+	// from now on, the candidate proposal block is FIXED for this node
 	if candidateProposal == nil {
 		header := block.Header()
 		header.Coinbase = StakingAddress
@@ -354,8 +359,6 @@ PROPOSAL_COLLECTION:
 	// we need to prepare 3 closures for this height, one to track proposals from local or remote,
 	// one to exchange the message from consensus core to p2p module, one to validate consensus
 	// messages with proposed blocks from remote.
-
-	// mesasge out call back to handle auxcilliary messages along with the consensus message
 	messageOutCallback := func(m *bdls.Message, signed *bdls.SignedProto) {
 		log.Debug("consensus sending message", "type", m.Type)
 
@@ -446,11 +449,17 @@ PROPOSAL_COLLECTION:
 	updateTick := time.NewTicker(20 * time.Millisecond)
 	defer updateTick.Stop()
 
-	// record & propose the candidate block
+	// the proposal resending ticker
+	resendProposalTick := time.NewTicker(10 * time.Second)
+	defer resendProposalTick.Stop()
+
+	// cache the candidate block
 	allBlocksInConsensus[candidateProposal.Coinbase()] = append(allBlocksInConsensus[candidateProposal.Coinbase()], candidateProposal)
+	// propose the block hash
 	consensus.Propose(candidateProposal.Hash().Bytes())
 
 	// core consensus loop
+CONSENSUS_TASK:
 	for {
 		select {
 		case obj, ok := <-consensusMessageChan: // consensus message
@@ -504,13 +513,13 @@ PROPOSAL_COLLECTION:
 					err := rlp.DecodeBytes(em.Message, &proposal)
 					if err != nil {
 						log.Debug("proposal during consensus", "rlp.DecodeBytes", err)
-						continue
+						continue CONSENSUS_TASK
 					}
 
 					// verify proposal fields
 					if !e.verifyRemoteProposal(chain, &proposal, block.NumberU64(), stakingObject) {
 						log.Debug("proposal during consensus - verifyRemoteProposal failed")
-						continue
+						continue CONSENSUS_TASK
 					}
 
 					// A simple DoS prevention mechanism:
@@ -534,10 +543,14 @@ PROPOSAL_COLLECTION:
 					// cache remote proposals
 					allBlocksInConsensus[proposal.Coinbase()] = keptBlocks
 
-					log.Debug("proposal during consensus - verifyRemoteProposal failed")
+					log.Debug("proposal during consensus", "block#", proposal.Hash())
 				}
 			}
 
+		case <-resendProposalTick.C:
+			// we need to resend the proposal periodically to prevent some nodes missed the message
+			log.Debug("consensusTask", "resend proposal block#", candidateProposal.Hash())
+			e.sendProposal(candidateProposal)
 		case <-updateTick.C:
 			consensus.Update(time.Now())
 		case <-stop:
