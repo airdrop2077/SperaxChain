@@ -230,6 +230,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 			return
 		}
 
+		log.Warn("PROPOSER STAGE", "PROPOSED BLOCK#", block.Hash(), "HEIGHT", block.NumberU64())
 		// post this message
 		err = e.mux.Post(MessageOutput(out))
 		if err != nil {
@@ -257,6 +258,8 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 
 	// prepare the maximum proposal by collecting proposals from proposers
 	collectProposalTimeout := time.NewTimer(proposalCollectTimeout)
+	log.Warn("AS VALIDATOR", "Address", crypto.PubkeyToAddress(privateKey.PublicKey))
+	log.Warn("PROPOSAL PRE-COLLECTION STARTED", "PROPOSAL COINBASE", candidateProposal.Coinbase(), "HEIGHT", candidateProposal.NumberU64())
 
 PROPOSAL_COLLECTION:
 	for {
@@ -329,7 +332,7 @@ PROPOSAL_COLLECTION:
 	}
 
 	// BEGIN THE CORE CONSENSUS MESSAGE LOOP
-	log.Warn("CONSENSUS TASK STARTED", "coinbase", candidateProposal.Coinbase(), "height", candidateProposal.NumberU64())
+	log.Warn("CONSENSUS TASK STARTED", "PROPOSAL COINBASE", candidateProposal.Coinbase(), "HEIGHT", candidateProposal.NumberU64())
 
 	// known proposed blocks from each participants' <roundchange> messages
 	allBlocksInConsensus := make(map[common.Address][]*types.Block)
@@ -355,31 +358,6 @@ PROPOSAL_COLLECTION:
 	// mesasge out call back to handle auxcilliary messages along with the consensus message
 	messageOutCallback := func(m *bdls.Message, signed *bdls.SignedProto) {
 		log.Debug("consensus sending message", "type", m.Type)
-		switch m.Type {
-		case bdls.MessageType_RoundChange:
-			// for <roundchange> message, we need to send the corresponding block
-			// as proposal.
-			blockHash := common.BytesToHash(m.State)
-			var outblock *types.Block
-			// externally proposed block
-			outblock = lookupConsensusBlock(blockHash)
-
-			// impossible situation here, all outgoing proposals in <roundchange>
-			// are to be known.
-			if outblock == nil {
-				log.Error("cannot locate the proposed block", "hash", blockHash)
-				return
-			}
-
-			// marshal the proposal block to binary and embed it in signed.AuxData
-			blockData, err := rlp.EncodeToBytes(outblock)
-			if err != nil {
-				log.Error("messageOutCallBack", "rlp.EncodeToBytes", err)
-			}
-
-			// set auxdata
-			signed.AuxData = blockData
-		}
 
 		// all outgoing signed message will be delivered to ProtocolManager
 		// and finally to send to peers.
@@ -408,64 +386,6 @@ PROPOSAL_COLLECTION:
 		}
 
 		log.Debug("### messageOutCallback ###", "message type:", m.Type)
-	}
-
-	// message validator for incoming messages which has correctly signed
-	messageValidator := func(c *bdls.Consensus, m *bdls.Message, signed *bdls.SignedProto) bool {
-		log.Debug("consensus received message", "type", m.Type)
-		// clear all auxdata before consensus processing,
-		// we don't want the consensus core to keep this external field AuxData
-		defer func() {
-			signed.AuxData = nil
-		}()
-
-		switch m.Type {
-		case bdls.MessageType_RoundChange:
-			// For incoming <roundchange> message(proposal), we should validate the block sent
-			// via sp.AuxData field, ahead of consensus processing.
-			var proposal types.Block
-			err := rlp.DecodeBytes(signed.AuxData, &proposal)
-			if err != nil {
-				log.Debug("messageValidator", "rlp.DecodeBytes", err)
-				return false
-			}
-
-			// ensure the hash is to the block in auxdata
-			if proposal.Hash() != common.BytesToHash(m.State) {
-				log.Debug("messageValidator auxdata hash", "block hash", proposal.Hash(), "state hash", common.BytesToHash(m.State))
-				return false
-			}
-
-			// verify proposal
-			if !e.verifyRemoteProposal(chain, &proposal, block.NumberU64(), stakingObject) {
-				log.Debug("messageValidator verifyProposal failed")
-				return false
-			}
-
-			// A simple DoS prevention mechanism:
-			// 1. Remove previously kept blocks which has NOT been accepted in consensus.
-			// 2. Always record the latest proposal from a proposer, before consensus continues
-			var keptBlocks []*types.Block
-			var repeated bool
-			for _, pBlock := range allBlocksInConsensus[block.Coinbase()] {
-				if c.HasProposed(pBlock.Hash().Bytes()) {
-					keptBlocks = append(keptBlocks, pBlock)
-					// repeated valid block
-					if pBlock.Hash() == proposal.Hash() {
-						repeated = true
-					}
-				}
-			}
-
-			if !repeated { // record latest proposal of a block
-				keptBlocks = append(keptBlocks, &proposal)
-			}
-			allBlocksInConsensus[proposal.Coinbase()] = keptBlocks
-
-			return true
-		}
-
-		return true
 	}
 
 	// setup consensus config at the given height
@@ -508,7 +428,6 @@ PROPOSAL_COLLECTION:
 			return false
 		},
 		PubKeyToIdentity: PubKeyToIdentity,
-		MessageValidator: messageValidator,
 		// consensus message will be routed through engine
 		MessageOutCallback: messageOutCallback,
 		Participants:       participants,
@@ -580,6 +499,42 @@ PROPOSAL_COLLECTION:
 						}
 						return
 					}
+				case EngineMessageType_Proposal: // keep updating local block cache
+					var proposal types.Block
+					err := rlp.DecodeBytes(em.Message, &proposal)
+					if err != nil {
+						log.Debug("proposal during consensus", "rlp.DecodeBytes", err)
+						continue
+					}
+
+					// verify proposal fields
+					if !e.verifyRemoteProposal(chain, &proposal, block.NumberU64(), stakingObject) {
+						log.Debug("proposal during consensus - verifyRemoteProposal failed")
+						continue
+					}
+
+					// A simple DoS prevention mechanism:
+					// 1. Remove previously kept blocks which has NOT been accepted in consensus.
+					// 2. Always record the latest proposal from a proposer, before consensus continues
+					var keptBlocks []*types.Block
+					var repeated bool
+					for _, pBlock := range allBlocksInConsensus[block.Coinbase()] {
+						if consensus.HasProposed(pBlock.Hash().Bytes()) {
+							keptBlocks = append(keptBlocks, pBlock)
+							// repeated valid block
+							if pBlock.Hash() == proposal.Hash() {
+								repeated = true
+							}
+						}
+					}
+
+					if !repeated { // record latest proposal of a block
+						keptBlocks = append(keptBlocks, &proposal)
+					}
+					// cache remote proposals
+					allBlocksInConsensus[proposal.Coinbase()] = keptBlocks
+
+					log.Debug("proposal during consensus - verifyRemoteProposal failed")
 				}
 			}
 
