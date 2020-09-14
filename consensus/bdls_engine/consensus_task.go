@@ -278,7 +278,7 @@ PROPOSAL_COLLECTION:
 				err := proto.Unmarshal(ev, &em)
 				if err != nil {
 					log.Debug("proposal collection", "proto.Unmarshal", err)
-					continue
+					continue PROPOSAL_COLLECTION
 				}
 
 				// we add an extra encapsulation for consensus contents
