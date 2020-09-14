@@ -235,8 +235,19 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	// the candidate block before consensus begins
 	var candidateProposal *types.Block
 
-	// if i'm the proposer, propose the block
+	// if i'm the proposer, sign & propose the block
 	if e.IsProposer(block.Header(), stakingObject) {
+		header := block.Header()
+		hash := e.proposalHash(header, header.Root, types.DeriveSha(block.Transactions()))
+		sig, err := crypto.Sign(hash, privateKey)
+		if err != nil {
+			log.Error("Seal", "Sign", err, "sig:", sig)
+		}
+		header.Signature = sig
+
+		// replace the block with the signed one
+		block = block.WithSeal(header)
+
 		// record the candidate block which I proposed
 		candidateProposal = block
 		// send the proposal as a proposer

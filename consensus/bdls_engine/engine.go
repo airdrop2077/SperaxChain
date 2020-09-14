@@ -389,6 +389,7 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 }
 
 // proposalHash computes the hash before it's being proposed
+// TODO: what other fields are required to do hashing?
 func (e *BDLSEngine) proposalHash(header *types.Header, stateHash common.Hash, txHash common.Hash) []byte {
 	hasher := sha3.New256()
 	hasher.Write(header.Coinbase.Bytes())
@@ -401,20 +402,6 @@ func (e *BDLSEngine) proposalHash(header *types.Header, stateHash common.Hash, t
 	return hasher.Sum(nil)
 }
 
-// signHeader signs the header and sets signature
-func (e *BDLSEngine) signHeader(header *types.Header, txs []*types.Transaction) {
-	// try to set proposer's R
-	privateKey := e.waitForPrivateKey(header.Coinbase, nil)
-	if privateKey != nil {
-		hash := e.proposalHash(header, header.Root, types.DeriveSha(types.Transactions(txs)))
-		sig, err := crypto.Sign(hash, privateKey)
-		if err != nil {
-			log.Error("Seal", "Sign", err, "sig:", sig)
-		}
-		header.Signature = sig
-	}
-}
-
 // Finalize runs any post-transaction state modifications (e.g. block rewards)
 // but does not assemble the block.
 //
@@ -423,7 +410,6 @@ func (e *BDLSEngine) signHeader(header *types.Header, txs []*types.Transaction) 
 func (e *BDLSEngine) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
 	e.accumulateRewards(chain, state, header)
 	header.Root = state.IntermediateRoot(true)
-	e.signHeader(header, txs)
 }
 
 // FinalizeAndAssemble runs any post-transaction state modifications (e.g. block
@@ -434,7 +420,6 @@ func (e *BDLSEngine) Finalize(chain consensus.ChainReader, header *types.Header,
 func (e *BDLSEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	e.accumulateRewards(chain, state, header)
 	header.Root = state.IntermediateRoot(true)
-	e.signHeader(header, txs)
 	return types.NewBlock(header, txs, nil, receipts), nil
 }
 
