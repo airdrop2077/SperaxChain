@@ -536,23 +536,17 @@ CONSENSUS_TASK:
 					// A simple DoS prevention mechanism:
 					// 1. Remove previously kept blocks which has NOT been accepted in consensus.
 					// 2. Always record the latest proposal from a proposer, before consensus continues
-					var keptBlocks []*types.Block
 					var repeated bool
 					for _, pBlock := range allBlocksInConsensus[block.Coinbase()] {
-						if consensus.HasProposed(pBlock.Hash().Bytes()) {
-							keptBlocks = append(keptBlocks, pBlock)
-							// repeated valid block
-							if pBlock.Hash() == proposal.Hash() {
-								repeated = true
-							}
+						// repeated valid block
+						if pBlock.Hash() == proposal.Hash() {
+							repeated = true
 						}
 					}
 
-					if !repeated { // record latest proposal of a block
-						keptBlocks = append(keptBlocks, &proposal)
+					if !repeated { // record new proposal of a block
+						allBlocksInConsensus[block.Coinbase()] = append(allBlocksInConsensus[block.Coinbase()], &proposal)
 					}
-					// cache remote proposals
-					allBlocksInConsensus[proposal.Coinbase()] = keptBlocks
 
 					log.Debug("proposal during consensus", "block#", proposal.Hash())
 				}
