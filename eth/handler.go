@@ -824,11 +824,11 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		// record the hash to prevent from resending to the same peer
 		p.MarkConsensus(cHash)
 
+		// relay the consensus message
+		pm.BroadcastConsensusMsg(cHash, bts)
+
 		// publish message to consensus.bdls_engine
 		pm.eventMux.Post(bdls_engine.MessageInput(bts))
-
-		// TODO: relay the consensus message
-		pm.BroadcastConsensusMsg(cHash, bts)
 
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
