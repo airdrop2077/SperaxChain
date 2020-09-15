@@ -370,6 +370,7 @@ PROPOSAL_COLLECTION:
 	// we need to prepare 3 closures for this height, one to track proposals from local or remote,
 	// one to exchange the message from consensus core to p2p module, one to validate consensus
 	// messages with proposed blocks from remote.
+	var nonce uint64
 	messageOutCallback := func(m *bdls.Message, signed *bdls.SignedProto) {
 		log.Debug("consensus sending message", "type", m.Type)
 
@@ -385,6 +386,8 @@ PROPOSAL_COLLECTION:
 		var msg EngineMessage
 		msg.Type = EngineMessageType_Consensus
 		msg.Message = bts
+		msg.Nonce = nonce
+		nonce++
 
 		out, err := proto.Marshal(&msg)
 		if err != nil {
