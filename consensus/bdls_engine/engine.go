@@ -107,6 +107,8 @@ func PubKeyToIdentity(pubkey *ecdsa.PublicKey) (ret bdls.Identity) {
 
 // BDLSEngine implements BDLS-based blockchain consensus engine
 type BDLSEngine struct {
+	// a nonce for message
+	nonce uint32
 	// ephermal private key for header verification
 	ephermalKey *ecdsa.PrivateKey
 

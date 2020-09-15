@@ -916,6 +916,7 @@ func (pm *ProtocolManager) BroadcastConsensusMsg(hash common.Hash, bts []byte) {
 		// broadcast the consensus message to all peers
 		for _, peer := range peers {
 			peer.SendConsensusMsg(bts)
+			peer.MarkConsensus(hash)
 		}
 
 		log.Debug("Propagated consensus", "hash", hash, "recipients", len(peers))

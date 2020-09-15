@@ -45,5 +45,5 @@ message EngineMessage {
 	EngineMessageType Type = 1;
 	// the Message in bytes
 	bytes Message=2;
-	uint64 Nonce=3;
+	uint32 Nonce=3;
 }
