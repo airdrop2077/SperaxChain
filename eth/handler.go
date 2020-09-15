@@ -912,11 +912,14 @@ func (pm *ProtocolManager) BroadcastTransactions(txs types.Transactions, propaga
 // BroadcastConsensusMsg broadcasts a consensus message to peers
 func (pm *ProtocolManager) BroadcastConsensusMsg(hash common.Hash, bts []byte) {
 	peers := pm.peers.PeersWithoutConsensus(hash)
-	// broadcast the consensus message to all peers
-	for _, peer := range peers {
-		peer.SendConsensusMsg(bts)
+	if len(peers) > 0 {
+		// broadcast the consensus message to all peers
+		for _, peer := range peers {
+			peer.SendConsensusMsg(bts)
+		}
+
+		log.Debug("Propagated consensus", "hash", hash, "recipients", len(peers))
 	}
-	log.Debug("Propagated consensus", "hash", hash, "recipients", len(peers))
 	return
 }
 
