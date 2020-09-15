@@ -827,8 +827,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		// publish message to consensus.bdls_engine
 		pm.eventMux.Post(bdls_engine.MessageInput(bts))
 
-		// relay the consensus message
-		pm.BroadcastConsensusMsg(cHash, bts)
+		// TODO: relay the consensus message
+		// pm.BroadcastConsensusMsg(cHash, bts)
 
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
