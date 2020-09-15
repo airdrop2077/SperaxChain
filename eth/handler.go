@@ -32,6 +32,7 @@ import (
 	"github.com/Sperax/SperaxChain/core"
 	"github.com/Sperax/SperaxChain/core/forkid"
 	"github.com/Sperax/SperaxChain/core/types"
+	"github.com/Sperax/SperaxChain/crypto"
 	"github.com/Sperax/SperaxChain/eth/downloader"
 	"github.com/Sperax/SperaxChain/eth/fetcher"
 	"github.com/Sperax/SperaxChain/ethdb"
@@ -818,12 +819,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 
 		// calculate message hash
-		cHash, err := bdls_engine.MessageHash(bts)
-		if err != nil {
-			log.Debug("Invalid incoming consensus message", "msg", msg)
-			return err
-		}
-
+		cHash := crypto.Keccak256Hash(bts)
 		// mark for propagation
 		// record the hash to prevent from resending to the same peer
 		p.MarkConsensus(cHash)
@@ -942,10 +938,7 @@ func (pm *ProtocolManager) consensusBroadcastLoop() {
 
 	for obj := range pm.consensusSub.Chan() {
 		if ev, ok := obj.Data.(bdls_engine.MessageOutput); ok {
-			cHash, err := bdls_engine.MessageHash(ev)
-			if err != nil {
-				log.Crit("Invalid outgoing consensus message", "msg", ev)
-			}
+			cHash := crypto.Keccak256Hash(ev)
 			pm.BroadcastConsensusMsg(cHash, ev) // broadcast to peers
 		}
 	}

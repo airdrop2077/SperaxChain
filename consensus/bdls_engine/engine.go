@@ -96,18 +96,6 @@ var (
 	emptyNonce        = types.BlockNonce{}       // nonce in block headers is always all-zeros
 )
 
-// MessageHash return the consistent hash based on SignedMessage content,
-// not including signature R, S, which has random number in ecdsa signing.
-func MessageHash(bts []byte) (common.Hash, error) {
-	sp, err := bdls.DecodeSignedMessage(bts)
-	if err != nil {
-		return common.Hash{}, errInvalidConsensusMessage
-	}
-
-	// convert the hash bytes in bdls to common.Hash
-	return common.BytesToHash(sp.Hash()), nil
-}
-
 // PublicKey to Identity conversion, for use in BDLS
 func PubKeyToIdentity(pubkey *ecdsa.PublicKey) (ret bdls.Identity) {
 	// for a publickey first we convert to ethereum common.Address
