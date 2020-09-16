@@ -114,7 +114,7 @@ from anyone on the internet, and are grateful for even the smallest of fixes!
 
 If you'd like to contribute to the Sperax Golang implementation, please send your suggestions to *joe@sperax.io*. 
 
-Also, we are about to launch the Sperax forum for any technical discussion around Sperax design and implementation. Check out our update on our official website *sperax.io*.
+Also, we are about to launch the Sperax forum for any technical discussion around Sperax design and implementation. Check out our update on our official website [sperax.io](www.sperax.io).
 
 
 ## License
