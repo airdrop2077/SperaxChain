@@ -31,8 +31,8 @@ func (h Header) MarshalJSON() ([]byte, error) {
 		Extra       hexutil.Bytes  `json:"extraData"        gencodec:"required"`
 		MixDigest   common.Hash    `json:"mixHash"`
 		Nonce       BlockNonce     `json:"nonce"`
-		Signature   hexutil.Bytes  `json:"proof"        gencodec:"required"`
-		Decision    hexutil.Bytes  `json:"proof"        gencodec:"required"`
+		Signature   hexutil.Bytes  `json:"sig"        gencodec:"required"`
+		Decision    hexutil.Bytes  `json:"decision"        gencodec:"required"`
 		R           common.Hash    `json:"R"        gencodec:"required"`
 		W           common.Hash    `json:"W"        gencodec:"required"`
 		Hash        common.Hash    `json:"hash"`
@@ -79,8 +79,8 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		Extra       *hexutil.Bytes  `json:"extraData"        gencodec:"required"`
 		MixDigest   *common.Hash    `json:"mixHash"`
 		Nonce       *BlockNonce     `json:"nonce"`
-		Signature   *hexutil.Bytes  `json:"proof"        gencodec:"required"`
-		Decision    *hexutil.Bytes  `json:"proof"        gencodec:"required"`
+		Signature   *hexutil.Bytes  `json:"sig"        gencodec:"required"`
+		Decision    *hexutil.Bytes  `json:"decision"        gencodec:"required"`
 		R           *common.Hash    `json:"R"        gencodec:"required"`
 		W           *common.Hash    `json:"W"        gencodec:"required"`
 	}
@@ -147,11 +147,11 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		h.Nonce = *dec.Nonce
 	}
 	if dec.Signature == nil {
-		return errors.New("missing required field 'proof' for Header")
+		return errors.New("missing required field 'sig' for Header")
 	}
 	h.Signature = *dec.Signature
 	if dec.Decision == nil {
-		return errors.New("missing required field 'proof' for Header")
+		return errors.New("missing required field 'decision' for Header")
 	}
 	h.Decision = *dec.Decision
 	if dec.R == nil {
