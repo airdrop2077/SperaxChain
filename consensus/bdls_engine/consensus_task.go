@@ -540,16 +540,22 @@ CONSENSUS_TASK:
 					// 1. Remove previously kept blocks which has NOT been accepted in consensus.
 					// 2. Always record the latest proposal from a proposer, before consensus continues
 					var repeated bool
+					var keptBlocks []*types.Block
 					for _, pBlock := range allBlocksInConsensus[block.Coinbase()] {
-						// repeated valid block
-						if pBlock.Hash() == proposal.Hash() {
-							repeated = true
+						if consensus.HasProposed(pBlock.Hash().Bytes()) {
+							keptBlocks = append(keptBlocks, pBlock)
+							// repeated valid block
+							if pBlock.Hash() == proposal.Hash() {
+								repeated = true
+							}
 						}
 					}
 
 					if !repeated { // record new proposal of a block
-						allBlocksInConsensus[block.Coinbase()] = append(allBlocksInConsensus[block.Coinbase()], &proposal)
+						keptBlocks = append(keptBlocks, &proposal)
 					}
+					// update cache
+					allBlocksInConsensus[proposal.Coinbase()] = keptBlocks
 
 					log.Debug("proposal during consensus", "block#", proposal.Hash())
 				}
