@@ -306,6 +306,6 @@ func TestKeccak256Hash1(t *testing.T) {
 	msg := []byte("ab")
 	h = Keccak256Hash(msg, []byte("ab1111112111"))
 	for i := 0; i < len(h); i++ {
-		t.Logf("%02x", h[i])
+		t.Logf("%02x", h[i]) //test
 	}
 }
