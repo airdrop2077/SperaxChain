@@ -292,15 +292,6 @@ func TestPythonIntegration(t *testing.T) {
 	t.Logf("msg: %x, privkey: %s sig: %x\n", msg1, kh, sig1)
 }
 
-/*
-func TestKeccak256Hash(t *testing.T) {
-	msg := []byte("abc")
-	exp, _ := hex.DecodeString("4e03657aea45a94fc7d47ba826c8d667c0d1e6e33a64a036ec44f58fa12d6c45")
-	checkhash(t, "Sha3-256-array", func(in []byte) []byte { h := Keccak256Hash(in); return h[:] }, msg, exp)
-}
-
-*/
-
 func TestKeccak256Hash1(t *testing.T) {
 	var h common.Hash //type common.Hash [HashLength]byte
 	msg := []byte("ab")
