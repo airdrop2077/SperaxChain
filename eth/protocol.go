@@ -41,7 +41,7 @@ const (
 const protocolName = "spa"
 
 // ProtocolVersions are the supported versions of the eth protocol (first is primary).
-var ProtocolVersions = []uint{spa01}
+var ProtocolVersions = []uint{spa01, eth65, eth64, eth63}
 
 // protocolLengths are the number of implemented message corresponding to different protocol versions.
 var protocolLengths = map[uint]uint64{spa01: 18, eth65: 17, eth64: 17, eth63: 17}
