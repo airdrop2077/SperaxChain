@@ -34,17 +34,16 @@ const (
 	eth63 = 63
 	eth64 = 64
 	eth65 = 65
-	spa01 = 1000 // the sperax protocol extension
 )
 
 // protocolName is the official short name of the protocol used during capability negotiation.
 const protocolName = "spa"
 
 // ProtocolVersions are the supported versions of the eth protocol (first is primary).
-var ProtocolVersions = []uint{spa01, eth65, eth64, eth63}
+var ProtocolVersions = []uint{eth65, eth64, eth63}
 
 // protocolLengths are the number of implemented message corresponding to different protocol versions.
-var protocolLengths = map[uint]uint64{spa01: 18, eth65: 17, eth64: 17, eth63: 17}
+var protocolLengths = map[uint]uint64{eth65: 18, eth64: 17, eth63: 17}
 
 const protocolMaxMsgSize = 10 * 1024 * 1024 // Maximum cap on the size of a protocol message
 
