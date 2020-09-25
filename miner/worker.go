@@ -603,6 +603,7 @@ func (w *worker) resultLoop() {
 
 			// BDLS engine ignores the task and insert the complete block with consensus proof
 			if _, ok := w.engine.(*bdls_engine.BDLSEngine); ok {
+				//types.DumpBlock(block) //add by zhanghua
 				_, err := w.chain.InsertChain(types.Blocks{block})
 				if err != nil {
 					log.Error("Insert BDLS finalized block failed", "err", err)

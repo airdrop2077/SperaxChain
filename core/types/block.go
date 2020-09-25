@@ -178,6 +178,56 @@ type Block struct {
 	ReceivedFrom interface{}
 }
 
+/*
+// Header represents a block header in the Ethereum blockchain.
+type Header struct {
+	ParentHash  common.Hash    `json:"parentHash"       gencodec:"required"`
+	UncleHash   common.Hash    `json:"sha3Uncles"       gencodec:"required"`
+	Coinbase    common.Address `json:"miner"            gencodec:"required"`
+	Root        common.Hash    `json:"stateRoot"        gencodec:"required"`
+	TxHash      common.Hash    `json:"transactionsRoot" gencodec:"required"`
+	ReceiptHash common.Hash    `json:"receiptsRoot"     gencodec:"required"`
+	Bloom       Bloom          `json:"logsBloom"        gencodec:"required"`
+	Difficulty  *big.Int       `json:"difficulty"       gencodec:"required"`
+	Number      *big.Int       `json:"number"           gencodec:"required"`
+	GasLimit    uint64         `json:"gasLimit"         gencodec:"required"`
+	GasUsed     uint64         `json:"gasUsed"          gencodec:"required"`
+	Time        uint64         `json:"timestamp"        gencodec:"required"`
+	Extra       []byte         `json:"extraData"        gencodec:"required"`
+	MixDigest   common.Hash    `json:"mixHash"`
+	Nonce       BlockNonce     `json:"nonce"`
+
+	// Sperax Consensus Extension
+	Signature []byte      `json:"sig"        gencodec:"required"`      // proposer's signature
+	Decision  []byte      `json:"decision"        gencodec:"required"` // consensus's decide
+	R         common.Hash `json:"R"        gencodec:"required"`        // proposer's random number
+	W         common.Hash `json:"W"        gencodec:"required"`
+}
+
+*/
+
+//DumpBlock :function to dump out the content of a block, for debug usage
+func DumpBlock(b *Block) {
+	fmt.Printf("============================content of a block=====================\r\n")
+	fmt.Printf("SperaxDEBUG: ReceivedAt: %T %v\r\n", b.ReceivedAt, b.ReceivedAt)
+	fmt.Printf("SperaxDEBUG: ReceivedFrom: %T %v\r\n", b.ReceivedFrom, b.ReceivedFrom)
+	fmt.Printf("SperaxDEBUG: hash: %T %v\r\n", b.hash, b.hash)
+	fmt.Printf("SperaxDEBUG: size: %T %v\r\n", b.size, b.size)
+	fmt.Printf("SperaxDEBUG: cap(b.uncles): %v\r\n", cap(b.uncles))
+	fmt.Printf("SperaxDEBUG: td: %v\r\n", b.td)
+	fmt.Printf("SperaxDEBUG: cap(b.transactions): %v\r\n", cap(b.transactions))
+	fmt.Printf("SperaxDEBUG: b.header.ParentHash: %v\r\n", b.header.ParentHash)
+	fmt.Printf("SperaxDEBUG: b.header.UncleHash: %v\r\n", b.header.UncleHash)
+	fmt.Printf("SperaxDEBUG: b.header.Coinbase: %v\r\n", b.header.Coinbase)
+	fmt.Printf("SperaxDEBUG: b.header.Root: %v\r\n", b.header.Root)
+	fmt.Printf("SperaxDEBUG: b.header.TxHash: %v\r\n", b.header.TxHash)
+	fmt.Printf("SperaxDEBUG: b.header.ReceiptHash: %v\r\n", b.header.ReceiptHash)
+	fmt.Printf("SperaxDEBUG: b.header.Signature: %v\r\n", b.header.Signature)
+	fmt.Printf("SperaxDEBUG: b.header.Decision: %v\r\n", b.header.Decision)
+	fmt.Printf("SperaxDEBUG: b.header.R: %v\r\n", b.header.R)
+	fmt.Printf("SperaxDEBUG: b.header.W: %v\r\n", b.header.W)
+}
+
 // DeprecatedTd is an old relic for extracting the TD of a block. It is in the
 // code solely to facilitate upgrading the database from the old format to the
 // new, after which it should be deleted. Do not use!
