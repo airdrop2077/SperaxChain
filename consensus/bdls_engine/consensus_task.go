@@ -541,7 +541,7 @@ CONSENSUS_TASK:
 					// 2. Always record the latest proposal from a proposer, before consensus continues
 					var repeated bool
 					var keptBlocks []*types.Block
-					for _, pBlock := range allBlocksInConsensus[block.Coinbase()] {
+					for _, pBlock := range allBlocksInConsensus[proposal.Coinbase()] {
 						if consensus.HasProposed(pBlock.Hash().Bytes()) {
 							keptBlocks = append(keptBlocks, pBlock)
 							// repeated valid block
