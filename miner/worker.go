@@ -224,7 +224,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		recommit = minRecommitInterval
 	}
 
-	// NOTE(xtaci): set BDLS specific block validator
+	// SPERAX: set BDLS specific block validator
 	if bdls, ok := worker.engine.(*bdls_engine.BDLSEngine); ok {
 		bdls.SetBlockValidator(worker.chain.HasBadBlock,
 			func(block *types.Block, state *state.StateDB) (types.Receipts, []*types.Log, uint64, error) {
@@ -600,20 +600,6 @@ func (w *worker) resultLoop() {
 				sealhash = w.engine.SealHash(block.Header())
 				hash     = block.Hash()
 			)
-
-			// BDLS engine ignores the task and insert the complete block with consensus proof
-			if _, ok := w.engine.(*bdls_engine.BDLSEngine); ok {
-				//types.DumpBlock(block) //add by zhanghua
-				_, err := w.chain.InsertChain(types.Blocks{block})
-				if err != nil {
-					log.Error("Insert BDLS finalized block failed", "err", err)
-					continue
-				}
-
-				// Broadcast the block and announce chain insertion event
-				w.mux.Post(core.NewMinedBlockEvent{Block: block})
-				continue
-			}
 
 			w.pendingMu.RLock()
 			task, exist := w.pendingTasks[sealhash]

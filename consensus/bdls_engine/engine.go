@@ -336,7 +336,6 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 	stakingObject, _ := e.GetStakingObject(state)
 
 	// set R only if it's in a valid staking period
-	var hasSetR bool
 	privateKey := e.waitForPrivateKey(header.Coinbase, nil)
 	if privateKey != nil {
 		for k := range stakingObject.Stakers {
@@ -345,28 +344,18 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 				if header.Number.Uint64() > staker.StakingFrom || header.Number.Uint64() <= staker.StakingTo {
 					seed := e.deriveStakingSeed(privateKey, staker.StakingFrom)
 					header.R = common.BytesToHash(e.hashChain(seed, header.Number.Uint64()-staker.StakingFrom))
-					hasSetR = true
 				}
 				break
 			}
 		}
-
 	}
 
-	if !hasSetR {
-		for k := range BaseQuorum {
-			if header.Coinbase == BaseQuorum[k] {
-				header.R = BaseQuorumR
-				break
-			}
-		}
-	}
 	return nil
 }
 
-// proposalHash computes the hash before it's being proposed
+// proposalBlockHash computes the hash before it's being proposed
 // TODO: what other fields are required to do hashing?
-func (e *BDLSEngine) proposalHash(header *types.Header, stateHash common.Hash, txHash common.Hash) []byte {
+func (e *BDLSEngine) proposalBlockHash(header *types.Header, stateHash common.Hash, txHash common.Hash) []byte {
 	hasher := sha3.New256()
 	hasher.Write(header.Coinbase.Bytes())
 	binary.Write(hasher, binary.LittleEndian, header.Number.Uint64())
@@ -438,6 +427,7 @@ func (e *BDLSEngine) waitForPrivateKey(coinbase common.Address, stop <-chan stru
 func (e *BDLSEngine) SealHash(header *types.Header) (hash common.Hash) {
 	copied := types.CopyHeader(header)
 	copied.Decision = nil
+	copied.Signature = nil
 	return copied.Hash()
 }
 

@@ -33,7 +33,7 @@ var (
 	// Proposer's SPA reward
 	ProposerReward       = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
 	TotalValidatorReward = new(big.Int).Mul(big.NewInt(3000), big.NewInt(params.Ether))
-	GasFeeAddress        = common.Address{0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD}
+	GasFeeAddress        = common.HexToAddress("0xdddddddddddddddddddddddddddddddddddddddd")
 )
 
 // mining reward computation
@@ -44,7 +44,7 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 	}
 
 	// Reward Block Proposer
-	state.AddBalance(header.Coinbase, new(big.Int).Mul(ProposerReward, big.NewInt(params.Ether)))
+	state.AddBalance(header.Coinbase, ProposerReward)
 
 	// Ensure the parent is not nil
 	parentHeader := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)

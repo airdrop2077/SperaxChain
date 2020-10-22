@@ -69,9 +69,6 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		misc.ApplyDAOHardFork(statedb)
 	}
 
-	// reset the temporary gas fee accounts to 0
-	statedb.SetBalance(bdls_engine.GasFeeAddress, big.NewInt(0))
-
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		statedb.Prepare(tx.Hash(), block.Hash(), i)
@@ -79,9 +76,11 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		if err != nil {
 			return nil, nil, 0, err
 		}
+
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
 	}
+
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
 
@@ -107,6 +106,7 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	if err != nil {
 		return nil, err
 	}
+
 	// Update the state with pending changes
 	var root []byte
 	if config.IsByzantium(header.Number) {
@@ -131,6 +131,18 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	receipt.BlockHash = statedb.BlockHash()
 	receipt.BlockNumber = header.Number
 	receipt.TransactionIndex = uint(statedb.TxIndex())
+
+	// SPERAX: Gas Distribution:
+	// 1. one half goes to block proposer
+	// 2. the other half goes save to GasFeeAddress temporarily and
+	//    to be distributed to block validators in next block.
+	txGasFee := big.NewInt(0)
+	txGasFee.Mul(big.NewInt(0).SetUint64(receipt.GasUsed), tx.GasPrice())
+	if txGasFee.Cmp(common.Big0) == 1 {
+		halfUsed := txGasFee.Div(txGasFee, common.Big2)
+		statedb.SubBalance(header.Coinbase, halfUsed)
+		statedb.AddBalance(bdls_engine.GasFeeAddress, halfUsed)
+	}
 
 	return receipt, err
 }

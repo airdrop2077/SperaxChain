@@ -60,7 +60,7 @@ var (
 	// unit of staking SPA
 	StakingUnit = new(big.Int).Mul(big.NewInt(100000), big.NewInt(params.Ether))
 	// transfering tokens to this address will be specially treated
-	StakingAddress = common.Address{0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE}
+	StakingAddress = common.HexToAddress("0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
 
 	// max unsigned 256-bit integer
 	MaxUint256 = big.NewFloat(0).SetInt(big.NewInt(0).SetBytes([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}))
@@ -165,6 +165,13 @@ func (e *BDLSEngine) IsProposer(header *types.Header, stakingObject *StakingObje
 		return true
 	}
 
+	// addresses in base quorum are permanent proposers
+	for k := range BaseQuorum {
+		if header.Coinbase == BaseQuorum[k] {
+			return true
+		}
+	}
+
 	// non-empty blocks
 	numStaked := big.NewFloat(0)
 	totalStaked := big.NewFloat(0) // effective stakings
@@ -212,13 +219,6 @@ func (e *BDLSEngine) IsProposer(header *types.Header, stakingObject *StakingObje
 
 		// prob compare
 		if h.Cmp(max) == 1 {
-			return true
-		}
-	}
-
-	// addresses in base quorum are valid proposers
-	for k := range BaseQuorum {
-		if header.Coinbase == BaseQuorum[k] {
 			return true
 		}
 	}

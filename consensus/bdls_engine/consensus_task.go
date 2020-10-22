@@ -95,7 +95,7 @@ func (e *BDLSEngine) verifyProposerField(stakingObject *StakingObject, header *t
 	}
 
 	// otherwise we need to verify the signature of the proposer
-	hash := e.proposalHash(header, header.Root, header.TxHash)
+	hash := e.proposalBlockHash(header, header.Root, header.TxHash)
 	// Ensure the signer is the coinbase
 	pubkey, err := crypto.SigToPub(hash, header.Signature)
 	if err != nil {
@@ -226,7 +226,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	// if i'm the proposer, sign & propose the block
 	if e.IsProposer(block.Header(), stakingObject) {
 		header := block.Header()
-		hash := e.proposalHash(header, header.Root, types.DeriveSha(block.Transactions()))
+		hash := e.proposalBlockHash(header, header.Root, types.DeriveSha(block.Transactions()))
 		sig, err := crypto.Sign(hash, privateKey)
 		if err != nil {
 			log.Error("Seal", "Sign", err, "sig:", sig)
@@ -396,38 +396,13 @@ PROPOSAL_COLLECTION:
 		Epoch:         time.Now(),
 		CurrentHeight: block.NumberU64() - 1,
 		PrivateKey:    privateKey,
-		StateCompare: func(a bdls.State, b bdls.State) int {
-			if bytes.Compare(a, b) == 0 {
-				return 0
-			}
-
-			blockA := lookupConsensusBlock(common.BytesToHash(a))
-			blockB := lookupConsensusBlock(common.BytesToHash(b))
-
-			// block comparision algorithm
-			if (blockA.Coinbase() == StakingAddress && blockB.Coinbase() == StakingAddress) || (blockA.Coinbase() != StakingAddress && blockB.Coinbase() != StakingAddress) {
-				// both emtpy or both non-empty
-				blockAHash := e.proposerHash(blockA.Header()).Bytes()
-				blockBHash := e.proposerHash(blockB.Header()).Bytes()
-				v := bytes.Compare(blockAHash, blockBHash)
-				if v == 0 {
-					log.Error("state compare:", "blockA", blockA.Header(), "blockB", blockB.Header())
-				}
-				return v
-			} else if blockA.Coinbase() == StakingAddress && blockB.Coinbase() != StakingAddress { // non empty block-B is larger
-				return -1
-			}
-			// non empty block-A is larger
-			return 1
-		},
+		StateCompare:  func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
 		StateValidate: func(s bdls.State) bool {
 			// make sure all states are known from <roundchange> exchanging
 			hash := common.BytesToHash(s)
 			if lookupConsensusBlock(hash) != nil {
 				return true
 			}
-
-			log.Debug("StateValidate--lookupConsensusBlock failed")
 			return false
 		},
 		PubKeyToIdentity: PubKeyToIdentity,
