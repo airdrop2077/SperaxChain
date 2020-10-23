@@ -89,11 +89,6 @@ func (e *BDLSEngine) verifyProposerField(stakingObject *StakingObject, header *t
 		return false
 	}
 
-	// if it's empty proposal, omit signature verification
-	if header.Coinbase == StakingAddress && len(header.Signature) == 0 {
-		return true
-	}
-
 	// otherwise we need to verify the signature of the proposer
 	hash := e.proposalBlockHash(header, header.Root, header.TxHash)
 	// Ensure the signer is the coinbase
@@ -183,9 +178,6 @@ func (e *BDLSEngine) sendProposal(block *types.Block) {
 
 // a consensus task for a specific block
 func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) {
-	privateKey := e.waitForPrivateKey(block.Coinbase(), stop)
-	// time compensation to avoid fast block generation
-	delay := time.Unix(int64(block.Header().Time), 0).Sub(time.Now())
 
 	// create a consensus message subscriber's loop
 	// subscribe to consensus message input via event mux
@@ -196,14 +188,6 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		consensusMessageChan = consensusSub.Chan()
 	} else {
 		log.Error("mux is nil")
-		return
-	}
-
-	// wait for the timestamp of header, use this to adjust the block period
-	select {
-	case <-time.After(delay):
-	case <-stop:
-		results <- nil
 		return
 	}
 
@@ -222,6 +206,9 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 
 	// the candidate block before consensus begins
 	var candidateProposal *types.Block
+
+	// retrieve private key for block signature & consensus message signature
+	privateKey := e.waitForPrivateKey(block.Coinbase(), stop)
 
 	// if i'm the proposer, sign & propose the block
 	if e.IsProposer(block.Header(), stakingObject) {
@@ -255,16 +242,20 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		}
 	}
 
+	// job is done here if i'm not an validator
 	if !isValidator {
 		return
 	}
 
 	// prepare the maximum proposal by collecting proposals from proposers
 	collectProposalTimeout := time.NewTimer(proposalCollectTimeout)
+	collectStart := time.Now()
 	log.Warn("AS VALIDATOR", "Address", crypto.PubkeyToAddress(privateKey.PublicKey))
 	log.Warn("PROPOSAL PRE-COLLECTION STARTED", "PROPOSAL COINBASE", candidateProposal.Coinbase(), "HEIGHT", candidateProposal.NumberU64())
 
 PROPOSAL_COLLECTION:
+
+	// For proposal collection, we wait at least proposalCollectionTimeout and at least one proposal
 	for {
 		select {
 		case obj, ok := <-consensusMessageChan: // consensus message
@@ -299,40 +290,30 @@ PROPOSAL_COLLECTION:
 					// record candidate blocks
 					if candidateProposal == nil {
 						candidateProposal = &proposal
-						continue PROPOSAL_COLLECTION
+					} else {
+						// replacement algorithm, keep the one with maximum hash
+						proposalHash := e.proposerHash(proposal.Header()).Bytes()
+						candidateHash := e.proposerHash(candidateProposal.Header()).Bytes()
+						if bytes.Compare(proposalHash, candidateHash) == 1 {
+							candidateProposal = &proposal
+						}
 					}
 
-					// replacement algorithm, keep the one with maximum hash
-					// non-empty block has priority over empty blocks
-					proposalHash := e.proposerHash(proposal.Header()).Bytes()
-					candidateHash := e.proposerHash(candidateProposal.Header()).Bytes()
-
-					if candidateProposal.Coinbase() == StakingAddress && proposal.Coinbase() == StakingAddress { // both emtpy
-						if bytes.Compare(proposalHash, candidateHash) == 1 {
-							candidateProposal = &proposal
-						}
-					} else if candidateProposal.Coinbase() == StakingAddress && proposal.Coinbase() != StakingAddress { // new proposal is not empty
-						candidateProposal = &proposal
-					} else if candidateProposal.Coinbase() != StakingAddress && proposal.Coinbase() != StakingAddress { // both not empty
-						if bytes.Compare(proposalHash, candidateHash) == 1 {
-							candidateProposal = &proposal
-						}
+					// at least one proposal confirmed, check if we have timeouted
+					if time.Since(collectStart) > proposalCollectTimeout {
+						break PROPOSAL_COLLECTION
 					}
 				}
 			}
 		case <-collectProposalTimeout.C:
-			break PROPOSAL_COLLECTION
+			// if candidate proposal has received, break now,
+			// otherwise, wait for at least one proposal
+			if candidateProposal != nil {
+				break PROPOSAL_COLLECTION
+			}
+		case <-stop:
+			return
 		}
-	}
-
-	// make sure candidateProposal is not nil
-	// from now on, the candidate proposal block is FIXED for this node
-	if candidateProposal == nil {
-		header := block.Header()
-		header.Coinbase = StakingAddress
-		e.Prepare(chain, header)
-		// create an empty block to propose
-		candidateProposal = types.NewBlock(header, nil, nil, nil)
 	}
 
 	// BEGIN THE CORE CONSENSUS MESSAGE LOOP
@@ -433,6 +414,16 @@ PROPOSAL_COLLECTION:
 	// propose the block hash
 	consensus.Propose(candidateProposal.Hash().Bytes())
 
+	// time compensation to avoid fast block generation
+	delay := time.Unix(int64(block.Header().Time), 0).Sub(time.Now())
+	// wait for the timestamp of header
+	select {
+	case <-time.After(delay):
+	case <-stop:
+		results <- nil
+		return
+	}
+
 	// core consensus loop
 CONSENSUS_TASK:
 	for {
@@ -464,7 +455,8 @@ CONSENSUS_TASK:
 
 						// every validator can finalize this block to it's local blockchain now
 						newblock := lookupConsensusBlock(hash)
-						if newblock != nil {
+						if newblock != nil && e.SealHash(block.Header()) == e.SealHash(newblock.Header()) {
+							// mined by me
 							header := newblock.Header()
 							bts, err := consensus.CurrentProof().Marshal()
 							if err != nil {
@@ -529,7 +521,6 @@ CONSENSUS_TASK:
 		case <-updateTick.C:
 			consensus.Update(time.Now())
 		case <-stop:
-			results <- nil
 			return
 		}
 	}
