@@ -176,6 +176,28 @@ func (e *BDLSEngine) sendProposal(block *types.Block) {
 	}
 }
 
+// block comparision algorithm for consensus and proposal collection
+func (e *BDLSEngine) blockCompare(blockA *types.Block, blockB *types.Block) int {
+	// block comparision algorithm:
+	// 1. block proposed by base quorum always have the lowest priority
+	// 2. block proposed other than base quorum have higher priority
+	// 3. same type of proposer compares it's proposer's hash
+	// 4. if proposer's hash is identical, compare block hash
+	if (e.IsBaseQuorum(blockA.Coinbase()) && e.IsBaseQuorum(blockB.Coinbase())) || (!e.IsBaseQuorum(blockA.Coinbase()) && !e.IsBaseQuorum(blockB.Coinbase())) {
+		// compare proposer's hash
+		ret := bytes.Compare(e.proposerHash(blockA.Header()).Bytes(), e.proposerHash(blockB.Header()).Bytes())
+		if ret != 0 {
+			return ret
+		}
+		// otherwise, compare it's block hash
+		return bytes.Compare(blockA.Hash().Bytes(), blockB.Hash().Bytes())
+	} else if e.IsBaseQuorum(blockA.Coinbase()) && !e.IsBaseQuorum(blockB.Coinbase()) {
+		// block b has higher priority
+		return -1
+	}
+	return 1
+}
+
 // a consensus task for a specific block
 func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) {
 
@@ -291,10 +313,7 @@ PROPOSAL_COLLECTION:
 					if candidateProposal == nil {
 						candidateProposal = &proposal
 					} else {
-						// replacement algorithm, keep the one with maximum hash
-						proposalHash := e.proposerHash(proposal.Header()).Bytes()
-						candidateHash := e.proposerHash(candidateProposal.Header()).Bytes()
-						if bytes.Compare(proposalHash, candidateHash) == 1 {
+						if e.blockCompare(&proposal, candidateProposal) > 0 {
 							candidateProposal = &proposal
 						}
 					}
@@ -380,21 +399,7 @@ PROPOSAL_COLLECTION:
 		StateCompare: func(a bdls.State, b bdls.State) int {
 			blockA := lookupConsensusBlock(common.BytesToHash(a))
 			blockB := lookupConsensusBlock(common.BytesToHash(b))
-
-			// block comparision algorithm:
-			// 1. block proposed by base quorum always have the lowest priority
-			// 2. block proposed other than base quorum have higher priority
-			// 3. same type of proposer compares it's block hash
-			if (e.IsBaseQuorum(blockA.Coinbase()) && e.IsBaseQuorum(blockB.Coinbase())) || (!e.IsBaseQuorum(blockA.Coinbase()) && !e.IsBaseQuorum(blockB.Coinbase())) {
-				// same type of proposer
-				blockAHash := e.proposerHash(blockA.Header()).Bytes()
-				blockBHash := e.proposerHash(blockB.Header()).Bytes()
-				return bytes.Compare(blockAHash, blockBHash)
-			} else if e.IsBaseQuorum(blockA.Coinbase()) && !e.IsBaseQuorum(blockB.Coinbase()) {
-				// block b has higher priority
-				return -1
-			}
-			return 1
+			return e.blockCompare(blockA, blockB)
 		},
 		StateValidate: func(s bdls.State) bool {
 			// make sure all states are known from <roundchange> exchanging
