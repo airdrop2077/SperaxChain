@@ -606,15 +606,15 @@ func (w *worker) resultLoop() {
 			w.pendingMu.RUnlock()
 
 			if !exist {
-				// BDLS engine ignores the task and insert the complete block with consensus proof
 				if _, ok := w.engine.(*bdls_engine.BDLSEngine); ok {
+					// blocks confirmed by BDLS consensus can be safely inserted to blockchain
 					_, err := w.chain.InsertChain(types.Blocks{block})
 					if err != nil {
 						log.Error("Insert BDLS finalized block failed", "err", err)
 						continue
 					}
 
-					// Broadcast the block and announce chain insertion event
+					// Each validator will announce this new mined block
 					w.mux.Post(core.NewMinedBlockEvent{Block: block})
 					continue
 				} else {
