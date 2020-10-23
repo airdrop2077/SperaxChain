@@ -467,7 +467,7 @@ CONSENSUS_TASK:
 				case EngineMessageType_Consensus:
 					err := consensus.ReceiveMessage(em.Message, time.Now()) // input to core
 					if err != nil {
-						log.Debug("consensus receive:", "err", err)
+						//	log.Debug("consensus receive:", "err", err)
 					}
 					newHeight, newRound, newState := consensus.CurrentState()
 
