@@ -478,7 +478,7 @@ CONSENSUS_TASK:
 
 						// every validator can finalize this block to it's local blockchain now
 						newblock := lookupConsensusBlock(hash)
-						if newblock != nil && e.SealHash(block.Header()) == e.SealHash(newblock.Header()) {
+						if newblock != nil {
 							// mined by me
 							header := newblock.Header()
 							bts, err := consensus.CurrentProof().Marshal()
@@ -492,8 +492,6 @@ CONSENSUS_TASK:
 
 							// broadcast the mined block if i'm the proposer
 							mined := newblock.WithSeal(header)
-							// as block integrity is verified ahead in <roundchange> message,
-							// it's safe to stop the consensus loop now
 							results <- mined
 						}
 						return
