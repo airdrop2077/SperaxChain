@@ -38,11 +38,6 @@ var (
 
 // mining reward computation
 func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state.StateDB, header *types.Header) {
-	if header.Coinbase == StakingAddress {
-		// ignore empty block
-		return
-	}
-
 	// Reward Block Proposer
 	state.AddBalance(header.Coinbase, ProposerReward)
 
