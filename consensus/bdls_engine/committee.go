@@ -150,13 +150,21 @@ func (e *BDLSEngine) deriveW(header *types.Header) common.Hash {
 	return common.BytesToHash(hasher.Sum(nil))
 }
 
+// IsBaseQuorum check whether a address is from base quorum
+func (e *BDLSEngine) IsBaseQuorum(address common.Address) bool {
+	for k := range BaseQuorum {
+		if address == BaseQuorum[k] {
+			return true
+		}
+	}
+	return false
+}
+
 // H(r;0;Ri,r,0;Wr) > max{0;1 i-aip}
 func (e *BDLSEngine) IsProposer(header *types.Header, stakingObject *StakingObject) bool {
 	// addresses in base quorum are permanent proposers
-	for k := range BaseQuorum {
-		if header.Coinbase == BaseQuorum[k] {
-			return true
-		}
+	if e.IsBaseQuorum(header.Coinbase) {
+		return true
 	}
 
 	// non-empty blocks

@@ -377,7 +377,25 @@ PROPOSAL_COLLECTION:
 		Epoch:         time.Now(),
 		CurrentHeight: block.NumberU64() - 1,
 		PrivateKey:    privateKey,
-		StateCompare:  func(a bdls.State, b bdls.State) int { return bytes.Compare(a, b) },
+		StateCompare: func(a bdls.State, b bdls.State) int {
+			blockA := lookupConsensusBlock(common.BytesToHash(a))
+			blockB := lookupConsensusBlock(common.BytesToHash(b))
+
+			// block comparision algorithm:
+			// 1. block proposed by base quorum always have the lowest priority
+			// 2. block proposed other than base quorum have higher priority
+			// 3. same type of proposer compares it's block hash
+			if (e.IsBaseQuorum(blockA.Coinbase()) && e.IsBaseQuorum(blockB.Coinbase())) || (!e.IsBaseQuorum(blockA.Coinbase()) && !e.IsBaseQuorum(blockB.Coinbase())) {
+				// same type of proposer
+				blockAHash := e.proposerHash(blockA.Header()).Bytes()
+				blockBHash := e.proposerHash(blockB.Header()).Bytes()
+				return bytes.Compare(blockAHash, blockBHash)
+			} else if e.IsBaseQuorum(blockA.Coinbase()) && !e.IsBaseQuorum(blockB.Coinbase()) {
+				// block b has higher priority
+				return -1
+			}
+			return 1
+		},
 		StateValidate: func(s bdls.State) bool {
 			// make sure all states are known from <roundchange> exchanging
 			hash := common.BytesToHash(s)
