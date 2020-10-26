@@ -231,7 +231,6 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		return
 	}
 
-	//log.Error("p", "p", privateKey.D)
 	// if i'm the proposer, sign & propose the block
 	if e.IsProposer(block.Header(), state) {
 		header := block.Header()

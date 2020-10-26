@@ -79,24 +79,24 @@ const (
 	// key: hash("/v1/29d3fbe3e7983a41d0e6d984c480ceedb3c251fd/from")
 
 	// the 1st block expected to participant in validator and proposer
-	StakingKeyFrom = "/v1/%s/from"
+	StakingKeyFrom = "/v1/%v/from"
 
 	// the last block to participant in validator and proposer, the tokens will be refunded
 	// to participants' addresses after this block has mined
-	StakingKeyTo = "/v1/%s/to"
+	StakingKeyTo = "/v1/%v/to"
 
 	// StakingHash is the last hash in hashchain,  random nubmers(R) in futureBlock
 	// will be hashed for (futureBlock - stakingFrom) times to match with StakingHash.
-	StakingKeyHash = "/v1/%s/hash"
+	StakingKeyHash = "/v1/%v/hash"
 
 	// records the number of tokens staked
-	StakingKeyValue = "/v1/%s/value"
+	StakingKeyValue = "/v1/%v/value"
 
 	// record the total number of staked users
 	StakingUsersCount = "/v1/count"
 
 	// staking users index , index -> address
-	StakingUserIndex = "/v1/address/%s"
+	StakingUserIndex = "/v1/address/%v"
 )
 
 // types of staking related operation
@@ -282,8 +282,9 @@ func (e *BDLSEngine) IsProposer(header *types.Header, state *state.StateDB) bool
 				return false
 			}
 
-			if common.BytesToHash(hashChain(staker.StakingHash.Bytes(), header.Number.Uint64()-staker.StakingFrom)) != header.R {
-				log.Debug("hashchain verification failed for header.R")
+			R := common.BytesToHash(hashChain(header.R.Bytes(), staker.StakingFrom, header.Number.Uint64()))
+			if R != staker.StakingHash {
+				log.Error("hashchain verification failed for header.R", "header.R", header.R, "computed R", R, "staked hash:", staker.StakingHash)
 				return false
 			}
 			numStaked = big.NewFloat(0).SetInt(staker.StakedValue)
@@ -505,13 +506,12 @@ func deriveStakingSeed(priv *ecdsa.PrivateKey, stakingFrom uint64) []byte {
 	return hasher.Sum(nil)
 }
 
-// compute hash recursively for n(n>=0) times
-func hashChain(hash []byte, n uint64) []byte {
+// compute hash recursively for to - from times
+func hashChain(hash []byte, from, to uint64) []byte {
+	n := to - from
 	lastHash := hash
-	hasher := sha3.New256()
 	for i := uint64(0); i < n; i++ {
-		hasher.Write(lastHash)
-		lastHash = hasher.Sum(nil)
+		lastHash = crypto.Keccak256(lastHash)
 	}
 	return lastHash
 }

@@ -331,23 +331,24 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 	// set W based on parent block
 	header.W = e.deriveW(parent)
 
-	// set R based on parent block
-	state, _ := e.stateAt(header.ParentHash)
-	stakers := GetAllStakers(state)
+	// ignore base quorum R
+	if e.IsBaseQuorum(header.Coinbase) {
+		return nil
+	}
 
-	// set R only if it's in a valid staking period
+	// set R based StakingHash
+	state, _ := e.stateAt(header.ParentHash)
 	privateKey := e.waitForPrivateKey(header.Coinbase, nil)
-	if privateKey != nil {
-		for k := range stakers {
-			staker := GetStaker(stakers[k], state)
-			if staker.Address == header.Coinbase {
-				if header.Number.Uint64() > staker.StakingFrom || header.Number.Uint64() <= staker.StakingTo {
-					seed := deriveStakingSeed(privateKey, staker.StakingFrom)
-					header.R = common.BytesToHash(hashChain(seed, header.Number.Uint64()-staker.StakingFrom))
-				}
-				break
-			}
-		}
+	if privateKey == nil {
+		return errors.New("cannot retrieve private key")
+	}
+
+	staker := GetStaker(header.Coinbase, state)
+	if header.Number.Uint64() > staker.StakingFrom && header.Number.Uint64() <= staker.StakingTo {
+		// if it's in a valid staking period
+		seed := deriveStakingSeed(privateKey, staker.StakingFrom)
+		log.Debug("Prepare", "stakingFrom", staker.StakingFrom, "stakingTo", staker.StakingTo, "block#", header.Number)
+		header.R = common.BytesToHash(hashChain(seed, header.Number.Uint64(), staker.StakingTo))
 	}
 
 	return nil
