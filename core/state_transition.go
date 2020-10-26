@@ -23,6 +23,7 @@ import (
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus/bdls_engine"
 	"github.com/Sperax/SperaxChain/core/vm"
+	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/params"
 	"github.com/Sperax/SperaxChain/rlp"
 )
@@ -266,29 +267,25 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		var req bdls_engine.StakingRequest
 		rlp.DecodeBytes(msg.Data(), &req)
 
-		// Decode from StakingAddress's Code field
-		code := st.state.GetCode(bdls_engine.StakingAddress)
-		var stakingObject bdls_engine.StakingObject
-		err := rlp.DecodeBytes(code, &stakingObject)
-		if err != nil {
-			return nil, err
-		}
-
 		switch req.StakingOp {
 		case bdls_engine.Staking:
-			for k := range stakingObject.Stakers {
-				if stakingObject.Stakers[k] == msg.From() {
+			stakers := bdls_engine.GetAllStakers(st.state)
+			for k := range stakers {
+				if stakers[k] == msg.From() {
+					log.Debug("TransitionDb", "err", bdls_engine.ErrStakingRequest)
 					return nil, bdls_engine.ErrStakingRequest
 				}
 			}
 
 			// minimum staking requirement
 			if st.value.Cmp(bdls_engine.StakingUnit) == -1 {
+				log.Debug("TransitionDb", "err", bdls_engine.ErrStakingMinimumTokens)
 				return nil, bdls_engine.ErrStakingMinimumTokens
 			}
 
 			// staking period check
 			if req.StakingTo <= req.StakingFrom {
+				log.Debug("TransitionDb", "err", bdls_engine.ErrStakingInvalidPeriod)
 				return nil, bdls_engine.ErrStakingInvalidPeriod
 			}
 
@@ -307,26 +304,20 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			// set staking fields
 			bdls_engine.SetStaker(&staker, st.state)
 
-			// update StakingObject
-			stakingObject.Stakers = append(stakingObject.Stakers, msg.From())
-			bts, err := rlp.EncodeToBytes(stakingObject)
-			if err != nil {
-				return nil, err
-			}
-			st.state.SetCode(bdls_engine.StakingAddress, bts)
+			// update staker's list
+			bdls_engine.AddNewStaker(msg.From(), st.state)
 
 		case bdls_engine.Redeem:
-			idx := -1
+			stakers := bdls_engine.GetAllStakers(st.state)
 			var staker *bdls_engine.Staker
-			for k := range stakingObject.Stakers {
-				if stakingObject.Stakers[k] == msg.From() {
-					idx = k
+			for k := range stakers {
+				if stakers[k] == msg.From() {
 					staker = bdls_engine.GetStaker(msg.From(), st.state)
 					break
 				}
 			}
 
-			if idx == -1 {
+			if staker == nil {
 				return nil, bdls_engine.ErrRedeemRequest
 			}
 
@@ -335,14 +326,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			st.state.SubBalance(bdls_engine.StakingAddress, staker.StakedValue)
 
 			// clear staker's information after redeeming
-			stakingObject.Stakers = append(stakingObject.Stakers[:idx], stakingObject.Stakers[idx+1:]...)
-
-			// update StakingObject
-			bts, err := rlp.EncodeToBytes(stakingObject)
-			if err != nil {
-				return nil, err
-			}
-			st.state.SetCode(bdls_engine.StakingAddress, bts)
+			bdls_engine.RemoveStaker(msg.From(), st.state)
 		}
 	} else {
 		// Increment the nonce for the next transaction

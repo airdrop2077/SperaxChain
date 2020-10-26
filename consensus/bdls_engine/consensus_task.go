@@ -83,9 +83,9 @@ func (e *BDLSEngine) verifyStates(block *types.Block) bool {
 }
 
 // verify the proposer in block header
-func (e *BDLSEngine) verifyProposerField(header *types.Header, stakingObject *StakingObject, state *state.StateDB) bool {
+func (e *BDLSEngine) verifyProposerField(header *types.Header, state *state.StateDB) bool {
 	// Ensure the coinbase is a valid proposer
-	if !e.IsProposer(header, stakingObject, state) {
+	if !e.IsProposer(header, state) {
 		log.Debug("verifyProposerField - IsProposer", "height", header.Number, "proposer", header.Coinbase)
 		return false
 	}
@@ -120,7 +120,7 @@ func (e *BDLSEngine) verifyProposerField(header *types.Header, stakingObject *St
 }
 
 // verify a proposed block from remote
-func (e *BDLSEngine) verifyRemoteProposal(chain consensus.ChainReader, block *types.Block, height uint64, stakingObject *StakingObject, state *state.StateDB) bool {
+func (e *BDLSEngine) verifyRemoteProposal(chain consensus.ChainReader, block *types.Block, height uint64, state *state.StateDB) bool {
 	header := block.Header()
 	// verify the block number
 	if header.Number.Uint64() != height {
@@ -135,7 +135,7 @@ func (e *BDLSEngine) verifyRemoteProposal(chain consensus.ChainReader, block *ty
 	}
 
 	// ensure it's a valid proposer
-	if !e.verifyProposerField(header, stakingObject, state) {
+	if !e.verifyProposerField(header, state) {
 		log.Debug("verifyRemoteProposal - verifyProposer failed")
 		return false
 	}
@@ -221,20 +221,19 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		return
 	}
 
-	stakingObject, err := GetStakingObject(state)
-	if err != nil {
-		log.Error("consensusTask - Error in getting staking Object", "parentHash", block.Header().ParentHash.Hex(), "err", err)
-		return
-	}
-
 	// the candidate block before consensus begins
 	var candidateProposal *types.Block
 
 	// retrieve private key for block signature & consensus message signature
 	privateKey := e.waitForPrivateKey(block.Coinbase(), stop)
+	if privateKey == nil {
+		log.Error("consensusTask - Error in getting privateKey", "account", block.Coinbase())
+		return
+	}
 
+	//log.Error("p", "p", privateKey.D)
 	// if i'm the proposer, sign & propose the block
-	if e.IsProposer(block.Header(), stakingObject, state) {
+	if e.IsProposer(block.Header(), state) {
 		header := block.Header()
 		hash := e.proposalBlockHash(header, header.Root, types.DeriveSha(block.Transactions()))
 		sig, err := crypto.Sign(hash, privateKey)
@@ -253,7 +252,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	}
 
 	// derive the participants from staking object at this height
-	participants := e.CreateValidators(block.Header(), stakingObject, state)
+	participants := e.CreateValidators(block.Header(), state)
 
 	// check if i'm the validator, stop here if i'm not a validator
 	var isValidator bool
@@ -305,7 +304,7 @@ PROPOSAL_COLLECTION:
 					}
 
 					// verify proposal fields
-					if !e.verifyRemoteProposal(chain, &proposal, block.NumberU64(), stakingObject, state) {
+					if !e.verifyRemoteProposal(chain, &proposal, block.NumberU64(), state) {
 						log.Debug("proposal collection - verifyRemoteProposal failed")
 						continue PROPOSAL_COLLECTION
 					}
@@ -506,7 +505,7 @@ CONSENSUS_TASK:
 					}
 
 					// verify proposal fields
-					if !e.verifyRemoteProposal(chain, &proposal, block.NumberU64(), stakingObject, state) {
+					if !e.verifyRemoteProposal(chain, &proposal, block.NumberU64(), state) {
 						log.Debug("proposal during consensus - verifyRemoteProposal failed")
 						continue CONSENSUS_TASK
 					}

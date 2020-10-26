@@ -23,6 +23,7 @@ import (
 	"errors"
 	fmt "fmt"
 	"math/big"
+	"sync"
 	"time"
 
 	"github.com/Sperax/SperaxChain/accounts"
@@ -97,6 +98,10 @@ type BDLSEngine struct {
 	nonce uint32
 	// ephermal private key for header verification
 	ephermalKey *ecdsa.PrivateKey
+	// private key for consensus signing
+	privKey     *ecdsa.PrivateKey
+	privKeyMu   sync.Mutex
+	privKeyOnce sync.Once
 
 	// event mux to exchange consensus message with protocol manager
 	mux *event.TypeMux
@@ -279,18 +284,13 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		return errors.New("Error in getting the block's parent's state")
 	}
 
-	stakingObject, err := GetStakingObject(state)
-	if err != nil {
-		return errors.New("Error in getting staking Object")
-	}
-
 	// Ensure it's a valid proposer
-	if !e.IsProposer(header, stakingObject, state) {
+	if !e.IsProposer(header, state) {
 		return errors.New(fmt.Sprint("Not a valid proposer at height", header.Number))
 	}
 
 	// create the consensus object along with participants to validate decide message
-	config.Participants = e.CreateValidators(header, stakingObject, state)
+	config.Participants = e.CreateValidators(header, state)
 
 	consensus, err := bdls.NewConsensus(config)
 	if err != nil {
@@ -333,17 +333,17 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 
 	// set R based on parent block
 	state, _ := e.stateAt(header.ParentHash)
-	stakingObject, _ := GetStakingObject(state)
+	stakers := GetAllStakers(state)
 
 	// set R only if it's in a valid staking period
 	privateKey := e.waitForPrivateKey(header.Coinbase, nil)
 	if privateKey != nil {
-		for k := range stakingObject.Stakers {
-			staker := GetStaker(stakingObject.Stakers[k], state)
+		for k := range stakers {
+			staker := GetStaker(stakers[k], state)
 			if staker.Address == header.Coinbase {
 				if header.Number.Uint64() > staker.StakingFrom || header.Number.Uint64() <= staker.StakingTo {
-					seed := e.deriveStakingSeed(privateKey, staker.StakingFrom)
-					header.R = common.BytesToHash(e.hashChain(seed, header.Number.Uint64()-staker.StakingFrom))
+					seed := deriveStakingSeed(privateKey, staker.StakingFrom)
+					header.R = common.BytesToHash(hashChain(seed, header.Number.Uint64()-staker.StakingFrom))
 				}
 				break
 			}
@@ -400,6 +400,14 @@ func (e *BDLSEngine) Seal(chain consensus.ChainReader, block *types.Block, resul
 
 // waitForPrivateKey gets private key from account manager
 func (e *BDLSEngine) waitForPrivateKey(coinbase common.Address, stop <-chan struct{}) *ecdsa.PrivateKey {
+	e.privKeyMu.Lock()
+	privKey := e.privKey
+	e.privKeyMu.Unlock()
+
+	if privKey != nil {
+		return privKey
+	}
+
 	for {
 		select {
 		case <-stop:
@@ -418,6 +426,9 @@ func (e *BDLSEngine) waitForPrivateKey(coinbase common.Address, stop <-chan stru
 				continue
 			}
 
+			e.privKeyMu.Lock()
+			e.privKey = priv
+			e.privKeyMu.Unlock()
 			return priv
 		}
 	}
