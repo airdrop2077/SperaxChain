@@ -21,8 +21,8 @@ func TestEncodingStaking(t *testing.T) {
 	req := StakingRequest{
 		StakingOp:   Staking,
 		StakingFrom: 1,
-		StakingTo:   120,
-		StakingHash: common.BytesToHash(hashChain(seed, 1, 120)),
+		StakingTo:   40,
+		StakingHash: common.BytesToHash(hashChain(seed, 1, 40)),
 	}
 	bts, err := rlp.EncodeToBytes(req)
 	if err != nil {
@@ -32,9 +32,9 @@ func TestEncodingStaking(t *testing.T) {
 	t.Log("seed:", common.BytesToHash(seed).String())
 	t.Log("R:", req.StakingHash.String())
 
-	block100 := hashChain(seed, 100, req.StakingTo)
-	t.Log("block100#R", common.BytesToHash(block100).String())
-	block1 := hashChain(block100, req.StakingFrom, 100)
+	block20 := hashChain(seed, 20, req.StakingTo)
+	t.Log("block20#R", common.BytesToHash(block20).String())
+	block1 := hashChain(block20, req.StakingFrom, 20)
 	t.Log("block1#R", common.BytesToHash(block1).String())
 	assert.Equal(t, block1, req.StakingHash.Bytes())
 }
