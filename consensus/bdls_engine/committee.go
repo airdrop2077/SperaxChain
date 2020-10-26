@@ -156,9 +156,7 @@ func setStakingValue(addr common.Address, key string, value common.Hash, state v
 
 // GetAllStakers retrieve all staker's addresses from account storage trie
 func GetAllStakers(state vm.StateDB) []common.Address {
-	keyHash := crypto.Keccak256Hash([]byte(fmt.Sprintf(StakingUsersCount)))
-	count := state.GetState(StakingAddress, keyHash).Big().Int64()
-
+	count := GetStakersCount(state)
 	var stakers []common.Address
 	for i := int64(0); i < count; i++ {
 		userIndex := crypto.Keccak256Hash([]byte(fmt.Sprintf(StakingUserIndex, i)))
@@ -199,7 +197,7 @@ func RemoveStaker(addr common.Address, state vm.StateDB) {
 		userIndex := crypto.Keccak256Hash([]byte(fmt.Sprintf(StakingUserIndex, i)))
 		// found this stakers
 		if addr == common.BytesToAddress(state.GetState(StakingAddress, userIndex).Bytes()) {
-			lastIndex := crypto.Keccak256Hash([]byte(fmt.Sprintf(StakingUserIndex, count)))
+			lastIndex := crypto.Keccak256Hash([]byte(fmt.Sprintf(StakingUserIndex, count-1)))
 			lastAddress := state.GetState(StakingAddress, lastIndex)
 
 			// swap with the last stakers
