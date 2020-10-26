@@ -75,19 +75,19 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 	}
 
 	// refund all expired staking tokens at current state
-	stakingObject, err := e.GetStakingObject(state)
+	stakingObject, err := GetStakingObject(state)
 	if err != nil {
 		panic("Error in getting staking Object")
 	}
 
-	var stakers []Staker
+	var stakers []common.Address
 	for k := range stakingObject.Stakers {
-		staker := stakingObject.Stakers[k]
+		staker := GetStaker(stakingObject.Stakers[k], state)
 		if header.Number.Uint64() > staker.StakingTo { // expired, refund automatically
 			state.AddBalance(staker.Address, staker.StakedValue)
 			state.SubBalance(StakingAddress, staker.StakedValue)
 		} else {
-			stakers = append(stakers, staker)
+			stakers = append(stakers, staker.Address)
 		}
 	}
 

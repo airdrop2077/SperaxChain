@@ -277,7 +277,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		switch req.StakingOp {
 		case bdls_engine.Staking:
 			for k := range stakingObject.Stakers {
-				if stakingObject.Stakers[k].Address == msg.From() {
+				if stakingObject.Stakers[k] == msg.From() {
 					return nil, bdls_engine.ErrStakingRequest
 				}
 			}
@@ -294,6 +294,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 
 			// no previous staking information
 			var staker bdls_engine.Staker
+			staker.Address = msg.From()
 			staker.StakingFrom = req.StakingFrom
 			staker.StakingTo = req.StakingTo
 			staker.StakingHash = req.StakingHash
@@ -303,8 +304,11 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			st.state.AddBalance(bdls_engine.StakingAddress, st.value)
 			st.state.SubBalance(msg.From(), st.value)
 
+			// set staking fields
+			bdls_engine.SetStaker(&staker, st.state)
+
 			// update StakingObject
-			stakingObject.Stakers = append(stakingObject.Stakers, staker)
+			stakingObject.Stakers = append(stakingObject.Stakers, msg.From())
 			bts, err := rlp.EncodeToBytes(stakingObject)
 			if err != nil {
 				return nil, err
@@ -315,9 +319,9 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			idx := -1
 			var staker *bdls_engine.Staker
 			for k := range stakingObject.Stakers {
-				if stakingObject.Stakers[k].Address == msg.From() {
+				if stakingObject.Stakers[k] == msg.From() {
 					idx = k
-					staker = &stakingObject.Stakers[k]
+					staker = bdls_engine.GetStaker(msg.From(), st.state)
 					break
 				}
 			}

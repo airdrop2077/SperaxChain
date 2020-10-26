@@ -279,18 +279,18 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		return errors.New("Error in getting the block's parent's state")
 	}
 
-	stakingObject, err := e.GetStakingObject(state)
+	stakingObject, err := GetStakingObject(state)
 	if err != nil {
 		return errors.New("Error in getting staking Object")
 	}
 
 	// Ensure it's a valid proposer
-	if !e.IsProposer(header, stakingObject) {
+	if !e.IsProposer(header, stakingObject, state) {
 		return errors.New(fmt.Sprint("Not a valid proposer at height", header.Number))
 	}
 
 	// create the consensus object along with participants to validate decide message
-	config.Participants = e.CreateValidators(header, stakingObject)
+	config.Participants = e.CreateValidators(header, stakingObject, state)
 
 	consensus, err := bdls.NewConsensus(config)
 	if err != nil {
@@ -333,13 +333,13 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 
 	// set R based on parent block
 	state, _ := e.stateAt(header.ParentHash)
-	stakingObject, _ := e.GetStakingObject(state)
+	stakingObject, _ := GetStakingObject(state)
 
 	// set R only if it's in a valid staking period
 	privateKey := e.waitForPrivateKey(header.Coinbase, nil)
 	if privateKey != nil {
 		for k := range stakingObject.Stakers {
-			staker := stakingObject.Stakers[k]
+			staker := GetStaker(stakingObject.Stakers[k], state)
 			if staker.Address == header.Coinbase {
 				if header.Number.Uint64() > staker.StakingFrom || header.Number.Uint64() <= staker.StakingTo {
 					seed := e.deriveStakingSeed(privateKey, staker.StakingFrom)

@@ -21,6 +21,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/binary"
 	"errors"
+	fmt "fmt"
 	"math/big"
 	"sort"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/Sperax/SperaxChain/common/hexutil"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
+	"github.com/Sperax/SperaxChain/core/vm"
 	"github.com/Sperax/SperaxChain/crypto"
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/params"
@@ -73,6 +75,25 @@ var (
 	ErrRedeemRequest        = errors.New("not staked")
 )
 
+const (
+	// example:
+	// key: hash("/v1/29d3fbe3e7983a41d0e6d984c480ceedb3c251fd/from")
+
+	// the 1st block expected to participant in validator and proposer
+	StakingKeyFrom = "/v1/%s/from"
+
+	// the last block to participant in validator and proposer, the tokens will be refunded
+	// to participants' addresses after this block has mined
+	StakingKeyTo = "/v1/%s/to"
+
+	// StakingHash is the last hash in hashchain,  random nubmers(R) in futureBlock
+	// will be hashed for (futureBlock - stakingFrom) times to match with StakingHash.
+	StakingKeyHash = "/v1/%s/hash"
+
+	// records the number of tokens staked
+	StakingKeyValue = "/v1/%s/value"
+)
+
 // types of staking related operation
 type StakingOp byte
 
@@ -97,9 +118,7 @@ type StakingRequest struct {
 	StakingHash common.Hash
 }
 
-// Staker & StakingObject are the structures stored in
-// StakingAddress's Account.Code for staking related information
-// A single Staker
+// Staker represents a staker's information retrieved from account storage trie
 type Staker struct {
 	// the Staker's address
 	Address common.Address
@@ -117,11 +136,21 @@ type Staker struct {
 
 // The object to be stored in StakingAddress's Account.Code
 type StakingObject struct {
-	Stakers []Staker // staker's, expired stakers will automatically be removed
+	Stakers []common.Address // staker's address, expired stakers will automatically be removed
+}
+
+func getStakingValue(addr common.Address, key string, state vm.StateDB) common.Hash {
+	keyHash := crypto.Keccak256Hash([]byte(fmt.Sprintf(key, addr)))
+	return state.GetState(addr, keyHash)
+}
+
+func setStakingValue(addr common.Address, key string, value common.Hash, state vm.StateDB) {
+	keyHash := crypto.Keccak256Hash([]byte(fmt.Sprintf(key, addr)))
+	state.SetState(addr, keyHash, value)
 }
 
 // GetStakingObject returns the stakingObject at some state
-func (e *BDLSEngine) GetStakingObject(state *state.StateDB) (*StakingObject, error) {
+func GetStakingObject(state vm.StateDB) (*StakingObject, error) {
 	var stakingObject StakingObject
 	// retrieve staking object from account.Code
 	code := state.GetCode(StakingAddress)
@@ -132,6 +161,23 @@ func (e *BDLSEngine) GetStakingObject(state *state.StateDB) (*StakingObject, err
 		}
 	}
 	return &stakingObject, nil
+}
+
+func GetStaker(addr common.Address, state vm.StateDB) *Staker {
+	staker := new(Staker)
+	staker.Address = addr
+	staker.StakingFrom = uint64(getStakingValue(addr, StakingKeyFrom, state).Big().Int64())
+	staker.StakingTo = uint64(getStakingValue(addr, StakingKeyTo, state).Big().Int64())
+	staker.StakingHash = getStakingValue(addr, StakingKeyHash, state)
+	staker.StakedValue = getStakingValue(addr, StakingKeyValue, state).Big()
+	return staker
+}
+
+func SetStaker(staker *Staker, state vm.StateDB) {
+	setStakingValue(staker.Address, StakingKeyFrom, common.BigToHash(big.NewInt(int64(staker.StakingFrom))), state)
+	setStakingValue(staker.Address, StakingKeyTo, common.BigToHash(big.NewInt(int64(staker.StakingTo))), state)
+	setStakingValue(staker.Address, StakingKeyHash, staker.StakingHash, state)
+	setStakingValue(staker.Address, StakingKeyValue, common.BigToHash(staker.StakedValue), state)
 }
 
 // GetW calculates random number W based on block information
@@ -161,7 +207,7 @@ func (e *BDLSEngine) IsBaseQuorum(address common.Address) bool {
 }
 
 // H(r;0;Ri,r,0;Wr) > max{0;1 i-aip}
-func (e *BDLSEngine) IsProposer(header *types.Header, stakingObject *StakingObject) bool {
+func (e *BDLSEngine) IsProposer(header *types.Header, stakingObject *StakingObject, state *state.StateDB) bool {
 	// addresses in base quorum are permanent proposers
 	if e.IsBaseQuorum(header.Coinbase) {
 		return true
@@ -173,22 +219,24 @@ func (e *BDLSEngine) IsProposer(header *types.Header, stakingObject *StakingObje
 
 	// lookup the staker's information
 	for k := range stakingObject.Stakers {
-		staker := stakingObject.Stakers[k]
+		staker := GetStaker(stakingObject.Stakers[k], state)
 		// count effective stakings
 		if header.Number.Uint64() > staker.StakingFrom || header.Number.Uint64() <= staker.StakingTo {
 			totalStaked.Add(totalStaked, big.NewFloat(0).SetInt(staker.StakedValue))
 		}
 
+		// found proposer's staking address
 		if staker.Address == header.Coinbase {
 			if header.Number.Uint64() <= staker.StakingFrom || header.Number.Uint64() > staker.StakingTo {
 				log.Debug("invalid staking period")
 				return false
-			} else if common.BytesToHash(e.hashChain(staker.StakingHash.Bytes(), header.Number.Uint64()-staker.StakingFrom)) != header.R {
+			}
+
+			if common.BytesToHash(e.hashChain(staker.StakingHash.Bytes(), header.Number.Uint64()-staker.StakingFrom)) != header.R {
 				log.Debug("hashchain verification failed for header.R")
 				return false
-			} else {
-				numStaked = big.NewFloat(0).SetInt(staker.StakedValue)
 			}
+			numStaked = big.NewFloat(0).SetInt(staker.StakedValue)
 		}
 	}
 
@@ -291,13 +339,13 @@ func (ov SortableValidators) Hash(height uint64, R common.Hash, W common.Hash) c
 }
 
 // CreateValidators creates an ordered list for all qualified validators with weights
-func (e *BDLSEngine) CreateValidators(header *types.Header, stakingObject *StakingObject) []bdls.Identity {
+func (e *BDLSEngine) CreateValidators(header *types.Header, stakingObject *StakingObject, state *state.StateDB) []bdls.Identity {
 	var orderedValidators []orderedValidator
 
 	// count effective stakings
 	var totalStaked *big.Int
 	for k := range stakingObject.Stakers {
-		staker := stakingObject.Stakers[k]
+		staker := GetStaker(stakingObject.Stakers[k], state)
 		// count effective stakings
 		if header.Number.Uint64() > staker.StakingFrom || header.Number.Uint64() <= staker.StakingTo {
 			totalStaked.Add(totalStaked, staker.StakedValue)
@@ -306,11 +354,11 @@ func (e *BDLSEngine) CreateValidators(header *types.Header, stakingObject *Staki
 
 	// setup validators
 	for k := range stakingObject.Stakers {
-		staker := stakingObject.Stakers[k]
+		staker := GetStaker(stakingObject.Stakers[k], state)
 		if header.Number.Uint64() <= staker.StakingFrom || header.Number.Uint64() > staker.StakingTo {
 			continue
 		} else {
-			n := e.ValidatorVotes(header, &staker, totalStaked)
+			n := e.ValidatorVotes(header, staker, totalStaked)
 			for i := uint64(0); i < n; i++ { // a validator has N slots to be a leader
 				var validator orderedValidator
 				copy(validator.identity[:], staker.Address.Bytes())
