@@ -23,6 +23,7 @@ import (
 
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
+	"github.com/Sperax/SperaxChain/consensus/bdls_engine/committee"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/crypto"
@@ -85,13 +86,13 @@ func (e *BDLSEngine) verifyStates(block *types.Block) bool {
 // verify the proposer in block header
 func (e *BDLSEngine) verifyProposerField(header *types.Header, state *state.StateDB) bool {
 	// Ensure the coinbase is a valid proposer
-	if !e.IsProposer(header, state) {
+	if !committee.IsProposer(header, state) {
 		log.Debug("verifyProposerField - IsProposer", "height", header.Number, "proposer", header.Coinbase)
 		return false
 	}
 
 	// otherwise we need to verify the signature of the proposer
-	hash := e.proposalBlockHash(header, header.Root, header.TxHash)
+	hash := e.SealHash(header).Bytes()
 	// Ensure the signer is the coinbase
 	pubkey, err := crypto.SigToPub(hash, header.Signature)
 	if err != nil {
@@ -184,15 +185,15 @@ func (e *BDLSEngine) blockCompare(blockA *types.Block, blockB *types.Block) int 
 	// 2. block proposed other than base quorum have higher priority
 	// 3. same type of proposer compares it's proposer's hash
 	// 4. if proposer's hash is identical, compare block hash
-	if (e.IsBaseQuorum(blockA.Coinbase()) && e.IsBaseQuorum(blockB.Coinbase())) || (!e.IsBaseQuorum(blockA.Coinbase()) && !e.IsBaseQuorum(blockB.Coinbase())) {
+	if (committee.IsBaseQuorum(blockA.Coinbase()) && committee.IsBaseQuorum(blockB.Coinbase())) || (!committee.IsBaseQuorum(blockA.Coinbase()) && !committee.IsBaseQuorum(blockB.Coinbase())) {
 		// compare proposer's hash
-		ret := bytes.Compare(e.proposerHash(blockA.Header()).Bytes(), e.proposerHash(blockB.Header()).Bytes())
+		ret := bytes.Compare(committee.ProposerHash(blockA.Header()).Bytes(), committee.ProposerHash(blockB.Header()).Bytes())
 		if ret != 0 {
 			return ret
 		}
 		// otherwise, compare it's block hash
 		return bytes.Compare(blockA.Hash().Bytes(), blockB.Hash().Bytes())
-	} else if e.IsBaseQuorum(blockA.Coinbase()) && !e.IsBaseQuorum(blockB.Coinbase()) {
+	} else if committee.IsBaseQuorum(blockA.Coinbase()) && !committee.IsBaseQuorum(blockB.Coinbase()) {
 		// block b has higher priority
 		return -1
 	}
@@ -232,9 +233,9 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	}
 
 	// if i'm the proposer, sign & propose the block
-	if e.IsProposer(block.Header(), state) {
+	if committee.IsProposer(block.Header(), state) {
 		header := block.Header()
-		hash := e.proposalBlockHash(header, header.Root, types.DeriveSha(block.Transactions()))
+		hash := e.SealHash(header).Bytes()
 		sig, err := crypto.Sign(hash, privateKey)
 		if err != nil {
 			log.Error("Seal", "Sign", err, "sig:", sig)
@@ -251,7 +252,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	}
 
 	// derive the participants from staking object at this height
-	participants := e.CreateValidators(block.Header(), state)
+	participants := committee.CreateValidators(block.Header(), state)
 
 	// check if i'm the validator, stop here if i'm not a validator
 	var isValidator bool

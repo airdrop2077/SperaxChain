@@ -19,7 +19,6 @@ package bdls_engine
 import (
 	"bytes"
 	"crypto/ecdsa"
-	"encoding/binary"
 	"errors"
 	fmt "fmt"
 	"math/big"
@@ -29,6 +28,7 @@ import (
 	"github.com/Sperax/SperaxChain/accounts"
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
+	"github.com/Sperax/SperaxChain/consensus/bdls_engine/committee"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/crypto"
@@ -37,7 +37,6 @@ import (
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/rpc"
 	"github.com/Sperax/bdls"
-	"golang.org/x/crypto/sha3"
 )
 
 const (
@@ -203,7 +202,7 @@ func (e *BDLSEngine) verifyHeader(chain consensus.ChainReader, header *types.Hea
 	}
 
 	// Ensure W has correctly set
-	if e.deriveW(parent) != header.W {
+	if committee.DeriveW(parent) != header.W {
 		return errInvalidW
 	}
 
@@ -285,12 +284,12 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 	}
 
 	// Ensure it's a valid proposer
-	if !e.IsProposer(header, state) {
+	if !committee.IsProposer(header, state) {
 		return errors.New(fmt.Sprint("Not a valid proposer at height", header.Number))
 	}
 
 	// create the consensus object along with participants to validate decide message
-	config.Participants = e.CreateValidators(header, state)
+	config.Participants = committee.CreateValidators(header, state)
 
 	consensus, err := bdls.NewConsensus(config)
 	if err != nil {
@@ -329,10 +328,10 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 	}
 
 	// set W based on parent block
-	header.W = e.deriveW(parent)
+	header.W = committee.DeriveW(parent)
 
 	// ignore base quorum R
-	if e.IsBaseQuorum(header.Coinbase) {
+	if committee.IsBaseQuorum(header.Coinbase) {
 		return nil
 	}
 
@@ -343,29 +342,15 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 		return errors.New("cannot retrieve private key")
 	}
 
-	staker := GetStaker(header.Coinbase, state)
+	staker := committee.GetStaker(header.Coinbase, state)
 	if header.Number.Uint64() > staker.StakingFrom && header.Number.Uint64() <= staker.StakingTo {
 		// if it's in a valid staking period
-		seed := deriveStakingSeed(privateKey, staker.StakingFrom)
+		seed := committee.DeriveStakingSeed(privateKey, staker.StakingFrom)
 		log.Debug("Prepare", "stakingFrom", staker.StakingFrom, "stakingTo", staker.StakingTo, "block#", header.Number)
-		header.R = common.BytesToHash(hashChain(seed, header.Number.Uint64(), staker.StakingTo))
+		header.R = common.BytesToHash(committee.HashChain(seed, header.Number.Uint64(), staker.StakingTo))
 	}
 
 	return nil
-}
-
-// proposalBlockHash computes the hash before it's being proposed
-// TODO: what other fields are required to do hashing?
-func (e *BDLSEngine) proposalBlockHash(header *types.Header, stateHash common.Hash, txHash common.Hash) []byte {
-	hasher := sha3.New256()
-	hasher.Write(header.Coinbase.Bytes())
-	binary.Write(hasher, binary.LittleEndian, header.Number.Uint64())
-	hasher.Write(header.R.Bytes())
-	hasher.Write(CommonCoin)
-	hasher.Write(header.W.Bytes())
-	hasher.Write(stateHash.Bytes()) // the state root
-	hasher.Write(txHash.Bytes())    // the txhash
-	return hasher.Sum(nil)
 }
 
 // Finalize runs any post-transaction state modifications (e.g. block rewards)

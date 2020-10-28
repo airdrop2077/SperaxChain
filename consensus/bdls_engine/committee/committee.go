@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-package bdls_engine
+package committee
 
 import (
 	"bytes"
@@ -229,7 +229,7 @@ func SetStaker(staker *Staker, state vm.StateDB) {
 // GetW calculates random number W based on block information
 // W0 = H(U0)
 // Wj = H(Pj-1,Wj-1) for 0<j<=r,
-func (e *BDLSEngine) deriveW(header *types.Header) common.Hash {
+func DeriveW(header *types.Header) common.Hash {
 	if header.Number.Uint64() == 0 {
 		return W0
 	}
@@ -243,7 +243,7 @@ func (e *BDLSEngine) deriveW(header *types.Header) common.Hash {
 }
 
 // IsBaseQuorum check whether a address is from base quorum
-func (e *BDLSEngine) IsBaseQuorum(address common.Address) bool {
+func IsBaseQuorum(address common.Address) bool {
 	for k := range BaseQuorum {
 		if address == BaseQuorum[k] {
 			return true
@@ -253,9 +253,9 @@ func (e *BDLSEngine) IsBaseQuorum(address common.Address) bool {
 }
 
 // H(r;0;Ri,r,0;Wr) > max{0;1 i-aip}
-func (e *BDLSEngine) IsProposer(header *types.Header, state *state.StateDB) bool {
+func IsProposer(header *types.Header, state *state.StateDB) bool {
 	// addresses in base quorum are permanent proposers
-	if e.IsBaseQuorum(header.Coinbase) {
+	if IsBaseQuorum(header.Coinbase) {
 		return true
 	}
 
@@ -279,7 +279,7 @@ func (e *BDLSEngine) IsProposer(header *types.Header, state *state.StateDB) bool
 				return false
 			}
 
-			R := common.BytesToHash(hashChain(header.R.Bytes(), staker.StakingFrom, header.Number.Uint64()))
+			R := common.BytesToHash(HashChain(header.R.Bytes(), staker.StakingFrom, header.Number.Uint64()))
 			if R != staker.StakingHash {
 				log.Error("hashchain verification failed for header.R", "header.R", header.R, "computed R", R, "staked hash:", staker.StakingHash)
 				return false
@@ -302,7 +302,7 @@ func (e *BDLSEngine) IsProposer(header *types.Header, state *state.StateDB) bool
 		}
 
 		// compute proposer hash
-		proposerHash := e.proposerHash(header)
+		proposerHash := ProposerHash(header)
 
 		// calculate H/MaxUint256
 		h := big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(proposerHash.Bytes()))
@@ -318,7 +318,7 @@ func (e *BDLSEngine) IsProposer(header *types.Header, state *state.StateDB) bool
 }
 
 // ValidatorVotes counts the number of votes for a validator
-func (e *BDLSEngine) ValidatorVotes(header *types.Header, staker *Staker, totalStaked *big.Int) uint64 {
+func ValidatorVotes(header *types.Header, staker *Staker, totalStaked *big.Int) uint64 {
 	numStaked := staker.StakedValue
 	validatorR := staker.StakingHash
 
@@ -331,7 +331,7 @@ func (e *BDLSEngine) ValidatorVotes(header *types.Header, staker *Staker, totalS
 	maxVotes := numStaked.Uint64() / StakingUnit.Uint64()
 
 	// compute validator's hash
-	validatorHash := e.validatorHash(header.Coinbase, header.Number.Uint64(), validatorR, header.W)
+	validatorHash := validatorHash(header.Coinbase, header.Number.Uint64(), validatorR, header.W)
 
 	// calculate H/MaxUint256
 	h := big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(validatorHash.Bytes()))
@@ -387,7 +387,7 @@ func (ov SortableValidators) Hash(height uint64, R common.Hash, W common.Hash) c
 }
 
 // CreateValidators creates an ordered list for all qualified validators with weights
-func (e *BDLSEngine) CreateValidators(header *types.Header, state *state.StateDB) []bdls.Identity {
+func CreateValidators(header *types.Header, state *state.StateDB) []bdls.Identity {
 	var orderedValidators []orderedValidator
 
 	// count effective stakings
@@ -407,11 +407,11 @@ func (e *BDLSEngine) CreateValidators(header *types.Header, state *state.StateDB
 		if header.Number.Uint64() <= staker.StakingFrom || header.Number.Uint64() > staker.StakingTo {
 			continue
 		} else {
-			n := e.ValidatorVotes(header, staker, totalStaked)
+			n := ValidatorVotes(header, staker, totalStaked)
 			for i := uint64(0); i < n; i++ { // a validator has N slots to be a leader
 				var validator orderedValidator
 				copy(validator.identity[:], staker.Address.Bytes())
-				validator.hash = e.validatorSortingHash(staker.Address, staker.StakingHash, header.W, i)
+				validator.hash = validatorSortingHash(staker.Address, staker.StakingHash, header.W, i)
 				orderedValidators = append(orderedValidators, validator)
 			}
 		}
@@ -447,8 +447,8 @@ func Pow(a *big.Float, e uint64) *big.Float {
 	return result
 }
 
-// proposerHash computes a hash for proposer's random number
-func (e *BDLSEngine) proposerHash(header *types.Header) common.Hash {
+// ProposerHash computes a hash for proposer's random number
+func ProposerHash(header *types.Header) common.Hash {
 	hasher := sha3.New256()
 	hasher.Write(header.Coinbase.Bytes())
 	binary.Write(hasher, binary.LittleEndian, header.Number.Uint64())
@@ -461,7 +461,7 @@ func (e *BDLSEngine) proposerHash(header *types.Header) common.Hash {
 }
 
 // validatorHash computes a hash for validator's random number
-func (e *BDLSEngine) validatorHash(coinbase common.Address, height uint64, R common.Hash, W common.Hash) common.Hash {
+func validatorHash(coinbase common.Address, height uint64, R common.Hash, W common.Hash) common.Hash {
 	hasher := sha3.New256()
 	hasher.Write(coinbase.Bytes())
 	binary.Write(hasher, binary.LittleEndian, height)
@@ -474,7 +474,7 @@ func (e *BDLSEngine) validatorHash(coinbase common.Address, height uint64, R com
 }
 
 // validatorSortHash computes a hash for validator's sorting hashing
-func (e *BDLSEngine) validatorSortingHash(address common.Address, R common.Hash, W common.Hash, votes uint64) common.Hash {
+func validatorSortingHash(address common.Address, R common.Hash, W common.Hash, votes uint64) common.Hash {
 	hasher := sha3.New256()
 	hasher.Write(address.Bytes())
 	binary.Write(hasher, binary.LittleEndian, votes)
@@ -485,9 +485,9 @@ func (e *BDLSEngine) validatorSortingHash(address common.Address, R common.Hash,
 	return common.BytesToHash(hasher.Sum(nil))
 }
 
-// deriveStakingSeed deterministically derives the pseudo-random number with height and private key
+// DeriveStakingSeed deterministically derives the pseudo-random number with height and private key
 // seed := H(H(privatekey,stakingFrom) *G)
-func deriveStakingSeed(priv *ecdsa.PrivateKey, stakingFrom uint64) []byte {
+func DeriveStakingSeed(priv *ecdsa.PrivateKey, stakingFrom uint64) []byte {
 	// H(privatekey + stakingFrom)
 	hasher := sha3.New256()
 	hasher.Write(priv.D.Bytes())
@@ -504,7 +504,7 @@ func deriveStakingSeed(priv *ecdsa.PrivateKey, stakingFrom uint64) []byte {
 }
 
 // compute hash recursively for to - from times
-func hashChain(hash []byte, from, to uint64) []byte {
+func HashChain(hash []byte, from, to uint64) []byte {
 	n := to - from
 	lastHash := hash
 	for i := uint64(0); i < n; i++ {

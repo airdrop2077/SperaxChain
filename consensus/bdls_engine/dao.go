@@ -21,6 +21,7 @@ import (
 
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
+	"github.com/Sperax/SperaxChain/consensus/bdls_engine/committee"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/crypto"
@@ -52,10 +53,9 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 	if err != nil {
 		return
 	}
-	sharedGasFee := parentState.GetBalance(GasFeeAddress)
 
-	log.Debug("sharedgasfee:", "value", sharedGasFee)
 	// reward validators from previous block
+	sharedGasFee := parentState.GetBalance(GasFeeAddress)
 	if parentHeader.Decision != nil {
 		sp, err := bdls.DecodeSignedMessage(parentHeader.Decision)
 		if err != nil {
@@ -81,14 +81,14 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 	}
 
 	// refund all expired staking tokens at current state
-	stakers := GetAllStakers(state)
+	stakers := committee.GetAllStakers(state)
 	for k := range stakers {
-		staker := GetStaker(stakers[k], state)
+		staker := committee.GetStaker(stakers[k], state)
 		if header.Number.Uint64() == staker.StakingTo+1 { // expired, refund automatically at height stakingTo+1
 			log.Debug("STAKING EXPIRED:", "account", staker.Address, "value", staker.StakedValue)
 			state.AddBalance(staker.Address, staker.StakedValue)
-			state.SubBalance(StakingAddress, staker.StakedValue)
-			RemoveStaker(stakers[k], state)
+			state.SubBalance(committee.StakingAddress, staker.StakedValue)
+			committee.RemoveStaker(stakers[k], state)
 		}
 	}
 }

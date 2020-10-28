@@ -21,7 +21,7 @@ import (
 	"math/big"
 
 	"github.com/Sperax/SperaxChain/common"
-	"github.com/Sperax/SperaxChain/consensus/bdls_engine"
+	"github.com/Sperax/SperaxChain/consensus/bdls_engine/committee"
 	"github.com/Sperax/SperaxChain/core/vm"
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/params"
@@ -257,40 +257,40 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	)
 	if contractCreation {
 		ret, _, st.gas, vmerr = st.evm.Create(sender, st.data, st.gas, st.value)
-	} else if *msg.To() == bdls_engine.StakingAddress {
+	} else if *msg.To() == committee.StakingAddress {
 		// Increment the nonce for the next transaction
 		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 		// Sperax Staking Rules
 		// sending tokens to StakingAddress will trigger staking operations
 		// decode staking message in msg.Payload
 		// this procedure will bypass EVM
-		var req bdls_engine.StakingRequest
+		var req committee.StakingRequest
 		rlp.DecodeBytes(msg.Data(), &req)
 
 		switch req.StakingOp {
-		case bdls_engine.Staking:
-			stakers := bdls_engine.GetAllStakers(st.state)
+		case committee.Staking:
+			stakers := committee.GetAllStakers(st.state)
 			for k := range stakers {
 				if stakers[k] == msg.From() {
-					log.Debug("TransitionDb", "err", bdls_engine.ErrStakingRequest)
-					return nil, bdls_engine.ErrStakingRequest
+					log.Debug("TransitionDb", "err", committee.ErrStakingRequest)
+					return nil, committee.ErrStakingRequest
 				}
 			}
 
 			// minimum staking requirement
-			if st.value.Cmp(bdls_engine.StakingUnit) == -1 {
-				log.Debug("TransitionDb", "err", bdls_engine.ErrStakingMinimumTokens)
-				return nil, bdls_engine.ErrStakingMinimumTokens
+			if st.value.Cmp(committee.StakingUnit) == -1 {
+				log.Debug("TransitionDb", "err", committee.ErrStakingMinimumTokens)
+				return nil, committee.ErrStakingMinimumTokens
 			}
 
 			// staking period check
 			if req.StakingTo <= req.StakingFrom {
-				log.Debug("TransitionDb", "err", bdls_engine.ErrStakingInvalidPeriod)
-				return nil, bdls_engine.ErrStakingInvalidPeriod
+				log.Debug("TransitionDb", "err", committee.ErrStakingInvalidPeriod)
+				return nil, committee.ErrStakingInvalidPeriod
 			}
 
 			// no previous staking information
-			var staker bdls_engine.Staker
+			var staker committee.Staker
 			staker.Address = msg.From()
 			staker.StakingFrom = req.StakingFrom
 			staker.StakingTo = req.StakingTo
@@ -298,35 +298,35 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			staker.StakedValue = st.value
 
 			// transfer from msg.From to StakingAddress manually
-			st.state.AddBalance(bdls_engine.StakingAddress, st.value)
+			st.state.AddBalance(committee.StakingAddress, st.value)
 			st.state.SubBalance(msg.From(), st.value)
 
 			// set staking fields
-			bdls_engine.SetStaker(&staker, st.state)
+			committee.SetStaker(&staker, st.state)
 
 			// update staker's list
-			bdls_engine.AddNewStaker(msg.From(), st.state)
+			committee.AddNewStaker(msg.From(), st.state)
 
-		case bdls_engine.Redeem:
-			stakers := bdls_engine.GetAllStakers(st.state)
-			var staker *bdls_engine.Staker
+		case committee.Redeem:
+			stakers := committee.GetAllStakers(st.state)
+			var staker *committee.Staker
 			for k := range stakers {
 				if stakers[k] == msg.From() {
-					staker = bdls_engine.GetStaker(msg.From(), st.state)
+					staker = committee.GetStaker(msg.From(), st.state)
 					break
 				}
 			}
 
 			if staker == nil {
-				return nil, bdls_engine.ErrRedeemRequest
+				return nil, committee.ErrRedeemRequest
 			}
 
 			// transfer from StakingAddress to msg.From
 			st.state.AddBalance(msg.From(), staker.StakedValue)
-			st.state.SubBalance(bdls_engine.StakingAddress, staker.StakedValue)
+			st.state.SubBalance(committee.StakingAddress, staker.StakedValue)
 
 			// clear staker's information after redeeming
-			bdls_engine.RemoveStaker(msg.From(), st.state)
+			committee.RemoveStaker(msg.From(), st.state)
 		}
 	} else {
 		// Increment the nonce for the next transaction

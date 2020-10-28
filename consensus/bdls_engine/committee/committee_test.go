@@ -1,4 +1,4 @@
-package bdls_engine
+package committee
 
 import (
 	"crypto/ecdsa"
