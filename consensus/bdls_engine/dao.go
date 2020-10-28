@@ -69,7 +69,12 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 			blockRewardShare := big.NewInt(0).Quo(TotalValidatorReward, big.NewInt(int64(len(message.Proof))))
 			for _, proof := range message.Proof {
 				address := crypto.PubkeyToAddress(*proof.PublicKey(crypto.S256()))
+
+				// each validator claim it's gas share, and reset balance in account: GasFeeAddress
 				state.AddBalance(address, gasFeeShare)
+				state.SubBalance(GasFeeAddress, gasFeeShare)
+
+				// each validator claim it's block reward share
 				state.AddBalance(address, blockRewardShare)
 			}
 		}
@@ -77,7 +82,6 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 
 	// refund all expired staking tokens at current state
 	stakers := GetAllStakers(state)
-	log.Debug("stakers:", "len", len(stakers))
 	for k := range stakers {
 		staker := GetStaker(stakers[k], state)
 		if header.Number.Uint64() == staker.StakingTo+1 { // expired, refund automatically at height stakingTo+1
