@@ -918,8 +918,6 @@ func (pm *ProtocolManager) BroadcastConsensusMsg(hash common.Hash, bts []byte) {
 			peer.SendConsensusMsg(bts)
 			peer.MarkConsensus(hash)
 		}
-
-		log.Debug("Propagated consensus", "hash", hash, "recipients", len(peers))
 	}
 	return
 }

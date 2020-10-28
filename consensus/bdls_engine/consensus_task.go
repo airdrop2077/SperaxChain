@@ -359,8 +359,7 @@ PROPOSAL_COLLECTION:
 	// one to exchange the message from consensus core to p2p module, one to validate consensus
 	// messages with proposed blocks from remote.
 	messageOutCallback := func(m *bdls.Message, signed *bdls.SignedProto) {
-		log.Debug("consensus sending message", "type", m.Type)
-
+		log.Debug("BDLS CONSENSUS MESSAGE", "TYPE", m.Type, "HEIGHT", m.Height, "ROUND", m.Round)
 		// all outgoing signed message will be delivered to ProtocolManager
 		// and finally to send to peers.
 		bts, err := signed.Marshal()
@@ -387,8 +386,6 @@ PROPOSAL_COLLECTION:
 			log.Error("messageOutCallback", "mux.Post", err)
 			return
 		}
-
-		log.Debug("### messageOutCallback ###", "message type:", m.Type)
 	}
 
 	// setup consensus config at the given height
@@ -470,8 +467,8 @@ CONSENSUS_TASK:
 
 					// new block confirmed
 					if newHeight == block.NumberU64() {
-						log.Warn("CONSENSUS <decide>", "height", newHeight, "round", newRound, "hash", newHeight, newRound, common.BytesToHash(newState))
 						hash := common.BytesToHash(newState)
+						log.Warn("BDLS CONSENSUS <decide>", "HEIGHT", newHeight, "ROUND", newRound, "SEALHASH", hash)
 
 						// every validator can finalize this block to it's local blockchain now
 						newblock := lookupConsensusBlock(hash)
@@ -527,8 +524,6 @@ CONSENSUS_TASK:
 					}
 					// update cache
 					allBlocksInConsensus[proposal.Coinbase()] = keptBlocks
-
-					log.Debug("proposal during consensus", "block#", proposal.Hash())
 				}
 			}
 
