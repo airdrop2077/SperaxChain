@@ -403,10 +403,7 @@ PROPOSAL_COLLECTION:
 		StateValidate: func(s bdls.State) bool {
 			// make sure all states are known from <roundchange> exchanging
 			hash := common.BytesToHash(s)
-			if lookupConsensusBlock(hash) != nil {
-				return true
-			}
-			return false
+			return lookupConsensusBlock(hash) != nil
 		},
 		PubKeyToIdentity: PubKeyToIdentity,
 		// consensus message will be routed through engine
@@ -437,7 +434,7 @@ PROPOSAL_COLLECTION:
 	consensus.Propose(candidateProposal.Hash().Bytes())
 
 	// time compensation to avoid fast block generation
-	delay := time.Unix(int64(block.Header().Time), 0).Sub(time.Now())
+	delay := time.Until(time.Unix(int64(block.Header().Time), 0))
 	// wait for the timestamp of header
 	select {
 	case <-time.After(delay):
@@ -539,10 +536,9 @@ CONSENSUS_TASK:
 			log.Debug("consensusTask", "resend proposal block#", candidateProposal.Hash())
 			e.sendProposal(candidateProposal)
 		case <-updateTick.C:
-			consensus.Update(time.Now())
+			_ = consensus.Update(time.Now())
 		case <-stop:
 			return
 		}
 	}
-	return
 }

@@ -139,16 +139,13 @@ type Staker struct {
 	StakedValue *big.Int
 }
 
-// The object to be stored in StakingAddress's Account.Code
-type StakingObject struct {
-	Stakers []common.Address // staker's address, expired stakers will automatically be removed
-}
-
+// getStakingValue retrieves the value with key from account: StakingAddress
 func getStakingValue(addr common.Address, key string, state vm.StateDB) common.Hash {
 	keyHash := crypto.Keccak256Hash([]byte(fmt.Sprintf(key, addr)))
 	return state.GetState(StakingAddress, keyHash)
 }
 
+// setStakingValue sets the value with key to account: StakingAddress
 func setStakingValue(addr common.Address, key string, value common.Hash, state vm.StateDB) {
 	keyHash := crypto.Keccak256Hash([]byte(fmt.Sprintf(key, addr)))
 	state.SetState(StakingAddress, keyHash, value)
@@ -168,13 +165,13 @@ func GetAllStakers(state vm.StateDB) []common.Address {
 
 // GetStakersCount retrieves the total staker's count from account storage trie
 func GetStakersCount(state vm.StateDB) int64 {
-	counterKeyHash := crypto.Keccak256Hash([]byte(fmt.Sprintf(StakingUsersCount)))
+	counterKeyHash := crypto.Keccak256Hash([]byte(StakingUsersCount))
 	return state.GetState(StakingAddress, counterKeyHash).Big().Int64()
 }
 
 // SetStakersCount sets the total staker's count from account storage trie
 func SetStakersCount(count int64, state vm.StateDB) {
-	counterKeyHash := crypto.Keccak256Hash([]byte(fmt.Sprintf(StakingUsersCount)))
+	counterKeyHash := crypto.Keccak256Hash([]byte(StakingUsersCount))
 	state.SetState(StakingAddress, counterKeyHash, common.BigToHash(big.NewInt(int64(count))))
 }
 
