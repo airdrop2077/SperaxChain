@@ -46,8 +46,6 @@ var (
 		common.HexToAddress("3f80e8718d8e17a1768b467f193a6fbeaa6236e3"),
 		common.HexToAddress("29d3fbe3e7983a41d0e6d984c480ceedb3c251fd"),
 	}
-
-	BaseQuorumR = common.BytesToHash(hexutil.MustDecode("0x053706572617844656661756c744e6f646"))
 )
 
 var (

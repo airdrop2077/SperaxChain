@@ -258,8 +258,6 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	if contractCreation {
 		ret, _, st.gas, vmerr = st.evm.Create(sender, st.data, st.gas, st.value)
 	} else if *msg.To() == committee.StakingAddress {
-		// Increment the nonce for the next transaction
-		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 		// Sperax Staking Rules
 		// sending tokens to StakingAddress will trigger staking operations
 		// decode staking message in msg.Payload
@@ -297,10 +295,6 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			staker.StakingHash = req.StakingHash
 			staker.StakedValue = st.value
 
-			// transfer from msg.From to StakingAddress manually
-			st.state.AddBalance(committee.StakingAddress, st.value)
-			st.state.SubBalance(msg.From(), st.value)
-
 			// set staking fields
 			committee.SetStaker(&staker, st.state)
 
@@ -328,6 +322,10 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			// clear staker's information after redeeming
 			committee.RemoveStaker(msg.From(), st.state)
 		}
+
+		// Increment the nonce for the next transaction
+		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+		ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
 	} else {
 		// Increment the nonce for the next transaction
 		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
