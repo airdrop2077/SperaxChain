@@ -67,17 +67,17 @@ func TestIsPropoersInternal(t *testing.T) {
 	numStaked := big.NewFloat(100)
 	totalStaked := big.NewFloat(100)
 
-	var proposerHash common.Hash
-	assert.False(t, isProposerInternal(proposerHash, numStaked, totalStaked))
+	var hash common.Hash
+	assert.False(t, isProposerInternal(hash, numStaked, totalStaked))
 
-	proposerHash[common.HashLength-1] = 1
-	assert.True(t, isProposerInternal(proposerHash, numStaked, totalStaked))
+	hash[common.HashLength-1] = 1
+	assert.True(t, isProposerInternal(hash, numStaked, totalStaked))
 
-	proposerHash = crypto.Keccak256Hash([]byte{})
-	assert.True(t, isProposerInternal(proposerHash, numStaked, totalStaked))
+	hash = crypto.Keccak256Hash([]byte{})
+	assert.True(t, isProposerInternal(hash, numStaked, totalStaked))
 }
 
-func TestGetAllStakers(t *testing.T) {
+func TestStakersList(t *testing.T) {
 	s := newStateTest()
 	stakers := GetAllStakers(s.state)
 	// nil test
@@ -88,6 +88,7 @@ func TestGetAllStakers(t *testing.T) {
 		var account common.Address
 		account.SetBytes(crypto.Keccak256([]byte{byte(i)})[:common.AddressLength])
 		AddStakerToList(account, s.state)
+		assert.True(t, HasStaked(account, s.state))
 	}
 
 	stakers = GetAllStakers(s.state)
@@ -98,7 +99,40 @@ func TestGetAllStakers(t *testing.T) {
 		var account common.Address
 		account.SetBytes(crypto.Keccak256([]byte{byte(i)})[:common.AddressLength])
 		RemoveStakerFromList(account, s.state)
+		assert.False(t, HasStaked(account, s.state))
 	}
 	stakers = GetAllStakers(s.state)
 	assert.Nil(t, stakers)
 }
+
+func TestStakerData(t *testing.T) {
+	s := newStateTest()
+	staker := new(Staker)
+
+	staker.Address.SetBytes(crypto.Keccak256([]byte{0})[:common.AddressLength])
+	staker.StakedValue = big.NewInt(1234)
+	staker.StakingFrom = 2345
+	staker.StakingTo = 3456
+	staker.StakingHash = crypto.Keccak256Hash([]byte{1})
+	staker.StakedValue = big.NewInt(1000000)
+
+	SetStakerData(staker, s.state)
+
+	stakerDumped := GetStakerData(staker.Address, s.state)
+	assert.Equal(t, staker, stakerDumped)
+}
+
+/*
+func TestCountValidatorVotes(t *testing.T) {
+	numStaked := big.NewInt(1000)
+	totalStaked := big.NewInt(1000)
+	numStaked.Mul(numStaked, StakingUnit)
+	totalStaked.Mul(totalStaked, StakingUnit)
+
+	hash := crypto.Keccak256Hash([]byte{})
+
+	votes := countValidatorVotes(hash, numStaked, totalStaked)
+	t.Log("votes:", votes)
+
+}
+*/
