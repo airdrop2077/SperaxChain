@@ -298,6 +298,11 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			committee.AddStakerToList(msg.From(), st.state)
 
 		case committee.Redeem:
+			// make sure the value is 0
+			if st.value.Cmp(common.Big0) != 0 {
+				return nil, committee.ErrRedeemValidNonZero
+			}
+
 			if !committee.HasStaked(msg.From(), st.state) {
 				return nil, committee.ErrRedeemRequest
 			}

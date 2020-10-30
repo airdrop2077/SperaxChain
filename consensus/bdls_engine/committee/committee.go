@@ -69,6 +69,7 @@ var (
 	ErrStakingMinimumTokens = errors.New("staking has less than minimum tokens")
 	ErrStakingInvalidPeriod = errors.New("invalid staking period")
 	ErrRedeemRequest        = errors.New("not staked")
+	ErrRedeemValidNonZero   = errors.New("the transaction to redeem has none 0 value")
 )
 
 const (
@@ -335,7 +336,7 @@ func isProposerInternal(proposerHash common.Hash, numStaked *big.Float, totalSta
 // countValidatorVotes counts the number of votes for a validator
 func countValidatorVotes(validatorhash common.Hash, numStaked *big.Int, totalStaked *big.Int) uint64 {
 	// compute p'
-	// p' = E2* numStaked /totalStaked
+	// p' = E2* numStakedUnit /totalStaked
 	p := big.NewFloat(0).SetInt(E2)
 	p.Mul(p, big.NewFloat(0).SetInt(StakingUnit))
 	p.Quo(p, big.NewFloat(0).SetInt(totalStaked))
@@ -356,19 +357,19 @@ func countValidatorVotes(validatorhash common.Hash, numStaked *big.Int, totalSta
 
 	binominal := big.NewInt(0)
 	for i := uint64(0); i <= maxVotes; i++ {
-		// computes binomial
 		sum := big.NewFloat(0)
 		for j := uint64(0); j <= i; j++ {
+			// computes binomial
 			coefficient := big.NewFloat(float64(binominal.Binomial(int64(maxVotes), int64(j)).Uint64()))
-			fmt.Println("coff:", coefficient)
+			//fmt.Println("coff:", coefficient)
 			a := Pow(p, j)
 			b := Pow(p2, maxVotes-j)
 			r := big.NewFloat(0).Mul(a, b)
+			fmt.Println("p^j=", a, "p2^(ai-j)=", b, "p=", p, "p'=", p2, "binominal=", coefficient)
 			r.Mul(r, coefficient)
 			sum.Add(sum, r)
 		}
 
-		fmt.Println("sum", sum)
 		// effective vote found
 		// break here, then votes is the minimum
 		if sum.Cmp(h) == 1 {

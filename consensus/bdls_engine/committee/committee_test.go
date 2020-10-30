@@ -122,7 +122,6 @@ func TestStakerData(t *testing.T) {
 	assert.Equal(t, staker, stakerDumped)
 }
 
-/*
 func TestCountValidatorVotes(t *testing.T) {
 	numStaked := big.NewInt(1000)
 	totalStaked := big.NewInt(1000)
@@ -135,4 +134,3 @@ func TestCountValidatorVotes(t *testing.T) {
 	t.Log("votes:", votes)
 
 }
-*/
