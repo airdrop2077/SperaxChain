@@ -342,7 +342,7 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 		return errors.New("cannot retrieve private key")
 	}
 
-	staker := committee.GetStaker(header.Coinbase, state)
+	staker := committee.GetStakerData(header.Coinbase, state)
 	if header.Number.Uint64() > staker.StakingFrom && header.Number.Uint64() <= staker.StakingTo {
 		// if it's in a valid staking period
 		seed := committee.DeriveStakingSeed(privateKey, staker.StakingFrom)

@@ -267,6 +267,10 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 
 		switch req.StakingOp {
 		case committee.Staking:
+			if committee.HasStaked(msg.From(), st.state) {
+				return nil, committee.ErrStakingRequest
+			}
+
 			// minimum staking requirement
 			if st.value.Cmp(committee.StakingUnit) == -1 {
 				log.Debug("TransitionDb", "err", committee.ErrStakingMinimumTokens)
@@ -279,14 +283,6 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 				return nil, committee.ErrStakingInvalidPeriod
 			}
 
-			stakers := committee.GetAllStakers(st.state)
-			for k := range stakers {
-				if stakers[k] == msg.From() {
-					log.Debug("TransitionDb", "err", committee.ErrStakingRequest)
-					return nil, committee.ErrStakingRequest
-				}
-			}
-
 			// no previous staking information
 			var staker committee.Staker
 			staker.Address = msg.From()
@@ -296,26 +292,18 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			staker.StakedValue = st.value
 
 			// set staking fields
-			committee.SetStaker(&staker, st.state)
+			committee.SetStakerData(&staker, st.state)
 
 			// update staker's list
 			committee.AddStakerToList(msg.From(), st.state)
 
 		case committee.Redeem:
-			stakers := committee.GetAllStakers(st.state)
-			var staker *committee.Staker
-			for k := range stakers {
-				if stakers[k] == msg.From() {
-					staker = committee.GetStaker(msg.From(), st.state)
-					break
-				}
-			}
-
-			if staker == nil {
+			if !committee.HasStaked(msg.From(), st.state) {
 				return nil, committee.ErrRedeemRequest
 			}
 
 			// transfer from StakingAddress to msg.From
+			staker := committee.GetStakerData(msg.From(), st.state)
 			st.state.AddBalance(msg.From(), staker.StakedValue)
 			st.state.SubBalance(committee.StakingAddress, staker.StakedValue)
 

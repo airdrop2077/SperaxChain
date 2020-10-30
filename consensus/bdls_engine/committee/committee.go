@@ -74,6 +74,7 @@ var (
 const (
 	// example:
 	// key: hash("/v1/29d3fbe3e7983a41d0e6d984c480ceedb3c251fd/from")
+	StakingInList = "/v1/%v/inlist"
 
 	// the 1st block expected to participant in validator and proposer
 	StakingKeyFrom = "/v1/%v/from"
@@ -148,9 +149,29 @@ func setStakingValue(addr common.Address, key string, value common.Hash, state v
 	state.SetState(StakingAddress, keyHash, value)
 }
 
+// getStakersCount retrieves the total staker's count from account storage trie
+func getStakersCount(state vm.StateDB) int64 {
+	counterKeyHash := crypto.Keccak256Hash([]byte(StakingUsersCount))
+	return state.GetState(StakingAddress, counterKeyHash).Big().Int64()
+}
+
+// setStakersCount sets the total staker's count from account storage trie
+func setStakersCount(count int64, state vm.StateDB) {
+	counterKeyHash := crypto.Keccak256Hash([]byte(StakingUsersCount))
+	state.SetState(StakingAddress, counterKeyHash, common.BigToHash(big.NewInt(int64(count))))
+}
+
+// HasStaked is a O(1) way to test whether an account has staked
+func HasStaked(addr common.Address, state vm.StateDB) bool {
+	if getStakingValue(addr, StakingInList, state) == addr.Hash() {
+		return true
+	}
+	return false
+}
+
 // GetAllStakers retrieve all staker's addresses from account storage trie
 func GetAllStakers(state vm.StateDB) []common.Address {
-	count := GetStakersCount(state)
+	count := getStakersCount(state)
 	var stakers []common.Address
 	for i := int64(0); i < count; i++ {
 		userIndex := crypto.Keccak256Hash([]byte(fmt.Sprintf(StakingUserIndex, i)))
@@ -160,33 +181,24 @@ func GetAllStakers(state vm.StateDB) []common.Address {
 	return stakers
 }
 
-// GetStakersCount retrieves the total staker's count from account storage trie
-func GetStakersCount(state vm.StateDB) int64 {
-	counterKeyHash := crypto.Keccak256Hash([]byte(StakingUsersCount))
-	return state.GetState(StakingAddress, counterKeyHash).Big().Int64()
-}
-
-// SetStakersCount sets the total staker's count from account storage trie
-func SetStakersCount(count int64, state vm.StateDB) {
-	counterKeyHash := crypto.Keccak256Hash([]byte(StakingUsersCount))
-	state.SetState(StakingAddress, counterKeyHash, common.BigToHash(big.NewInt(int64(count))))
-}
-
 // AddStakerToList adds a new staker's address to the staker's list in account storage trie
 func AddStakerToList(addr common.Address, state vm.StateDB) {
-	count := GetStakersCount(state)
+	count := getStakersCount(state)
 
 	// set index
 	userIndex := crypto.Keccak256Hash([]byte(fmt.Sprintf(StakingUserIndex, count)))
 	state.SetState(StakingAddress, userIndex, addr.Hash())
 
+	// mark the account in list
+	setStakingValue(addr, StakingInList, addr.Hash(), state)
+
 	// increase counter
-	SetStakersCount(count+1, state)
+	setStakersCount(count+1, state)
 }
 
 // RemoveStakerFromList remove a staker's address from staker's list account storage trie
 func RemoveStakerFromList(addr common.Address, state vm.StateDB) {
-	count := GetStakersCount(state)
+	count := getStakersCount(state)
 	for i := int64(0); i < count; i++ {
 		userIndex := crypto.Keccak256Hash([]byte(fmt.Sprintf(StakingUserIndex, i)))
 		// found this stakers
@@ -197,15 +209,18 @@ func RemoveStakerFromList(addr common.Address, state vm.StateDB) {
 			// swap with the last stakers
 			state.SetState(StakingAddress, userIndex, lastAddress)
 
+			// unmark the account in list
+			setStakingValue(addr, StakingInList, common.Hash{}, state)
+
 			// decrease counter
-			SetStakersCount(count-1, state)
+			setStakersCount(count-1, state)
 			return
 		}
 	}
 }
 
-// GetStaker retrieves staking information from storage account trie
-func GetStaker(addr common.Address, state vm.StateDB) *Staker {
+// GetStakerData retrieves staking information from storage account trie
+func GetStakerData(addr common.Address, state vm.StateDB) *Staker {
 	staker := new(Staker)
 	staker.Address = addr
 	staker.StakingFrom = uint64(getStakingValue(addr, StakingKeyFrom, state).Big().Int64())
@@ -215,8 +230,8 @@ func GetStaker(addr common.Address, state vm.StateDB) *Staker {
 	return staker
 }
 
-// SetStaker sets staking information to storage account trie
-func SetStaker(staker *Staker, state vm.StateDB) {
+// SetStakerData sets staking information to storage account trie
+func SetStakerData(staker *Staker, state vm.StateDB) {
 	setStakingValue(staker.Address, StakingKeyFrom, common.BigToHash(big.NewInt(int64(staker.StakingFrom))), state)
 	setStakingValue(staker.Address, StakingKeyTo, common.BigToHash(big.NewInt(int64(staker.StakingTo))), state)
 	setStakingValue(staker.Address, StakingKeyHash, staker.StakingHash, state)
@@ -263,7 +278,7 @@ func IsProposer(header *types.Header, state vm.StateDB) bool {
 	// lookup the staker's information
 	stakers := GetAllStakers(state)
 	for k := range stakers {
-		staker := GetStaker(stakers[k], state)
+		staker := GetStakerData(stakers[k], state)
 		// count effective stakings
 		if header.Number.Uint64() > staker.StakingFrom || header.Number.Uint64() <= staker.StakingTo {
 			totalStaked.Add(totalStaked, big.NewFloat(0).SetInt(staker.StakedValue))
@@ -394,7 +409,7 @@ func CreateValidators(header *types.Header, state vm.StateDB) []bdls.Identity {
 	totalStaked := big.NewInt(0)
 	stakers := GetAllStakers(state)
 	for k := range stakers {
-		staker := GetStaker(stakers[k], state)
+		staker := GetStakerData(stakers[k], state)
 		// count effective stakings
 		if header.Number.Uint64() > staker.StakingFrom || header.Number.Uint64() <= staker.StakingTo {
 			totalStaked.Add(totalStaked, staker.StakedValue)
@@ -403,7 +418,7 @@ func CreateValidators(header *types.Header, state vm.StateDB) []bdls.Identity {
 
 	// setup validators
 	for k := range stakers {
-		staker := GetStaker(stakers[k], state)
+		staker := GetStakerData(stakers[k], state)
 		if header.Number.Uint64() <= staker.StakingFrom || header.Number.Uint64() > staker.StakingTo {
 			continue
 		} else {
