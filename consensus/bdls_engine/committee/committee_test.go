@@ -48,3 +48,15 @@ func TestEncodingStaking(t *testing.T) {
 	}
 	t.Log("redeem rlp:", common.Bytes2Hex(bts))
 }
+
+func TestIsPropoersInternal(t *testing.T) {
+	numStaked := big.NewFloat(100)
+	totalStaked := big.NewFloat(100)
+
+	var proposerHash common.Hash
+	assert.False(t, isProposerInternal(proposerHash, numStaked, totalStaked))
+
+	proposerHash = crypto.Keccak256Hash([]byte{})
+
+	assert.True(t, isProposerInternal(proposerHash, numStaked, totalStaked))
+}

@@ -62,7 +62,7 @@ var (
 	StakingAddress = common.HexToAddress("0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
 
 	// max unsigned 256-bit integer
-	MaxUint256 = big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(common.Hex2Bytes("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")))
+	MaxUint256 = big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(common.FromHex("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")))
 )
 
 var (
@@ -286,6 +286,12 @@ func IsProposer(header *types.Header, state *state.StateDB) bool {
 		}
 	}
 
+	return isProposerInternal(ProposerHash(header), numStaked, totalStaked)
+}
+
+// isProposerInternal is the pure algorithm implementation for testing whether
+// an block coinbase account is the proposer
+func isProposerInternal(proposerHash common.Hash, numStaked *big.Float, totalStaked *big.Float) bool {
 	// if there's staking
 	if totalStaked.Sign() == 1 {
 		// compute p
@@ -298,9 +304,6 @@ func IsProposer(header *types.Header, state *state.StateDB) bool {
 		if max.Cmp(big.NewFloat(0)) != 1 {
 			max = big.NewFloat(0)
 		}
-
-		// compute proposer hash
-		proposerHash := ProposerHash(header)
 
 		// calculate H/MaxUint256
 		h := big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(proposerHash.Bytes()))
