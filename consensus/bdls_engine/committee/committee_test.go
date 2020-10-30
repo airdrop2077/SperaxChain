@@ -56,7 +56,9 @@ func TestIsPropoersInternal(t *testing.T) {
 	var proposerHash common.Hash
 	assert.False(t, isProposerInternal(proposerHash, numStaked, totalStaked))
 
-	proposerHash = crypto.Keccak256Hash([]byte{})
+	proposerHash[common.HashLength-1] = 1
+	assert.True(t, isProposerInternal(proposerHash, numStaked, totalStaked))
 
+	proposerHash = crypto.Keccak256Hash([]byte{})
 	assert.True(t, isProposerInternal(proposerHash, numStaked, totalStaked))
 }

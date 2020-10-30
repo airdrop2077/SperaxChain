@@ -27,7 +27,6 @@ import (
 
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/common/hexutil"
-	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/core/vm"
 	"github.com/Sperax/SperaxChain/crypto"
@@ -251,7 +250,7 @@ func IsBaseQuorum(address common.Address) bool {
 }
 
 // H(r;0;Ri,r,0;Wr) > max{0;1 i-aip}
-func IsProposer(header *types.Header, state *state.StateDB) bool {
+func IsProposer(header *types.Header, state vm.StateDB) bool {
 	// addresses in base quorum are permanent proposers
 	if IsBaseQuorum(header.Coinbase) {
 		return true
@@ -388,7 +387,7 @@ func (ov SortableValidators) Hash(height uint64, R common.Hash, W common.Hash) c
 }
 
 // CreateValidators creates an ordered list for all qualified validators with weights
-func CreateValidators(header *types.Header, state *state.StateDB) []bdls.Identity {
+func CreateValidators(header *types.Header, state vm.StateDB) []bdls.Identity {
 	var orderedValidators []orderedValidator
 
 	// count effective stakings
