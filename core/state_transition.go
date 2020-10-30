@@ -267,14 +267,6 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 
 		switch req.StakingOp {
 		case committee.Staking:
-			stakers := committee.GetAllStakers(st.state)
-			for k := range stakers {
-				if stakers[k] == msg.From() {
-					log.Debug("TransitionDb", "err", committee.ErrStakingRequest)
-					return nil, committee.ErrStakingRequest
-				}
-			}
-
 			// minimum staking requirement
 			if st.value.Cmp(committee.StakingUnit) == -1 {
 				log.Debug("TransitionDb", "err", committee.ErrStakingMinimumTokens)
@@ -285,6 +277,14 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			if req.StakingTo <= req.StakingFrom {
 				log.Debug("TransitionDb", "err", committee.ErrStakingInvalidPeriod)
 				return nil, committee.ErrStakingInvalidPeriod
+			}
+
+			stakers := committee.GetAllStakers(st.state)
+			for k := range stakers {
+				if stakers[k] == msg.From() {
+					log.Debug("TransitionDb", "err", committee.ErrStakingRequest)
+					return nil, committee.ErrStakingRequest
+				}
 			}
 
 			// no previous staking information
@@ -299,7 +299,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			committee.SetStaker(&staker, st.state)
 
 			// update staker's list
-			committee.AddNewStaker(msg.From(), st.state)
+			committee.AddStakerToList(msg.From(), st.state)
 
 		case committee.Redeem:
 			stakers := committee.GetAllStakers(st.state)
@@ -320,7 +320,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			st.state.SubBalance(committee.StakingAddress, staker.StakedValue)
 
 			// clear staker's information after redeeming
-			committee.RemoveStaker(msg.From(), st.state)
+			committee.RemoveStakerFromList(msg.From(), st.state)
 		}
 
 		// Increment the nonce for the next transaction

@@ -87,7 +87,7 @@ func TestGetAllStakers(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		var account common.Address
 		account.SetBytes(crypto.Keccak256([]byte{byte(i)})[:common.AddressLength])
-		AddNewStaker(account, s.state)
+		AddStakerToList(account, s.state)
 	}
 
 	stakers = GetAllStakers(s.state)
@@ -97,7 +97,7 @@ func TestGetAllStakers(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		var account common.Address
 		account.SetBytes(crypto.Keccak256([]byte{byte(i)})[:common.AddressLength])
-		RemoveStaker(account, s.state)
+		RemoveStakerFromList(account, s.state)
 	}
 	stakers = GetAllStakers(s.state)
 	assert.Nil(t, stakers)

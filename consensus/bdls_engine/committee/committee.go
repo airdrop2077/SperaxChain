@@ -172,8 +172,8 @@ func SetStakersCount(count int64, state vm.StateDB) {
 	state.SetState(StakingAddress, counterKeyHash, common.BigToHash(big.NewInt(int64(count))))
 }
 
-// AddNewStaker adds a new staker's address to the staker's list in account storage trie
-func AddNewStaker(addr common.Address, state vm.StateDB) {
+// AddStakerToList adds a new staker's address to the staker's list in account storage trie
+func AddStakerToList(addr common.Address, state vm.StateDB) {
 	count := GetStakersCount(state)
 
 	// set index
@@ -184,8 +184,8 @@ func AddNewStaker(addr common.Address, state vm.StateDB) {
 	SetStakersCount(count+1, state)
 }
 
-// RemoveStaker remove a staker's address from staker's list account storage trie
-func RemoveStaker(addr common.Address, state vm.StateDB) {
+// RemoveStakerFromList remove a staker's address from staker's list account storage trie
+func RemoveStakerFromList(addr common.Address, state vm.StateDB) {
 	count := GetStakersCount(state)
 	for i := int64(0); i < count; i++ {
 		userIndex := crypto.Keccak256Hash([]byte(fmt.Sprintf(StakingUserIndex, i)))
