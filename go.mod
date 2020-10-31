@@ -13,7 +13,7 @@ require (
 	github.com/aristanetworks/goarista v0.0.0-20190607111240-52c2a7864a08
 	github.com/aws/aws-sdk-go v1.25.48
 	github.com/btcsuite/btcd v0.20.1-beta
-	github.com/cespare/cp v0.1.0
+	github.com/cespare/cp v1.1.1
 	github.com/cloudflare/cloudflare-go v0.10.2-0.20190916151808-a80f83b9add9
 	github.com/davecgh/go-spew v1.1.1
 	github.com/deckarep/golang-set v1.7.1
@@ -22,8 +22,8 @@ require (
 	github.com/dop251/goja v0.0.0-20200219165308-d1232e640a87
 	github.com/edsrzf/mmap-go v1.0.0
 	github.com/elastic/gosigar v0.8.1-0.20180330100440-37f05ff46ffa
-	github.com/fatih/color v1.3.0
-	github.com/fjl/memsize v0.0.0-20180418122429-ca190fb6ffbc
+	github.com/fatih/color v1.7.0
+	github.com/fjl/memsize v0.0.0-20180929194037-2a09253e352a
 	github.com/gballet/go-libpcsclite v0.0.0-20190607065134-2772fd86a8ff
 	github.com/go-logfmt/logfmt v0.4.0 // indirect
 	github.com/go-ole/go-ole v1.2.1 // indirect
@@ -34,6 +34,7 @@ require (
 	github.com/golang/snappy v0.0.1
 	github.com/gorilla/websocket v1.4.2
 	github.com/graph-gophers/graphql-go v0.0.0-20191115155744-f33e81362277
+	github.com/harmony-one/harmony v1.9.0
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/huin/goupnp v1.0.0
 	github.com/influxdata/influxdb v1.2.3-0.20180221223340-01288bdb0883
@@ -42,17 +43,17 @@ require (
 	github.com/karalabe/usb v0.0.0-20190919080040-51dc0efba356
 	github.com/kr/pretty v0.2.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
-	github.com/mattn/go-colorable v0.1.1
-	github.com/mattn/go-isatty v0.0.5
+	github.com/mattn/go-colorable v0.1.4
+	github.com/mattn/go-isatty v0.0.8
 	github.com/naoina/go-stringutil v0.1.0 // indirect
 	github.com/naoina/toml v0.1.2-0.20170918210437-9fafd6967416
 	github.com/olekukonko/tablewriter v0.0.4
-	github.com/pborman/uuid v0.0.0-20170112150404-1b00554d8222
+	github.com/pborman/uuid v1.2.0
 	github.com/peterh/liner v1.1.1-0.20190123174540-a2c9a5303de7
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/tsdb v0.10.0
-	github.com/rjeczalik/notify v0.9.1
-	github.com/rs/cors v0.0.0-20160617231935-a62a804a8a00
+	github.com/rjeczalik/notify v0.9.2
+	github.com/rs/cors v1.7.0
 	github.com/rs/xhandler v0.0.0-20160618193221-ed27b6fd6521 // indirect
 	github.com/status-im/keycard-go v0.0.0-20190316090335-8537d3370df4
 	github.com/steakknife/bloomfilter v0.0.0-20180922174646-6819c0d2a570

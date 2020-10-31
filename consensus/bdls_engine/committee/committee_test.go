@@ -128,9 +128,14 @@ func TestCountValidatorVotes(t *testing.T) {
 	numStaked.Mul(numStaked, StakingUnit)
 	totalStaked.Mul(totalStaked, StakingUnit)
 
-	hash := crypto.Keccak256Hash([]byte{})
+	W := crypto.Keccak256Hash([]byte{})
+	stakingHash := crypto.Keccak256Hash([]byte{1})
+	address := common.Address{}
 
-	votes := countValidatorVotes(hash, numStaked, totalStaked)
-	t.Log("votes:", votes)
+	var totalVotes uint64
+	for i := 0; i < 1000; i++ {
+		totalVotes += countValidatorVotes(address, 2, W, stakingHash, numStaked, totalStaked)
+	}
+	t.Log("avg votes:", totalVotes/1000)
 
 }

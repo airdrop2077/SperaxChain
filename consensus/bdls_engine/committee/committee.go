@@ -334,47 +334,23 @@ func isProposerInternal(proposerHash common.Hash, numStaked *big.Float, totalSta
 }
 
 // countValidatorVotes counts the number of votes for a validator
-func countValidatorVotes(validatorhash common.Hash, numStaked *big.Int, totalStaked *big.Int) uint64 {
+func countValidatorVotes(coinbase common.Address, blockNumber uint64, W common.Hash, stakingHash common.Hash, numStaked *big.Int, totalStaked *big.Int) uint64 {
 	// compute p'
-	// p' = E2* numStakedUnit /totalStaked
+	// p' = E2* numStakedUnit /totalStaked * MaxUint256
 	p := big.NewFloat(0).SetInt(E2)
 	p.Mul(p, big.NewFloat(0).SetInt(StakingUnit))
 	p.Quo(p, big.NewFloat(0).SetInt(totalStaked))
+	p.Mul(p, MaxUint256)
 
-	// p2 = 1-p
-	p2 := big.NewFloat(0).Sub(big.NewFloat(1), p)
+	threshold, _ := p.Int(nil)
 
 	// the count of staking units is the maxVotes
 	maxVotes := uint64(big.NewInt(0).Quo(numStaked, StakingUnit).Int64())
-	fmt.Println(maxVotes, numStaked, StakingUnit)
-
-	// calculate H/MaxUint256
-	h := big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(validatorhash.Bytes()))
-	h.Quo(h, MaxUint256)
-
-	// find the minimum possible votes
-	var votes uint64
-
-	binominal := big.NewInt(0)
-	for i := uint64(0); i <= maxVotes; i++ {
-		sum := big.NewFloat(0)
-		for j := uint64(0); j <= i; j++ {
-			// computes binomial
-			coefficient := big.NewFloat(float64(binominal.Binomial(int64(maxVotes), int64(j)).Uint64()))
-			//fmt.Println("coff:", coefficient)
-			a := Pow(p, j)
-			b := Pow(p2, maxVotes-j)
-			r := big.NewFloat(0).Mul(a, b)
-			fmt.Println("p^j=", a, "p2^(ai-j)=", b, "p=", p, "p'=", p2, "binominal=", coefficient)
-			r.Mul(r, coefficient)
-			sum.Add(sum, r)
-		}
-
-		// effective vote found
-		// break here, then votes is the minimum
-		if sum.Cmp(h) == 1 {
-			votes = i
-			break
+	votes := uint64(0)
+	for j := uint64(1); j <= maxVotes; j++ {
+		validatorHash := validatorHash(coinbase, blockNumber, j, stakingHash, W).Big()
+		if validatorHash.Cmp(threshold) < 0 {
+			votes++
 		}
 	}
 
@@ -428,8 +404,7 @@ func CreateValidators(header *types.Header, state vm.StateDB) []bdls.Identity {
 			continue
 		} else {
 			// compute validator's hash
-			validatorHash := validatorHash(header.Coinbase, header.Number.Uint64(), staker.StakingHash, header.W)
-			n := countValidatorVotes(validatorHash, staker.StakedValue, totalStaked)
+			n := countValidatorVotes(header.Coinbase, header.Number.Uint64(), header.W, staker.StakingHash, staker.StakedValue, totalStaked)
 			for i := uint64(0); i < n; i++ { // a validator has N slots to be a leader
 				var validator orderedValidator
 				copy(validator.identity[:], staker.Address.Bytes())
@@ -483,9 +458,10 @@ func ProposerHash(header *types.Header) common.Hash {
 }
 
 // validatorHash computes a hash for validator's random number
-func validatorHash(coinbase common.Address, height uint64, R common.Hash, W common.Hash) common.Hash {
+func validatorHash(coinbase common.Address, height uint64, j uint64, R common.Hash, W common.Hash) common.Hash {
 	hasher := sha3.New256()
 	hasher.Write(coinbase.Bytes())
+	binary.Write(hasher, binary.LittleEndian, j)
 	binary.Write(hasher, binary.LittleEndian, height)
 	binary.Write(hasher, binary.LittleEndian, 1)
 	hasher.Write(R.Bytes())
