@@ -426,19 +426,6 @@ func CreateValidators(header *types.Header, state vm.StateDB) []bdls.Identity {
 	return sortedValidators
 }
 
-// Pow calculates a^e
-func Pow(a *big.Float, e uint64) *big.Float {
-	if e == 0 {
-		return big.NewFloat(1)
-	}
-
-	result := big.NewFloat(0.0).Copy(a)
-	for i := uint64(1); i < e; i++ {
-		result.Mul(result, a)
-	}
-	return result
-}
-
 // ProposerHash computes a hash for proposer's random number
 func ProposerHash(header *types.Header) common.Hash {
 	hasher := sha3.New256()
