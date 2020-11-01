@@ -61,7 +61,7 @@ var (
 	StakingAddress = common.HexToAddress("0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
 
 	// max unsigned 256-bit integer
-	MaxUint256 = big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(common.FromHex("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")))
+	MaxUint256 = big.NewInt(0).SetBytes(common.FromHex("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"))
 )
 
 var (
@@ -273,8 +273,8 @@ func IsProposer(header *types.Header, state vm.StateDB) bool {
 	}
 
 	// non-empty blocks
-	numStaked := big.NewFloat(0)
-	totalStaked := big.NewFloat(0) // effective stakings
+	numStaked := big.NewInt(0)
+	totalStaked := big.NewInt(0) // effective stakings
 
 	// lookup the staker's information
 	stakers := GetAllStakers(state)
@@ -282,7 +282,7 @@ func IsProposer(header *types.Header, state vm.StateDB) bool {
 		staker := GetStakerData(stakers[k], state)
 		// count effective stakings
 		if header.Number.Uint64() > staker.StakingFrom || header.Number.Uint64() <= staker.StakingTo {
-			totalStaked.Add(totalStaked, big.NewFloat(0).SetInt(staker.StakedValue))
+			totalStaked.Add(totalStaked, staker.StakedValue)
 		}
 
 		// found proposer's staking address
@@ -297,7 +297,7 @@ func IsProposer(header *types.Header, state vm.StateDB) bool {
 				log.Error("hashchain verification failed for header.R", "header.R", header.R, "computed R", R, "staked hash:", staker.StakingHash)
 				return false
 			}
-			numStaked = big.NewFloat(0).SetInt(staker.StakedValue)
+			numStaked = staker.StakedValue
 		}
 	}
 
@@ -306,27 +306,25 @@ func IsProposer(header *types.Header, state vm.StateDB) bool {
 
 // isProposerInternal is the pure algorithm implementation for testing whether
 // an block coinbase account is the proposer
-func isProposerInternal(proposerHash common.Hash, numStaked *big.Float, totalStaked *big.Float) bool {
+func isProposerInternal(proposerHash common.Hash, numStaked *big.Int, totalStaked *big.Int) bool {
 	// if there's staking
-	if totalStaked.Sign() == 1 {
-		// compute p
-		p := big.NewFloat(0).SetInt(E1)
-		p.Mul(p, big.NewFloat(0).SetInt(StakingUnit))
-		p.Quo(p, totalStaked)
+	if totalStaked.Cmp(common.Big0) > 0 {
+		ai := new(big.Int).Div(numStaked, StakingUnit)
+		if ai.Cmp(common.Big0) > 0 {
+			// compute E1 * StakingUnit * MaxUint256 * ai / totalStaked
+			threshold := new(big.Int).Mul(E1, StakingUnit)
+			threshold.Mul(threshold, MaxUint256)
+			threshold.Mul(threshold, ai)
+			threshold.Div(threshold, totalStaked)
 
-		// max{0, 1 - ai*p}
-		max := p.Sub(big.NewFloat(1), p.Mul(numStaked, p))
-		if max.Cmp(big.NewFloat(0)) != 1 {
-			max = big.NewFloat(0)
-		}
+			// 1- ai*p < 0, then set threshold to 0
+			if MaxUint256.Cmp(threshold) < 0 {
+				threshold = common.Big0
+			}
 
-		// calculate H/MaxUint256
-		h := big.NewFloat(0).SetInt(big.NewInt(0).SetBytes(proposerHash.Bytes()))
-		h.Quo(h, MaxUint256)
-
-		// prob compare
-		if h.Cmp(max) == 1 {
-			return true
+			if big.NewInt(0).SetBytes(proposerHash.Bytes()).Cmp(threshold) > 0 {
+				return true
+			}
 		}
 	}
 
@@ -335,19 +333,16 @@ func isProposerInternal(proposerHash common.Hash, numStaked *big.Float, totalSta
 
 // countValidatorVotes counts the number of votes for a validator
 func countValidatorVotes(coinbase common.Address, blockNumber uint64, W common.Hash, stakingHash common.Hash, numStaked *big.Int, totalStaked *big.Int) uint64 {
-	// compute p'
-	// p' = E2* numStakedUnit /totalStaked * MaxUint256
-	p := big.NewFloat(0).SetInt(E2)
-	p.Mul(p, big.NewFloat(0).SetInt(StakingUnit))
-	p.Quo(p, big.NewFloat(0).SetInt(totalStaked))
-	p.Mul(p, MaxUint256)
-
-	threshold, _ := p.Int(nil)
+	// compute
+	// E2* numStakedUnit /totalStaked * MaxUint256
+	threshold := new(big.Int).Mul(E2, StakingUnit)
+	threshold.Mul(threshold, MaxUint256)
+	threshold.Quo(threshold, totalStaked)
 
 	// the count of staking units is the maxVotes
-	maxVotes := uint64(big.NewInt(0).Quo(numStaked, StakingUnit).Int64())
+	maxVotes := big.NewInt(0).Quo(numStaked, StakingUnit)
 	votes := uint64(0)
-	for j := uint64(1); j <= maxVotes; j++ {
+	for j := big.NewInt(0); j.Cmp(maxVotes) <= 0; j = j.Add(j, common.Big1) {
 		validatorHash := validatorHash(coinbase, blockNumber, j, stakingHash, W).Big()
 		if validatorHash.Cmp(threshold) < 0 {
 			votes++
@@ -458,10 +453,10 @@ func ProposerHash(header *types.Header) common.Hash {
 }
 
 // validatorHash computes a hash for validator's random number
-func validatorHash(coinbase common.Address, height uint64, j uint64, R common.Hash, W common.Hash) common.Hash {
+func validatorHash(coinbase common.Address, height uint64, j *big.Int, R common.Hash, W common.Hash) common.Hash {
 	hasher := sha3.New256()
 	hasher.Write(coinbase.Bytes())
-	binary.Write(hasher, binary.LittleEndian, j)
+	hasher.Write(j.Bytes())
 	binary.Write(hasher, binary.LittleEndian, height)
 	binary.Write(hasher, binary.LittleEndian, 1)
 	hasher.Write(R.Bytes())

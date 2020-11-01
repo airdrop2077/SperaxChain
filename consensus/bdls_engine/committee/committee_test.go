@@ -64,8 +64,10 @@ func TestEncodingStaking(t *testing.T) {
 }
 
 func TestIsPropoersInternal(t *testing.T) {
-	numStaked := big.NewFloat(100)
-	totalStaked := big.NewFloat(100)
+	numStaked := big.NewInt(100)
+	totalStaked := big.NewInt(100)
+	numStaked.Mul(numStaked, StakingUnit)
+	totalStaked.Mul(totalStaked, StakingUnit)
 
 	var hash common.Hash
 	assert.False(t, isProposerInternal(hash, numStaked, totalStaked))
@@ -75,6 +77,21 @@ func TestIsPropoersInternal(t *testing.T) {
 
 	hash = crypto.Keccak256Hash([]byte{})
 	assert.True(t, isProposerInternal(hash, numStaked, totalStaked))
+
+	numStaked = big.NewInt(10)
+	totalStaked = big.NewInt(100)
+	numStaked.Mul(numStaked, StakingUnit)
+	totalStaked.Mul(totalStaked, StakingUnit)
+
+	totalProposer := 0
+	for i := 0; i < 100000; i++ {
+		hash = crypto.Keccak256Hash(hash.Bytes())
+		if isProposerInternal(hash, numStaked, totalStaked) {
+			totalProposer++
+		}
+	}
+
+	t.Log("totalProposer for 10000, 10% staked", totalProposer)
 }
 
 func TestStakersList(t *testing.T) {
@@ -136,6 +153,6 @@ func TestCountValidatorVotes(t *testing.T) {
 	for i := 0; i < 10000; i++ {
 		totalVotes += countValidatorVotes(address, uint64(i), W, stakingHash, numStaked, totalStaked)
 	}
-	t.Log("avg votes:", totalVotes/10000)
 
+	t.Log("totalVotes for 10000, 10% staked", totalVotes)
 }
