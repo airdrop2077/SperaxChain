@@ -123,7 +123,7 @@ func TestStakerData(t *testing.T) {
 }
 
 func TestCountValidatorVotes(t *testing.T) {
-	numStaked := big.NewInt(1000)
+	numStaked := big.NewInt(100)
 	totalStaked := big.NewInt(1000)
 	numStaked.Mul(numStaked, StakingUnit)
 	totalStaked.Mul(totalStaked, StakingUnit)
@@ -133,9 +133,9 @@ func TestCountValidatorVotes(t *testing.T) {
 	address := common.Address{}
 
 	var totalVotes uint64
-	for i := 0; i < 1000; i++ {
-		totalVotes += countValidatorVotes(address, 2, W, stakingHash, numStaked, totalStaked)
+	for i := 0; i < 10000; i++ {
+		totalVotes += countValidatorVotes(address, uint64(i), W, stakingHash, numStaked, totalStaked)
 	}
-	t.Log("avg votes:", totalVotes/1000)
+	t.Log("avg votes:", totalVotes/10000)
 
 }
