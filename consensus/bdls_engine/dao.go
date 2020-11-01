@@ -65,8 +65,8 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 
 		if len(message.Proof) > 0 {
 			// gas fee
-			gasFeeShare := big.NewInt(0).Quo(sharedGasFee, big.NewInt(int64(len(message.Proof))))
-			blockRewardShare := big.NewInt(0).Quo(TotalValidatorReward, big.NewInt(int64(len(message.Proof))))
+			gasFeeShare := big.NewInt(0).Div(sharedGasFee, big.NewInt(int64(len(message.Proof))))
+			blockRewardShare := big.NewInt(0).Div(TotalValidatorReward, big.NewInt(int64(len(message.Proof))))
 			for _, proof := range message.Proof {
 				address := crypto.PubkeyToAddress(*proof.PublicKey(crypto.S256()))
 

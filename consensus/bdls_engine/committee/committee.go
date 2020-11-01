@@ -322,7 +322,7 @@ func isProposerInternal(proposerHash common.Hash, numStaked *big.Int, totalStake
 				threshold = common.Big0
 			}
 
-			if big.NewInt(0).SetBytes(proposerHash.Bytes()).Cmp(threshold) > 0 {
+			if proposerHash.Big().Cmp(threshold) > 0 {
 				return true
 			}
 		}
@@ -337,10 +337,10 @@ func countValidatorVotes(coinbase common.Address, blockNumber uint64, W common.H
 	// E2* numStakedUnit /totalStaked * MaxUint256
 	threshold := new(big.Int).Mul(E2, StakingUnit)
 	threshold.Mul(threshold, MaxUint256)
-	threshold.Quo(threshold, totalStaked)
+	threshold.Div(threshold, totalStaked)
 
 	// the count of staking units is the maxVotes
-	maxVotes := big.NewInt(0).Quo(numStaked, StakingUnit)
+	maxVotes := big.NewInt(0).Div(numStaked, StakingUnit)
 	votes := uint64(0)
 	for j := big.NewInt(0); j.Cmp(maxVotes) <= 0; j = j.Add(j, common.Big1) {
 		validatorHash := validatorHash(coinbase, blockNumber, j, stakingHash, W).Big()
