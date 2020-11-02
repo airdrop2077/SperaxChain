@@ -252,6 +252,10 @@ var AppHelpFlagGroups = []flagGroup{
 		}, debug.DeprecatedFlags...),
 	},
 	{
+		Name:  "STAKING",
+		Flags: stakeFlags,
+	},
+	{
 		Name: "MISC",
 		Flags: []cli.Flag{
 			utils.SnapshotFlag,

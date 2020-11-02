@@ -200,6 +200,13 @@ var (
 		utils.MetricsInfluxDBPasswordFlag,
 		utils.MetricsInfluxDBTagsFlag,
 	}
+
+	// SPERAX: stake flags
+	stakeFlags = []cli.Flag{
+		utils.SperaxStakeFromFlag,
+		utils.SperaxStakeToFlag,
+		utils.SperaxStakeAccountFlag,
+	}
 )
 
 func init() {
@@ -209,6 +216,7 @@ func init() {
 	app.Copyright = "Copyright 2013-2020 The go-ethereum Authors"
 	app.Commands = []cli.Command{
 		// See chaincmd.go:
+		stakeCommand,
 		initCommand,
 		importCommand,
 		exportCommand,
@@ -247,6 +255,7 @@ func init() {
 	app.Flags = append(app.Flags, debug.DeprecatedFlags...)
 	app.Flags = append(app.Flags, whisperFlags...)
 	app.Flags = append(app.Flags, metricsFlags...)
+	app.Flags = append(app.Flags, stakeFlags...)
 
 	app.Before = func(ctx *cli.Context) error {
 		return debug.Setup(ctx)

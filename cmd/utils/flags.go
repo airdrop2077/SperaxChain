@@ -706,6 +706,22 @@ var (
 		Usage: "External EVM configuration (default = built-in interpreter)",
 		Value: "",
 	}
+
+	// SPERAX: staking command
+	SperaxStakeFromFlag = cli.IntFlag{
+		Name:  "stake.from",
+		Usage: "the beginning block number to become a validator node",
+	}
+
+	SperaxStakeToFlag = cli.IntFlag{
+		Name:  "stake.to",
+		Usage: "the end block number to stop running validator node",
+	}
+
+	SperaxStakeAccountFlag = cli.StringFlag{
+		Name:  "stake.account",
+		Usage: "the account to stake",
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating
