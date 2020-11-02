@@ -329,27 +329,6 @@ func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) 
 
 	// set W based on parent block
 	header.W = committee.DeriveW(parent)
-
-	// ignore base quorum R
-	if committee.IsBaseQuorum(header.Coinbase) {
-		return nil
-	}
-
-	// set R based StakingHash
-	state, _ := e.stateAt(header.ParentHash)
-	privateKey := e.waitForPrivateKey(header.Coinbase, nil)
-	if privateKey == nil {
-		return errors.New("cannot retrieve private key")
-	}
-
-	staker := committee.GetStakerData(header.Coinbase, state)
-	if header.Number.Uint64() > staker.StakingFrom && header.Number.Uint64() <= staker.StakingTo {
-		// if it's in a valid staking period
-		seed := committee.DeriveStakingSeed(privateKey, staker.StakingFrom)
-		log.Debug("Prepare", "stakingFrom", staker.StakingFrom, "stakingTo", staker.StakingTo, "block#", header.Number)
-		header.R = common.BytesToHash(committee.HashChain(seed, header.Number.Uint64(), staker.StakingTo))
-	}
-
 	return nil
 }
 
@@ -425,6 +404,7 @@ func (e *BDLSEngine) SealHash(header *types.Header) (hash common.Hash) {
 	copied := types.CopyHeader(header)
 	copied.Decision = nil
 	copied.Signature = nil
+	copied.R = common.Hash{}
 	return copied.Hash()
 }
 

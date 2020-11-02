@@ -242,6 +242,19 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		}
 		header.Signature = sig
 
+		// ignore setting base quorum R
+		if !committee.IsBaseQuorum(block.Coinbase()) {
+			// set R based StakingHash
+			state, _ := e.stateAt(block.ParentHash())
+			staker := committee.GetStakerData(block.Coinbase(), state)
+			if header.Number.Uint64() > staker.StakingFrom && header.Number.Uint64() <= staker.StakingTo {
+				// if it's in a valid staking period
+				seed := committee.DeriveStakingSeed(privateKey, staker.StakingFrom)
+				log.Debug("consensusTask", "stakingFrom", staker.StakingFrom, "stakingTo", staker.StakingTo, "block#", header.Number)
+				header.R = common.BytesToHash(committee.HashChain(seed, header.Number.Uint64(), staker.StakingTo))
+			}
+		}
+
 		// replace the block with the signed one
 		block = block.WithSeal(header)
 
