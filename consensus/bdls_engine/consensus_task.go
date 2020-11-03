@@ -18,6 +18,7 @@ package bdls_engine
 
 import (
 	"bytes"
+	fmt "fmt"
 	"sync/atomic"
 	"time"
 
@@ -252,6 +253,9 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 				seed := committee.DeriveStakingSeed(privateKey, staker.StakingFrom)
 				log.Debug("consensusTask", "stakingFrom", staker.StakingFrom, "stakingTo", staker.StakingTo, "block#", header.Number)
 				header.R = common.BytesToHash(committee.HashChain(seed, header.Number.Uint64(), staker.StakingTo))
+				fmt.Println("################ PERIOD VALID ##################", staker.StakingFrom, staker.StakingTo, header.R)
+			} else {
+				fmt.Println("################ PERIOD INVALID ##################", staker.StakingFrom, staker.StakingTo)
 			}
 		}
 
