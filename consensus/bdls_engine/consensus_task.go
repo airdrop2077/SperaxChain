@@ -286,7 +286,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	collectProposalTimeout := time.NewTimer(proposalCollectTimeout)
 	collectStart := time.Now()
 	log.Warn("AS VALIDATOR", "Address", crypto.PubkeyToAddress(privateKey.PublicKey))
-	log.Warn("PROPOSAL PRE-COLLECTION STARTED", "PROPOSAL COINBASE", candidateProposal.Coinbase(), "HEIGHT", candidateProposal.NumberU64())
+	log.Warn("PROPOSAL PRE-COLLECTION STARTED")
 
 PROPOSAL_COLLECTION:
 
