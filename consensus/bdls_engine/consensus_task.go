@@ -248,7 +248,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	}
 
 	// seal with Signature and broadcast
-	if committee.IsProposer(block.Header(), state) {
+	if committee.IsProposer(header, state) {
 		hash := e.SealHash(header).Bytes()
 		sig, err := crypto.Sign(hash, privateKey)
 		if err != nil {
