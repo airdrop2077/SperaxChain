@@ -350,7 +350,7 @@ PROPOSAL_COLLECTION:
 	}
 
 	// BEGIN THE CORE CONSENSUS MESSAGE LOOP
-	log.Warn("CONSENSUS TASK STARTED", "PROPOSAL COINBASE", candidateProposal.Coinbase(), "HEIGHT", candidateProposal.NumberU64())
+	log.Warn("CONSENSUS TASK STARTED", "SEALHASH", e.SealHash(candidateProposal.Header()), "COINBASE", candidateProposal.Coinbase(), "HEIGHT", candidateProposal.NumberU64())
 
 	// known proposed blocks from each participants' <roundchange> messages
 	allBlocksInConsensus := make(map[common.Address][]*types.Block)
