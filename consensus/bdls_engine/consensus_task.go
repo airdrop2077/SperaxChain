@@ -18,7 +18,6 @@ package bdls_engine
 
 import (
 	"bytes"
-	fmt "fmt"
 	"sync/atomic"
 	"time"
 
@@ -233,31 +232,29 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		return
 	}
 
-	// if i'm the proposer, sign & propose the block
+	// seal with R
+	header := block.Header()
+	// ignore setting base quorum R
+	if !committee.IsBaseQuorum(block.Coinbase()) {
+		// set R based StakingHash
+		state, _ := e.stateAt(block.ParentHash())
+		staker := committee.GetStakerData(block.Coinbase(), state)
+		if header.Number.Uint64() > staker.StakingFrom && header.Number.Uint64() <= staker.StakingTo {
+			// if it's in a valid staking period
+			seed := committee.DeriveStakingSeed(privateKey, staker.StakingFrom)
+			log.Debug("consensusTask", "stakingFrom", staker.StakingFrom, "stakingTo", staker.StakingTo, "block#", header.Number)
+			header.R = common.BytesToHash(committee.HashChain(seed, header.Number.Uint64(), staker.StakingTo))
+		}
+	}
+
+	// seal with Signature and broadcast
 	if committee.IsProposer(block.Header(), state) {
-		header := block.Header()
 		hash := e.SealHash(header).Bytes()
 		sig, err := crypto.Sign(hash, privateKey)
 		if err != nil {
 			log.Error("Seal", "Sign", err, "sig:", sig)
 		}
 		header.Signature = sig
-
-		// ignore setting base quorum R
-		if !committee.IsBaseQuorum(block.Coinbase()) {
-			// set R based StakingHash
-			state, _ := e.stateAt(block.ParentHash())
-			staker := committee.GetStakerData(block.Coinbase(), state)
-			if header.Number.Uint64() > staker.StakingFrom && header.Number.Uint64() <= staker.StakingTo {
-				// if it's in a valid staking period
-				seed := committee.DeriveStakingSeed(privateKey, staker.StakingFrom)
-				log.Debug("consensusTask", "stakingFrom", staker.StakingFrom, "stakingTo", staker.StakingTo, "block#", header.Number)
-				header.R = common.BytesToHash(committee.HashChain(seed, header.Number.Uint64(), staker.StakingTo))
-				fmt.Println("################ PERIOD VALID ##################", staker.StakingFrom, staker.StakingTo, header.R)
-			} else {
-				fmt.Println("################ PERIOD INVALID ##################", staker.StakingFrom, staker.StakingTo)
-			}
-		}
 
 		// replace the block with the signed one
 		block = block.WithSeal(header)
