@@ -80,7 +80,7 @@ func delegate(ctx *cli.Context) error {
 	if err != nil {
 		utils.Fatalf("internal error:%v ", err)
 	}
-	fmt.Printf("STAKING PAYLOAD, use with eth.sendTransaction() by setting data.payload=%v\n", common.Bytes2Hex(bts))
+	fmt.Printf("STAKING PAYLOAD, use with eth.sendTransaction() by setting data.payload=0x%v\n", common.Bytes2Hex(bts))
 	return nil
 }
 
@@ -96,7 +96,7 @@ func redeem(ctx *cli.Context) error {
 		utils.Fatalf("internal error:%v ", err)
 	}
 
-	fmt.Printf("REDEEM PAYLOAD, use with eth.sendTransaction() by setting data.payload=%v\n", common.Bytes2Hex(bts))
+	fmt.Printf("REDEEM PAYLOAD, use with eth.sendTransaction() by setting data.payload=0x%v\n", common.Bytes2Hex(bts))
 	return nil
 }
 
