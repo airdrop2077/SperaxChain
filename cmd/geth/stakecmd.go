@@ -130,5 +130,9 @@ func redeem(ctx *cli.Context) error {
 	}
 
 	fmt.Printf("REDEEM PAYLOAD, use with eth.sendTransaction() by setting data.payload=0x%v\n", common.Bytes2Hex(bts))
+	fmt.Println("======================================================================================================")
+	fmt.Printf(`Console transaction example:
+eth.sendTransaction({from: "YOUR ACCOUNT",to: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", value: "0", data:"%v"})
+		`, common.Bytes2Hex(bts))
 	return nil
 }
