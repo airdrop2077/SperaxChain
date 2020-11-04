@@ -272,8 +272,7 @@ func IsProposer(header *types.Header, state vm.StateDB) bool {
 		return true
 	}
 
-	// non-empty blocks
-	numStaked := big.NewInt(0)
+	var coinBaseStaker *Staker   // coinbase staker to be found
 	totalStaked := big.NewInt(0) // effective stakings
 
 	// lookup the staker's information
@@ -291,17 +290,27 @@ func IsProposer(header *types.Header, state vm.StateDB) bool {
 				log.Debug("invalid staking period")
 				return false
 			}
-
-			R := common.BytesToHash(HashChain(header.R.Bytes(), staker.StakingFrom, header.Number.Uint64()))
-			if R != staker.StakingHash {
-				log.Error("hashchain verification failed for header.R", "header.R", header.R, "computed R", R, "staked hash:", staker.StakingHash)
-				return false
-			}
-			numStaked = staker.StakedValue
+			coinBaseStaker = staker
 		}
 	}
 
-	return isProposerInternal(ProposerHash(header), numStaked, totalStaked)
+	// cannot find the staker
+	if coinBaseStaker == nil {
+		return false
+	}
+
+	// to mitigate hashchain hashing attack by computing probability aforehead
+	if !isProposerInternal(ProposerHash(header), coinBaseStaker.StakedValue, totalStaked) {
+		return false
+	}
+
+	// hashchain verification is the last step, expensive for long term staking
+	R := common.BytesToHash(HashChain(header.R.Bytes(), coinBaseStaker.StakingFrom, header.Number.Uint64()))
+	if R != coinBaseStaker.StakingHash {
+		log.Error("hashchain verification failed for header.R", "header.R", header.R, "computed R", R, "staked hash:", coinBaseStaker.StakingHash)
+		return false
+	}
+	return true
 }
 
 // isProposerInternal is the pure algorithm implementation for testing whether
