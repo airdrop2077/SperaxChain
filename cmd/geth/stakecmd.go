@@ -107,6 +107,10 @@ func delegate(ctx *cli.Context) error {
 			utils.Fatalf("internal error:%v ", err)
 		}
 		fmt.Printf("STAKING PAYLOAD, use with eth.sendTransaction() by setting data.payload=0x%v\n", common.Bytes2Hex(bts))
+		fmt.Println("======================================================================================================")
+		fmt.Printf(`Console transaction example:
+eth.sendTransaction({from: "%v",to: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", value: "88888888888888888888888", data:"%v"})
+		`, account.Address.String(), common.Bytes2Hex(bts))
 		return nil
 	}
 
