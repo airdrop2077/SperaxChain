@@ -35,8 +35,8 @@ import (
 )
 
 var (
-	proposalCollectTimeout = 5 * time.Second
-	expectedLatency        = time.Second
+	proposalCollectionTimeout = 5 * time.Second
+	expectedLatency           = time.Second
 )
 
 // verify states in block
@@ -284,7 +284,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	}
 
 	// prepare the maximum proposal by collecting proposals from proposers
-	collectProposalTimeout := time.NewTimer(proposalCollectTimeout)
+	collectProposalTimeout := time.NewTimer(proposalCollectionTimeout)
 	collectStart := time.Now()
 	log.Warn("AS VALIDATOR", "Address", crypto.PubkeyToAddress(privateKey.PublicKey))
 	log.Warn("PROPOSAL PRE-COLLECTION STARTED")
@@ -333,7 +333,7 @@ PROPOSAL_COLLECTION:
 					}
 
 					// at least one proposal confirmed, check if we have timeouted
-					if time.Since(collectStart) > proposalCollectTimeout {
+					if time.Since(collectStart) > proposalCollectionTimeout {
 						break PROPOSAL_COLLECTION
 					}
 				}
