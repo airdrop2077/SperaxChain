@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"errors"
-	fmt "fmt"
 	"math/big"
 	"sync"
 	"time"
@@ -246,6 +245,10 @@ func (e *BDLSEngine) VerifyUncles(chain consensus.ChainReader, block *types.Bloc
 
 // VerifySeal checks whether the crypto seal on a header is valid according to
 // the consensus rules of the given engine.
+// Fields to verify:
+// 	- Signature
+// 	- Decision
+//	- R
 func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Header) error {
 	// The genesis block is the always valid dead-end
 	number := header.Number.Uint64()
@@ -259,12 +262,23 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		return consensus.ErrUnknownAncestor
 	}
 
+	// retrieve the staking object at parent height
+	state, err := e.stateAt(header.ParentHash)
+	if err != nil {
+		return errors.New("VerifySeal - Error in getting the block's parent's state")
+	}
+
+	// Ensure it's a valid proposer(Signature & R field)
+	if !e.verifyProposerField(header, state) {
+		return errors.New("VerifySeal - verifyProposerField failed")
+	}
+
 	// Ensure the proof field is not nil
 	if len(header.Decision) == 0 {
 		return errEmptyDecision
 	}
 
-	// Get the SealHash(without Decision field) of this header to verify against
+	// Get the SealHash of this header to verify against
 	sealHash := e.SealHash(header).Bytes()
 
 	// create a consensus config to validate this message at the correct height
@@ -276,18 +290,6 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		CurrentHeight:    header.Number.Uint64() - 1,
 		PubKeyToIdentity: PubKeyToIdentity,
 	}
-
-	// retrieve the staking object at parent height
-	state, err := e.stateAt(header.ParentHash)
-	if err != nil {
-		return errors.New("Error in getting the block's parent's state")
-	}
-
-	// Ensure it's a valid proposer
-	if !committee.IsProposer(header, state) {
-		return errors.New(fmt.Sprint("Not a valid proposer at height", header.Number))
-	}
-
 	// create the consensus object along with participants to validate decide message
 	config.Participants = committee.CreateValidators(header, state)
 
@@ -297,7 +299,7 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		return err
 	}
 
-	// Ensure the block has a validate decide message
+	// Ensure the block has a validate decide message(Decision field)
 	err = consensus.ValidateDecideMessage(header.Decision, sealHash)
 	if err != nil {
 		log.Debug("VerifySeal", "consensus..ValidateDecideMessage", err)
