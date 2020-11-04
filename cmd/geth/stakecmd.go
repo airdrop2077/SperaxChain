@@ -68,39 +68,7 @@ Generate data.payload to redeem SPA via eth.sendTransaction()`,
 
 func delegate(ctx *cli.Context) error {
 	fmt.Println("STAKEING PARAMETERS GENERATION")
-	req, err := stake(ctx, committee.Staking)
-	if err != nil {
-		utils.Fatalf("delgated failed. err: %v", err)
-	}
 
-	fmt.Println("FROM:", req.StakingFrom)
-	fmt.Println("TO:", req.StakingTo)
-
-	bts, err := rlp.EncodeToBytes(req)
-	if err != nil {
-		utils.Fatalf("internal error:%v ", err)
-	}
-	fmt.Printf("STAKING PAYLOAD, use with eth.sendTransaction() by setting data.payload=0x%v\n", common.Bytes2Hex(bts))
-	return nil
-}
-
-func redeem(ctx *cli.Context) error {
-	fmt.Println("REDEEM PARAMETERS GENERATION")
-	req, err := stake(ctx, committee.Redeem)
-	if err != nil {
-		utils.Fatalf("redeem failed. err: %v", err)
-	}
-
-	bts, err := rlp.EncodeToBytes(req)
-	if err != nil {
-		utils.Fatalf("internal error:%v ", err)
-	}
-
-	fmt.Printf("REDEEM PAYLOAD, use with eth.sendTransaction() by setting data.payload=0x%v\n", common.Bytes2Hex(bts))
-	return nil
-}
-
-func stake(ctx *cli.Context, op committee.StakingOp) (req *committee.StakingRequest, err error) {
 	node := makeFullNode(ctx)
 	defer node.Close()
 
@@ -123,15 +91,40 @@ func stake(ctx *cli.Context, op committee.StakingOp) (req *committee.StakingRequ
 
 		// derive random seed from private key
 		req := committee.StakingRequest{
-			StakingOp:   op,
+			StakingOp:   committee.Staking,
 			StakingFrom: uint64(ctx.GlobalInt(utils.SperaxStakeFromFlag.Name)),
 			StakingTo:   uint64(ctx.GlobalInt(utils.SperaxStakeToFlag.Name)),
 		}
 
 		seed := committee.DeriveStakingSeed(priv, req.StakingFrom)
 		req.StakingHash = common.BytesToHash(committee.HashChain(seed, req.StakingFrom, req.StakingTo))
-		return &req, nil
+
+		fmt.Println("FROM:", req.StakingFrom)
+		fmt.Println("TO:", req.StakingTo)
+
+		bts, err := rlp.EncodeToBytes(req)
+		if err != nil {
+			utils.Fatalf("internal error:%v ", err)
+		}
+		fmt.Printf("STAKING PAYLOAD, use with eth.sendTransaction() by setting data.payload=0x%v\n", common.Bytes2Hex(bts))
+		return nil
 	}
 
-	return nil, errors.New("Failed to unlock private key")
+	return errors.New("Failed to unlock private key")
+}
+
+func redeem(ctx *cli.Context) error {
+	fmt.Println("REDEEM PARAMETERS GENERATION")
+
+	req := committee.StakingRequest{
+		StakingOp: committee.Redeem,
+	}
+
+	bts, err := rlp.EncodeToBytes(req)
+	if err != nil {
+		utils.Fatalf("internal error:%v ", err)
+	}
+
+	fmt.Printf("REDEEM PAYLOAD, use with eth.sendTransaction() by setting data.payload=0x%v\n", common.Bytes2Hex(bts))
+	return nil
 }
