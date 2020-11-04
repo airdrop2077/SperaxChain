@@ -109,7 +109,7 @@ func delegate(ctx *cli.Context) error {
 		fmt.Printf("STAKING PAYLOAD, use with eth.sendTransaction() by setting data.payload=0x%v\n", common.Bytes2Hex(bts))
 		fmt.Println("======================================================================================================")
 		fmt.Printf(`Console transaction example:
-eth.sendTransaction({from: "%v",to: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", value: "88888888888888888888888", data:"0x%v"})
+eth.sendTransaction({from: "%v",to: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", value: "YOUR SPA TO STAKE", data:"0x%v"})
 		`, account.Address.String(), common.Bytes2Hex(bts))
 		return nil
 	}
