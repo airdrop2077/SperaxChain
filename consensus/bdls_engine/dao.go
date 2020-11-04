@@ -84,10 +84,12 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 	stakers := committee.GetAllStakers(state)
 	for k := range stakers {
 		staker := committee.GetStakerData(stakers[k], state)
-		if header.Number.Uint64() == staker.StakingTo+1 { // expired, refund automatically at height stakingTo+1
+		if header.Number.Uint64() > staker.StakingTo { // expired, refund automatically at height stakingTo+1
 			log.Debug("STAKING EXPIRED:", "account", staker.Address, "value", staker.StakedValue)
 			state.AddBalance(staker.Address, staker.StakedValue)
 			state.SubBalance(committee.StakingAddress, staker.StakedValue)
+
+			// make sure to remove from list
 			committee.RemoveStakerFromList(stakers[k], state)
 		}
 	}

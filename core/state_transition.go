@@ -261,7 +261,6 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		// Sperax Staking Rules
 		// sending tokens to StakingAddress will trigger staking operations
 		// decode staking message in msg.Payload
-		// this procedure will bypass EVM
 		var req committee.StakingRequest
 		rlp.DecodeBytes(msg.Data(), &req)
 
