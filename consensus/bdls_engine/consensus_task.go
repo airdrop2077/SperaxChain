@@ -236,7 +236,6 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	header := block.Header()
 	// ignore setting base quorum R
 	if !committee.IsBaseQuorum(block.Coinbase()) {
-		// set R based StakingHash
 		state, _ := e.stateAt(block.ParentHash())
 		staker := committee.GetStakerData(block.Coinbase(), state)
 		if header.Number.Uint64() > staker.StakingFrom && header.Number.Uint64() <= staker.StakingTo {
@@ -247,13 +246,14 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		}
 	}
 
-	// seal with Signature and broadcast
+	// R has set, check if I'm the proposer
 	if committee.IsProposer(header, state) {
 		hash := e.SealHash(header).Bytes()
 		sig, err := crypto.Sign(hash, privateKey)
 		if err != nil {
 			log.Error("Seal", "Sign", err, "sig:", sig)
 		}
+		// seal with Signature
 		header.Signature = sig
 
 		// replace the block with the signed one
@@ -261,6 +261,16 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 
 		// record the candidate block which I proposed
 		candidateProposal = block
+
+		// time compensation to avoid fast block generation
+		delay := time.Until(time.Unix(int64(block.Header().Time), 0))
+		select {
+		case <-time.After(delay):
+		case <-stop:
+			results <- nil
+			return
+		}
+
 		// send the proposal as a proposer
 		e.sendProposal(block)
 	}
@@ -326,10 +336,8 @@ PROPOSAL_COLLECTION:
 					// record candidate blocks
 					if candidateProposal == nil {
 						candidateProposal = &proposal
-					} else {
-						if e.blockCompare(&proposal, candidateProposal) > 0 {
-							candidateProposal = &proposal
-						}
+					} else if e.blockCompare(&proposal, candidateProposal) > 0 {
+						candidateProposal = &proposal
 					}
 
 					// at least one proposal confirmed, check if we have timeouted
@@ -444,16 +452,6 @@ PROPOSAL_COLLECTION:
 	allBlocksInConsensus[candidateProposal.Coinbase()] = append(allBlocksInConsensus[candidateProposal.Coinbase()], candidateProposal)
 	// propose the block hash
 	consensus.Propose(candidateProposal.Hash().Bytes())
-
-	// time compensation to avoid fast block generation
-	delay := time.Until(time.Unix(int64(block.Header().Time), 0))
-	// wait for the timestamp of header
-	select {
-	case <-time.After(delay):
-	case <-stop:
-		results <- nil
-		return
-	}
 
 	// core consensus loop
 CONSENSUS_TASK:
