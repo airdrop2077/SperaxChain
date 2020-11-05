@@ -441,6 +441,7 @@ PROPOSAL_COLLECTION:
 	// set expected latency
 	// network latency will be dynamically adjusted based on previous
 	// blocks.
+	latency := baseLatency
 	parentHeader := chain.GetHeaderByNumber(block.NumberU64() - 1)
 	if parentHeader.Decision != nil {
 		sp, err := bdls.DecodeSignedMessage(parentHeader.Decision)
@@ -454,10 +455,11 @@ PROPOSAL_COLLECTION:
 		}
 
 		// update consensus latency based on previous block
-		consensus.SetLatency(baseLatency * (1 << message.Round))
-	} else {
-		consensus.SetLatency(baseLatency)
+		latency = baseLatency * (1 << message.Round)
 	}
+
+	log.Warn("CONSENSUS LATENCY SET", "LATENCY", latency)
+	consensus.SetLatency(latency)
 
 	// the consensus updater ticker
 	updateTick := time.NewTicker(20 * time.Millisecond)
