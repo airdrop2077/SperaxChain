@@ -272,7 +272,8 @@ func IsProposer(header *types.Header, state vm.StateDB) bool {
 		return true
 	}
 
-	var coinBaseStaker *Staker   // coinbase staker to be found
+	var coinBaseStaker Staker    // coinbase staker to be found
+	var stakerFound bool         // mark staker found
 	totalStaked := big.NewInt(0) // effective stakings
 
 	// lookup the staker's information
@@ -290,12 +291,13 @@ func IsProposer(header *types.Header, state vm.StateDB) bool {
 				log.Debug("invalid staking period")
 				return false
 			}
-			coinBaseStaker = staker
+			coinBaseStaker = *staker
+			stakerFound = true
 		}
 	}
 
 	// cannot find the staker
-	if coinBaseStaker == nil {
+	if !stakerFound {
 		return false
 	}
 
