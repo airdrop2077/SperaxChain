@@ -280,7 +280,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	}
 
 	// derive the participants from staking object at this height
-	participants := committee.CreateValidators(block.Header(), state)
+	participants := committee.CreateValidators(candidateProposal.Header(), state)
 
 	// check if i'm the validator, stop here if i'm not a validator
 	var isValidator bool
@@ -332,7 +332,7 @@ PROPOSAL_COLLECTION:
 					}
 
 					// verify proposal fields
-					if !e.verifyRemoteProposal(chain, &proposal, block.NumberU64(), state) {
+					if !e.verifyRemoteProposal(chain, &proposal, candidateProposal.NumberU64(), state) {
 						log.Debug("proposal collection - verifyRemoteProposal failed")
 						continue PROPOSAL_COLLECTION
 					}
