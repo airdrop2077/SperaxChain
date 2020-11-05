@@ -35,7 +35,8 @@ import (
 )
 
 const (
-	baseLatency               = 500 * time.Millisecond
+	baseLatency               = 200 * time.Millisecond
+	maxBaseLatency            = 10 * time.Second
 	proposalCollectionTimeout = 5 * time.Second
 )
 
@@ -263,12 +264,15 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		candidateProposal = block
 
 		// time compensation to avoid fast block generation
-		delay := time.Until(time.Unix(int64(block.Header().Time), 0))
-		select {
-		case <-time.After(delay):
-		case <-stop:
-			results <- nil
-			return
+		now := time.Now().Unix()
+		if uint64(now) > candidateProposal.Header().Time {
+			delay := time.Duration(uint64(now)-candidateProposal.Header().Time) * time.Second
+			select {
+			case <-time.After(delay):
+			case <-stop:
+				results <- nil
+				return
+			}
 		}
 
 		// send the proposal as a proposer
@@ -456,6 +460,10 @@ PROPOSAL_COLLECTION:
 
 		// update consensus latency based on previous block
 		latency = baseLatency * (1 << message.Round)
+	}
+
+	if latency > maxBaseLatency {
+		latency = maxBaseLatency
 	}
 
 	log.Warn("CONSENSUS LATENCY SET", "LATENCY", latency)
