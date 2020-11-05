@@ -280,7 +280,7 @@ func IsProposer(header *types.Header, state vm.StateDB) bool {
 	for k := range stakers {
 		staker := GetStakerData(stakers[k], state)
 		// count effective stakings
-		if header.Number.Uint64() > staker.StakingFrom || header.Number.Uint64() <= staker.StakingTo {
+		if header.Number.Uint64() > staker.StakingFrom && header.Number.Uint64() <= staker.StakingTo {
 			totalStaked.Add(totalStaked, staker.StakedValue)
 		}
 
@@ -396,7 +396,7 @@ func CreateValidators(header *types.Header, state vm.StateDB) []bdls.Identity {
 	for k := range stakers {
 		staker := GetStakerData(stakers[k], state)
 		// count effective stakings
-		if header.Number.Uint64() > staker.StakingFrom || header.Number.Uint64() <= staker.StakingTo {
+		if header.Number.Uint64() > staker.StakingFrom && header.Number.Uint64() <= staker.StakingTo {
 			totalStaked.Add(totalStaked, staker.StakedValue)
 		}
 	}
