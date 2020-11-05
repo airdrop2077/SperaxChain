@@ -314,7 +314,7 @@ PROPOSAL_COLLECTION:
 					}
 
 					// verify proposal fields
-					if !e.verifyRemoteProposal(chain, &proposal, candidateProposal.NumberU64(), state) {
+					if !e.verifyRemoteProposal(chain, &proposal, block.NumberU64(), state) {
 						log.Debug("proposal collection - verifyRemoteProposal failed")
 						continue PROPOSAL_COLLECTION
 					}
