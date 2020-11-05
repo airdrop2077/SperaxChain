@@ -61,7 +61,11 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 		if err != nil {
 			panic(err)
 		}
+
 		message, err := bdls.DecodeMessage(sp.Message)
+		if err != nil {
+			panic(err)
+		}
 
 		if len(message.Proof) > 0 {
 			// gas fee

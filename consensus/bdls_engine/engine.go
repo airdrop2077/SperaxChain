@@ -268,7 +268,7 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		return errors.New("VerifySeal - Error in getting the block's parent's state")
 	}
 
-	// Ensure it's a valid proposer(Signature & R field)
+	// Ensure it's a valid proposer(header.Signature & header.R field)
 	if !e.verifyProposerField(header, state) {
 		return errors.New("VerifySeal - verifyProposerField failed")
 	}
@@ -299,7 +299,7 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		return err
 	}
 
-	// Ensure the block has a validate decide message(Decision field)
+	// Ensure the block has a validate decide message(header.Decision field)
 	err = consensus.ValidateDecideMessage(header.Decision, sealHash)
 	if err != nil {
 		log.Debug("VerifySeal", "consensus..ValidateDecideMessage", err)
@@ -309,7 +309,7 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 	return nil
 }
 
-// Prepare initializes the consensus fields of a block header according to the
+// Prepare initializes the fields of a block header according to the
 // rules of a particular engine. The changes are executed inline.
 func (e *BDLSEngine) Prepare(chain consensus.ChainReader, header *types.Header) error {
 	// unused fields, force to set to empty

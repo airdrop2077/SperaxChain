@@ -34,9 +34,9 @@ import (
 	proto "github.com/gogo/protobuf/proto"
 )
 
-var (
+const (
+	baseLatency               = 500 * time.Millisecond
 	proposalCollectionTimeout = 5 * time.Second
-	expectedLatency           = time.Second
 )
 
 // verify states in block
@@ -437,8 +437,27 @@ PROPOSAL_COLLECTION:
 		log.Error("bdls.NewConsensus", "err", err)
 		return
 	}
+
 	// set expected latency
-	consensus.SetLatency(expectedLatency)
+	// network latency will be dynamically adjusted based on previous
+	// blocks.
+	parentHeader := chain.GetHeaderByNumber(block.NumberU64() - 1)
+	if parentHeader.Decision != nil {
+		sp, err := bdls.DecodeSignedMessage(parentHeader.Decision)
+		if err != nil {
+			panic(err)
+		}
+
+		message, err := bdls.DecodeMessage(sp.Message)
+		if err != nil {
+			panic(err)
+		}
+
+		// update consensus latency based on previous block
+		consensus.SetLatency(baseLatency * (1 << message.Round))
+	} else {
+		consensus.SetLatency(baseLatency)
+	}
 
 	// the consensus updater ticker
 	updateTick := time.NewTicker(20 * time.Millisecond)
