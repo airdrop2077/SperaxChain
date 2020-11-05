@@ -279,9 +279,6 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		e.sendProposal(block)
 	}
 
-	// derive the participants from staking object at this height
-	participants := committee.CreateValidators(candidateProposal.Header(), state)
-
 	// check if i'm the validator, stop here if i'm not a validator
 	var isValidator bool
 	identity := PubKeyToIdentity(&privateKey.PublicKey)
@@ -413,6 +410,9 @@ PROPOSAL_COLLECTION:
 			return
 		}
 	}
+
+	// derive the participants from staking object at this height
+	participants := committee.CreateValidators(candidateProposal.Header(), state)
 
 	// setup consensus config at the given height
 	config := &bdls.Config{
