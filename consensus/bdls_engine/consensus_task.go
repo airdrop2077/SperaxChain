@@ -279,21 +279,6 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		e.sendProposal(block)
 	}
 
-	// check if i'm the validator, stop here if i'm not a validator
-	var isValidator bool
-	identity := PubKeyToIdentity(&privateKey.PublicKey)
-	for k := range participants {
-		if participants[k] == identity {
-			isValidator = true // mark i'm a validator
-			break
-		}
-	}
-
-	// job is done here if i'm not an validator
-	if !isValidator {
-		return
-	}
-
 	// prepare the maximum proposal by collecting proposals from proposers
 	collectProposalTimeout := time.NewTimer(proposalCollectionTimeout)
 	collectStart := time.Now()
@@ -358,6 +343,24 @@ PROPOSAL_COLLECTION:
 		}
 	}
 
+	// derive the participants from staking object at this height
+	participants := committee.CreateValidators(candidateProposal.Header(), state)
+
+	// check if i'm the validator, stop here if i'm not a validator
+	var isValidator bool
+	identity := PubKeyToIdentity(&privateKey.PublicKey)
+	for k := range participants {
+		if participants[k] == identity {
+			isValidator = true // mark i'm a validator
+			break
+		}
+	}
+
+	// job is done here if i'm not an validator
+	if !isValidator {
+		return
+	}
+
 	// BEGIN THE CORE CONSENSUS MESSAGE LOOP
 	log.Warn("CONSENSUS TASK STARTED", "SEALHASH", e.SealHash(candidateProposal.Header()), "COINBASE", candidateProposal.Coinbase(), "HEIGHT", candidateProposal.NumberU64())
 
@@ -410,9 +413,6 @@ PROPOSAL_COLLECTION:
 			return
 		}
 	}
-
-	// derive the participants from staking object at this height
-	participants := committee.CreateValidators(candidateProposal.Header(), state)
 
 	// setup consensus config at the given height
 	config := &bdls.Config{
