@@ -70,38 +70,40 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 
 		if len(message.Proof) > 0 {
 			totalStaked := committee.TotalStaked(parentState)
+			// no value staked
+			if totalStaked.Cmp(common.Big0) > 0 {
+				// gasFeePercentageGain = sharedGasFee * 1e18 / totalStaked
+				// we multiplied by 1e18 here to avoid underflow
+				gasFeePercentageGain := new(big.Int)
+				gasFeePercentageGain.Mul(sharedGasFee, Multiplier)
+				gasFeePercentageGain.Div(gasFeePercentageGain, totalStaked)
 
-			// gasFeePercentageGain = sharedGasFee * 1e18 / totalStaked
-			// we multiplied by 1e18 here to avoid underflow
-			gasFeePercentageGain := new(big.Int)
-			gasFeePercentageGain.Mul(sharedGasFee, Multiplier)
-			gasFeePercentageGain.Div(gasFeePercentageGain, totalStaked)
+				// blockRewardPercentageGain = (totalvalidator reward) * 1e18 / totalStaked
+				// we multiplied by 1e18 here to avoid underflow
+				blockRewardPercentageGain := new(big.Int)
+				blockRewardPercentageGain.Mul(TotalValidatorReward, Multiplier)
+				blockRewardPercentageGain.Div(blockRewardPercentageGain, totalStaked)
 
-			// blockRewardPercentageGain = (totalvalidator reward) * 1e18 / totalStaked
-			// we multiplied by 1e18 here to avoid underflow
-			blockRewardPercentageGain := new(big.Int)
-			blockRewardPercentageGain.Mul(TotalValidatorReward, Multiplier)
-			blockRewardPercentageGain.Div(blockRewardPercentageGain, totalStaked)
+				// gas fee will be distributed evenly for how much staker's has staked
+				for _, proof := range message.Proof {
+					address := crypto.PubkeyToAddress(*proof.PublicKey(crypto.S256()))
+					staker := committee.GetStakerData(address, state)
 
-			// gas fee will be distributed evenly for how much staker's has staked
-			for _, proof := range message.Proof {
-				address := crypto.PubkeyToAddress(*proof.PublicKey(crypto.S256()))
-				staker := committee.GetStakerData(address, state)
+					gasFee := new(big.Int)
+					gasFee.Mul(gasFeePercentageGain, staker.StakedValue)
+					gasFee.Div(gasFee, Multiplier)
 
-				gasFee := new(big.Int)
-				gasFee.Mul(gasFeePercentageGain, staker.StakedValue)
-				gasFee.Div(gasFee, Multiplier)
+					blockReward := new(big.Int)
+					blockReward.Mul(blockRewardPercentageGain, staker.StakedValue)
+					blockReward.Div(blockReward, Multiplier)
 
-				blockReward := new(big.Int)
-				blockReward.Mul(blockRewardPercentageGain, staker.StakedValue)
-				blockReward.Div(blockReward, Multiplier)
+					// each validator claim it's gas share, and reset balance in account: GasFeeAddress
+					state.AddBalance(address, gasFee)
+					state.SubBalance(GasFeeAddress, gasFee)
 
-				// each validator claim it's gas share, and reset balance in account: GasFeeAddress
-				state.AddBalance(address, gasFee)
-				state.SubBalance(GasFeeAddress, gasFee)
-
-				// each validator claim it's block reward share
-				state.AddBalance(address, blockReward)
+					// each validator claim it's block reward share
+					state.AddBalance(address, blockReward)
+				}
 			}
 		}
 	}
