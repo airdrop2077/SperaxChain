@@ -69,7 +69,7 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 		}
 
 		if len(message.Proof) > 0 {
-			totalStaked := committee.TotalStaked(uint64(parentHeader.Number.Int64()), parentState)
+			totalStaked := committee.TotalStaked(parentState)
 
 			// gasFeePercentageGain = sharedGasFee * 1e18 / totalStaked
 			// we multiplied by 1e18 here to avoid underflow
