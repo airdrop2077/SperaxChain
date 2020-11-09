@@ -369,22 +369,20 @@ type weightedValidator struct {
 	hash     common.Hash
 }
 
+// TotalStaked retrieves value staked in staking account
+func TotalStaked(state vm.StateDB) *big.Int {
+	return state.GetBalance(StakingAddress)
+}
+
 // CreateValidators creates an ordered list for all qualified validators with weights
 func CreateValidators(header *types.Header, state vm.StateDB) []bdls.Identity {
 	var validators []weightedValidator
 
 	// count effective stakings
-	totalStaked := big.NewInt(0)
-	stakers := GetAllStakers(state)
-	for k := range stakers {
-		staker := GetStakerData(stakers[k], state)
-		// count effective stakings
-		if header.Number.Uint64() > staker.StakingFrom && header.Number.Uint64() <= staker.StakingTo {
-			totalStaked.Add(totalStaked, staker.StakedValue)
-		}
-	}
+	totalStaked := TotalStaked(state)
 
 	// setup validators
+	stakers := GetAllStakers(state)
 	for k := range stakers {
 		staker := GetStakerData(stakers[k], state)
 		if header.Number.Uint64() <= staker.StakingFrom || header.Number.Uint64() > staker.StakingTo {
