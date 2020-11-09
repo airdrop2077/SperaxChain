@@ -35,6 +35,7 @@ var (
 	ProposerReward       = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
 	TotalValidatorReward = new(big.Int).Mul(big.NewInt(3000), big.NewInt(params.Ether))
 	GasFeeAddress        = common.HexToAddress("0xdddddddddddddddddddddddddddddddddddddddd")
+	Multiplier           = big.NewInt(1e18)
 )
 
 // mining reward computation
@@ -68,18 +69,39 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 		}
 
 		if len(message.Proof) > 0 {
-			// gas fee
-			gasFeeShare := big.NewInt(0).Div(sharedGasFee, big.NewInt(int64(len(message.Proof))))
-			blockRewardShare := big.NewInt(0).Div(TotalValidatorReward, big.NewInt(int64(len(message.Proof))))
+			totalStaked := committee.TotalStaked(uint64(parentHeader.Number.Int64()), parentState)
+
+			// gasFeePercentageGain = sharedGasFee * 1e18 / totalStaked
+			// we multiplied by 1e18 here to avoid underflow
+			gasFeePercentageGain := new(big.Int)
+			gasFeePercentageGain.Mul(sharedGasFee, Multiplier)
+			gasFeePercentageGain.Div(gasFeePercentageGain, totalStaked)
+
+			// blockRewardPercentageGain = (totalvalidator reward) * 1e18 / totalStaked
+			// we multiplied by 1e18 here to avoid underflow
+			blockRewardPercentageGain := new(big.Int)
+			blockRewardPercentageGain.Mul(TotalValidatorReward, Multiplier)
+			blockRewardPercentageGain.Div(blockRewardPercentageGain, totalStaked)
+
+			// gas fee will be distributed evenly for how much staker's has staked
 			for _, proof := range message.Proof {
 				address := crypto.PubkeyToAddress(*proof.PublicKey(crypto.S256()))
+				staker := committee.GetStakerData(address, state)
+
+				gasFee := new(big.Int)
+				gasFee.Mul(gasFeePercentageGain, staker.StakedValue)
+				gasFee.Div(gasFee, Multiplier)
+
+				blockReward := new(big.Int)
+				blockReward.Mul(blockRewardPercentageGain, staker.StakedValue)
+				blockReward.Div(blockReward, Multiplier)
 
 				// each validator claim it's gas share, and reset balance in account: GasFeeAddress
-				state.AddBalance(address, gasFeeShare)
-				state.SubBalance(GasFeeAddress, gasFeeShare)
+				state.AddBalance(address, gasFee)
+				state.SubBalance(GasFeeAddress, gasFee)
 
 				// each validator claim it's block reward share
-				state.AddBalance(address, blockRewardShare)
+				state.AddBalance(address, blockReward)
 			}
 		}
 	}

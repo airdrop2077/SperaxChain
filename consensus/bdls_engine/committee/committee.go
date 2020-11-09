@@ -363,34 +363,15 @@ func countValidatorVotes(coinbase common.Address, blockNumber uint64, W common.H
 	return votes
 }
 
-type orderedValidator struct {
+type weightedValidator struct {
 	identity bdls.Identity
+	votes    uint64
 	hash     common.Hash
-}
-
-type SortableValidators []orderedValidator
-
-func (s SortableValidators) Len() int { return len(s) }
-func (s SortableValidators) Less(i, j int) bool {
-	return bytes.Compare(s[i].hash.Bytes(), s[j].hash.Bytes()) == -1
-}
-func (s SortableValidators) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-
-// validatorHash computes a hash for validator's random number
-func (ov SortableValidators) Hash(height uint64, R common.Hash, W common.Hash) common.Hash {
-	hasher := sha3.New256()
-	binary.Write(hasher, binary.LittleEndian, height)
-	binary.Write(hasher, binary.LittleEndian, 1)
-	hasher.Write(R.Bytes())
-	hasher.Write(CommonCoin)
-	hasher.Write(W.Bytes())
-
-	return common.BytesToHash(hasher.Sum(nil))
 }
 
 // CreateValidators creates an ordered list for all qualified validators with weights
 func CreateValidators(header *types.Header, state vm.StateDB) []bdls.Identity {
-	var orderedValidators []orderedValidator
+	var validators []weightedValidator
 
 	// count effective stakings
 	totalStaked := big.NewInt(0)
@@ -411,20 +392,28 @@ func CreateValidators(header *types.Header, state vm.StateDB) []bdls.Identity {
 		} else {
 			// compute validator's hash
 			n := countValidatorVotes(header.Coinbase, header.Number.Uint64(), header.W, staker.StakingHash, staker.StakedValue, totalStaked)
-			for i := uint64(0); i < n; i++ { // a validator has N slots to be a leader
-				var validator orderedValidator
+			if n > 0 {
+				var validator weightedValidator
 				copy(validator.identity[:], staker.Address.Bytes())
-				validator.hash = validatorSortingHash(staker.Address, staker.StakingHash, header.W, i)
-				orderedValidators = append(orderedValidators, validator)
+				validator.votes = n
+				validator.hash = validatorSortingHash(staker.Address, staker.StakingHash, header.W, n)
+				validators = append(validators, validator)
 			}
 		}
 	}
 
-	// sort by the validators based on the sorting hash
-	sort.Stable(SortableValidators(orderedValidators))
+	// validators are prioritized by it's weight & hash
+	// weight first then hash
+	sort.SliceStable(validators, func(i, j int) bool {
+		if validators[i].votes == validators[j].votes {
+			return bytes.Compare(validators[i].hash.Bytes(), validators[j].hash.Bytes()) == -1
+		}
+		return validators[i].votes > validators[j].votes
+	})
+
 	var sortedValidators []bdls.Identity
-	for i := 0; i < len(orderedValidators); i++ {
-		sortedValidators = append(sortedValidators, orderedValidators[i].identity)
+	for i := 0; i < len(validators); i++ {
+		sortedValidators = append(sortedValidators, validators[i].identity)
 	}
 
 	// always append based quorum to then end of the validators

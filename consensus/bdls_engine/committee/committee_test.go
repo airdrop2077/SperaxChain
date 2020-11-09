@@ -156,3 +156,6 @@ func TestCountValidatorVotes(t *testing.T) {
 
 	t.Log("totalVotes for 10000, 10% staked", totalVotes)
 }
+
+func TestCreateValidators(t *testing.T) {
+}
