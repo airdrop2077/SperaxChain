@@ -300,7 +300,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	// prepare the maximum proposal by collecting proposals from proposers
 	collectProposalTimeout := time.NewTimer(proposalCollectionTimeout)
 	collectStart := time.Now()
-	log.Warn("PROPOSAL PRE-COLLECTION STARTED")
+	log.Info("PROPOSAL PRE-COLLECTION STARTED")
 
 PROPOSAL_COLLECTION:
 
@@ -361,7 +361,7 @@ PROPOSAL_COLLECTION:
 	}
 
 	// BEGIN THE CORE CONSENSUS MESSAGE LOOP
-	log.Warn("CONSENSUS TASK STARTED", "SEALHASH", e.SealHash(candidateProposal.Header()), "COINBASE", candidateProposal.Coinbase(), "HEIGHT", candidateProposal.NumberU64())
+	log.Info("CONSENSUS TASK STARTED", "SEALHASH", e.SealHash(candidateProposal.Header()), "COINBASE", candidateProposal.Coinbase(), "HEIGHT", candidateProposal.NumberU64())
 
 	// known proposed blocks from each participants' <roundchange> messages
 	allBlocksInConsensus := make(map[common.Address][]*types.Block)
@@ -465,7 +465,7 @@ PROPOSAL_COLLECTION:
 		latency = maxBaseLatency
 	}
 
-	log.Warn("CONSENSUS LATENCY SET", "LATENCY", latency)
+	log.Info("CONSENSUS LATENCY SET", "LATENCY", latency)
 	consensus.SetLatency(latency)
 
 	// the consensus updater ticker
@@ -508,7 +508,7 @@ CONSENSUS_TASK:
 					// new block confirmed
 					if newHeight == block.NumberU64() {
 						hash := common.BytesToHash(newState)
-						log.Warn("BDLS CONSENSUS <decide>", "HEIGHT", newHeight, "ROUND", newRound, "SEALHASH", hash)
+						log.Info("BDLS CONSENSUS <decide>", "HEIGHT", newHeight, "ROUND", newRound, "SEALHASH", hash)
 
 						// every validator can finalize this block to it's local blockchain now
 						newblock := lookupConsensusBlock(hash)
