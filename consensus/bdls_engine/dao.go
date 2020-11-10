@@ -85,15 +85,15 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 				blockRewardPercentageGain.Div(blockRewardPercentageGain, totalStaked)
 
 				// gas fee will be distributed evenly for how much staker's has staked
+				gasFee := new(big.Int)
+				blockReward := new(big.Int)
 				for _, proof := range message.Proof {
 					address := crypto.PubkeyToAddress(*proof.PublicKey(crypto.S256()))
 					staker := committee.GetStakerData(address, state)
 
-					gasFee := new(big.Int)
 					gasFee.Mul(gasFeePercentageGain, staker.StakedValue)
 					gasFee.Div(gasFee, Multiplier)
 
-					blockReward := new(big.Int)
 					blockReward.Mul(blockRewardPercentageGain, staker.StakedValue)
 					blockReward.Div(blockReward, Multiplier)
 
