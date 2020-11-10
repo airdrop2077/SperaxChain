@@ -272,44 +272,25 @@ func IsProposer(header *types.Header, state vm.StateDB) bool {
 		return true
 	}
 
-	var coinBaseStaker Staker    // coinbase staker to be found
-	var stakerFound bool         // mark staker found
-	totalStaked := big.NewInt(0) // effective stakings
+	totalStaked := TotalStaked(state)
 
 	// lookup the staker's information
-	stakers := GetAllStakers(state)
-	for k := range stakers {
-		staker := GetStakerData(stakers[k], state)
-		// count effective stakings
-		if header.Number.Uint64() > staker.StakingFrom && header.Number.Uint64() <= staker.StakingTo {
-			totalStaked.Add(totalStaked, staker.StakedValue)
-		}
-
-		// found proposer's staking address
-		if staker.Address == header.Coinbase {
-			if header.Number.Uint64() <= staker.StakingFrom || header.Number.Uint64() > staker.StakingTo {
-				log.Debug("invalid staking period")
-				return false
-			}
-			coinBaseStaker = *staker
-			stakerFound = true
-		}
-	}
-
-	// cannot find the staker
-	if !stakerFound {
+	staker := GetStakerData(header.Coinbase, state)
+	if header.Number.Uint64() <= staker.StakingFrom || header.Number.Uint64() > staker.StakingTo {
+		log.Debug("invalid staking period")
 		return false
 	}
 
 	// to mitigate hashchain hashing attack by computing probability aforehead
-	if !isProposerInternal(ProposerHash(header), coinBaseStaker.StakedValue, totalStaked) {
+	if !isProposerInternal(ProposerHash(header), staker.StakedValue, totalStaked) {
+		log.Debug("hash of the proposer has failed the threshold")
 		return false
 	}
 
 	// hashchain verification is the last step, expensive for long term staking
-	R := common.BytesToHash(HashChain(header.R.Bytes(), coinBaseStaker.StakingFrom, header.Number.Uint64()))
-	if R != coinBaseStaker.StakingHash {
-		log.Error("hashchain verification failed for header.R", "header.R", header.R, "computed R", R, "staked hash:", coinBaseStaker.StakingHash)
+	R := common.BytesToHash(HashChain(header.R.Bytes(), staker.StakingFrom, header.Number.Uint64()))
+	if R != staker.StakingHash {
+		log.Error("hashchain verification failed for header.R", "header.R", header.R, "computed R", R, "staked hash:", staker.StakingHash)
 		return false
 	}
 	return true
