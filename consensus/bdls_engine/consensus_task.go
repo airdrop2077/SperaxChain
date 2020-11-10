@@ -279,10 +279,27 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 		e.sendProposal(block)
 	}
 
+	// derive the participants from staking object at this height
+	participants := committee.CreateValidators(header, state)
+
+	// check if i'm the validator, stop here if i'm not a validator
+	var isValidator bool
+	identity := PubKeyToIdentity(&privateKey.PublicKey)
+	for k := range participants {
+		if participants[k] == identity {
+			isValidator = true // mark i'm a validator
+			break
+		}
+	}
+
+	// job is done here if i'm not an validator
+	if !isValidator {
+		return
+	}
+
 	// prepare the maximum proposal by collecting proposals from proposers
 	collectProposalTimeout := time.NewTimer(proposalCollectionTimeout)
 	collectStart := time.Now()
-	log.Warn("AS VALIDATOR", "Address", crypto.PubkeyToAddress(privateKey.PublicKey))
 	log.Warn("PROPOSAL PRE-COLLECTION STARTED")
 
 PROPOSAL_COLLECTION:
@@ -341,24 +358,6 @@ PROPOSAL_COLLECTION:
 		case <-stop:
 			return
 		}
-	}
-
-	// derive the participants from staking object at this height
-	participants := committee.CreateValidators(candidateProposal.Header(), state)
-
-	// check if i'm the validator, stop here if i'm not a validator
-	var isValidator bool
-	identity := PubKeyToIdentity(&privateKey.PublicKey)
-	for k := range participants {
-		if participants[k] == identity {
-			isValidator = true // mark i'm a validator
-			break
-		}
-	}
-
-	// job is done here if i'm not an validator
-	if !isValidator {
-		return
 	}
 
 	// BEGIN THE CORE CONSENSUS MESSAGE LOOP
