@@ -140,14 +140,14 @@ type Staker struct {
 	StakedValue *big.Int
 }
 
-// getStakingValue retrieves the value with key from account: StakingAddress
-func getStakingValue(addr common.Address, key string, state vm.StateDB) common.Hash {
+// getMapValue retrieves the value with key from account: StakingAddress
+func getMapValue(addr common.Address, key string, state vm.StateDB) common.Hash {
 	keyHash := crypto.Keccak256Hash([]byte(fmt.Sprintf(key, addr)))
 	return state.GetState(StakingAddress, keyHash)
 }
 
-// setStakingValue sets the value with key to account: StakingAddress
-func setStakingValue(addr common.Address, key string, value common.Hash, state vm.StateDB) {
+// setMapValue sets the value with key to account: StakingAddress
+func setMapValue(addr common.Address, key string, value common.Hash, state vm.StateDB) {
 	keyHash := crypto.Keccak256Hash([]byte(fmt.Sprintf(key, addr)))
 	state.SetState(StakingAddress, keyHash, value)
 }
@@ -166,7 +166,7 @@ func setStakersCount(count int64, state vm.StateDB) {
 
 // HasStaked is a O(1) way to test whether an account has staked
 func HasStaked(addr common.Address, state vm.StateDB) bool {
-	if getStakingValue(addr, StakingInList, state) == addr.Hash() {
+	if getMapValue(addr, StakingInList, state) == addr.Hash() {
 		return true
 	}
 	return false
@@ -193,7 +193,7 @@ func AddStakerToList(addr common.Address, state vm.StateDB) {
 	state.SetState(StakingAddress, userIndex, addr.Hash())
 
 	// mark the account in list
-	setStakingValue(addr, StakingInList, addr.Hash(), state)
+	setMapValue(addr, StakingInList, addr.Hash(), state)
 
 	// increase counter
 	setStakersCount(count+1, state)
@@ -213,7 +213,7 @@ func RemoveStakerFromList(addr common.Address, state vm.StateDB) {
 			state.SetState(StakingAddress, userIndex, lastAddress)
 
 			// unmark the account in list
-			setStakingValue(addr, StakingInList, common.Hash{}, state)
+			setMapValue(addr, StakingInList, common.Hash{}, state)
 
 			// decrease counter
 			setStakersCount(count-1, state)
@@ -226,19 +226,19 @@ func RemoveStakerFromList(addr common.Address, state vm.StateDB) {
 func GetStakerData(addr common.Address, state vm.StateDB) *Staker {
 	staker := new(Staker)
 	staker.Address = addr
-	staker.StakingFrom = uint64(getStakingValue(addr, StakingKeyFrom, state).Big().Int64())
-	staker.StakingTo = uint64(getStakingValue(addr, StakingKeyTo, state).Big().Int64())
-	staker.StakingHash = getStakingValue(addr, StakingKeyHash, state)
-	staker.StakedValue = getStakingValue(addr, StakingKeyValue, state).Big()
+	staker.StakingFrom = uint64(getMapValue(addr, StakingKeyFrom, state).Big().Int64())
+	staker.StakingTo = uint64(getMapValue(addr, StakingKeyTo, state).Big().Int64())
+	staker.StakingHash = getMapValue(addr, StakingKeyHash, state)
+	staker.StakedValue = getMapValue(addr, StakingKeyValue, state).Big()
 	return staker
 }
 
 // SetStakerData sets staking information to storage account trie
 func SetStakerData(staker *Staker, state vm.StateDB) {
-	setStakingValue(staker.Address, StakingKeyFrom, common.BigToHash(big.NewInt(int64(staker.StakingFrom))), state)
-	setStakingValue(staker.Address, StakingKeyTo, common.BigToHash(big.NewInt(int64(staker.StakingTo))), state)
-	setStakingValue(staker.Address, StakingKeyHash, staker.StakingHash, state)
-	setStakingValue(staker.Address, StakingKeyValue, common.BigToHash(staker.StakedValue), state)
+	setMapValue(staker.Address, StakingKeyFrom, common.BigToHash(big.NewInt(int64(staker.StakingFrom))), state)
+	setMapValue(staker.Address, StakingKeyTo, common.BigToHash(big.NewInt(int64(staker.StakingTo))), state)
+	setMapValue(staker.Address, StakingKeyHash, staker.StakingHash, state)
+	setMapValue(staker.Address, StakingKeyValue, common.BigToHash(staker.StakedValue), state)
 }
 
 // GetW calculates random number W based on block information
@@ -274,6 +274,7 @@ func IsProposer(header *types.Header, state vm.StateDB) bool {
 		return true
 	}
 
+	// get total staked value
 	totalStaked := TotalStaked(state)
 
 	// lookup the staker's information
