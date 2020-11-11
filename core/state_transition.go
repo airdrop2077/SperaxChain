@@ -281,8 +281,14 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 				return nil, committee.ErrStakingMinimumTokens
 			}
 
+			// make sure period has not expired
+			if req.StakingTo <= st.evm.BlockNumber.Uint64() {
+				log.Debug("TransitionDb", "err", committee.ErrStakingAlreadyExpired)
+				return nil, committee.ErrStakingAlreadyExpired
+			}
+
 			// staking period check
-			if req.StakingTo <= req.StakingFrom {
+			if !(req.StakingTo > req.StakingFrom) {
 				log.Debug("TransitionDb", "err", committee.ErrStakingInvalidPeriod)
 				return nil, committee.ErrStakingInvalidPeriod
 			}

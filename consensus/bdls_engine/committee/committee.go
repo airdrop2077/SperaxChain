@@ -65,12 +65,13 @@ var (
 )
 
 var (
-	ErrStakingRequest       = errors.New("STAKING: already staked")
-	ErrStakingMinimumTokens = errors.New("STAKING: less than minimum values")
-	ErrStakingZeroValue     = errors.New("STAKING: cannot stake 0 value")
-	ErrStakingInvalidPeriod = errors.New("STAKING: invalid staking period")
-	ErrRedeemRequest        = errors.New("REDEEM: not staked")
-	ErrRedeemValidNonZero   = errors.New("REDEEM: the redeem transaction has none 0 value")
+	ErrStakingRequest        = errors.New("STAKING: already staked")
+	ErrStakingMinimumTokens  = errors.New("STAKING: less than minimum values")
+	ErrStakingZeroValue      = errors.New("STAKING: cannot stake 0 value")
+	ErrStakingInvalidPeriod  = errors.New("STAKING: invalid staking period, make sure from < to")
+	ErrStakingAlreadyExpired = errors.New("STAKING: staking period already expired")
+	ErrRedeemRequest         = errors.New("REDEEM: not staked")
+	ErrRedeemValidNonZero    = errors.New("REDEEM: the redeem transaction has none 0 value")
 )
 
 const (
