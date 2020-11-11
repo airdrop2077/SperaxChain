@@ -69,7 +69,7 @@ func (api *API) GetValidatorsAtHash(hash common.Hash) ([]common.Address, error) 
 }
 
 // GetTotalStake returns the total staked value
-func (api *API) GetTotalStaked() (*big.Int, error) {
+func (api *API) GetTotalStaked() (total *big.Int, err error) {
 	header := api.chain.CurrentHeader()
 	state, err := api.engine.stateAt(header.Hash())
 	if err != nil {
@@ -77,6 +77,22 @@ func (api *API) GetTotalStaked() (*big.Int, error) {
 	}
 
 	return committee.TotalStaked(state), nil
+}
+
+// GetStakers returns a map for all stakers and it's value
+func (api *API) GetStakers() (stakers []*committee.Staker, err error) {
+	header := api.chain.CurrentHeader()
+	state, err := api.engine.stateAt(header.Hash())
+	if err != nil {
+		return nil, err
+	}
+
+	stakerAccounts := committee.GetAllStakers(state)
+	for _, account := range stakerAccounts {
+		stakers = append(stakers, committee.GetStakerData(account, state))
+	}
+
+	return stakers, nil
 }
 
 func (api *API) decodeValidators(decision []byte) ([]common.Address, error) {
