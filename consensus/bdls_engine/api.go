@@ -35,7 +35,7 @@ func (api *API) Version() string {
 	return "1.0"
 }
 
-// GetValidators returns the validator addresses at specific block
+// GetValidators returns the validator addresses at specific block height
 func (api *API) GetValidators(number *rpc.BlockNumber) ([]common.Address, error) {
 	// Retrieve the requested block number (or current if none requested)
 	var header *types.Header
@@ -50,9 +50,25 @@ func (api *API) GetValidators(number *rpc.BlockNumber) ([]common.Address, error)
 		return nil, errUnknownBlock
 	}
 
+	return api.decodeValidators(header.Decision)
+}
+
+// GetValidatorsAtHash returns the validator addresses at specific block hash
+func (api *API) GetValidatorsAtHash(hash common.Hash) ([]common.Address, error) {
+	header := api.chain.GetHeaderByHash(hash)
+
+	// Ensure we have an actually valid block and return the validators from its snapshot
+	if header == nil {
+		return nil, errUnknownBlock
+	}
+
+	return api.decodeValidators(header.Decision)
+}
+
+func (api *API) decodeValidators(decision []byte) ([]common.Address, error) {
 	var validators []common.Address
-	if header.Decision != nil {
-		sp, err := bdls.DecodeSignedMessage(header.Decision)
+	if decision != nil {
+		sp, err := bdls.DecodeSignedMessage(decision)
 		if err != nil {
 			return nil, err
 		}
