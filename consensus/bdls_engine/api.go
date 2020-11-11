@@ -20,6 +20,9 @@ import (
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
 	"github.com/Sperax/SperaxChain/core/types"
+	"github.com/Sperax/SperaxChain/crypto"
+	"github.com/Sperax/SperaxChain/rpc"
+	"github.com/Sperax/bdls"
 )
 
 // API is a user facing RPC API to dump BDLS state
@@ -28,9 +31,42 @@ type API struct {
 	engine *BDLSEngine
 }
 
-func (api *API) SealHash(header *types.Header) (hash common.Hash) {
-	copied := types.CopyHeader(header)
-	copied.Decision = nil
-	copied.Signature = nil
-	return copied.Hash()
+func (api *API) Version() string {
+	return "1.0"
+}
+
+// GetValidators returns the validator addresses at specific block
+func (api *API) GetValidators(number *rpc.BlockNumber) ([]common.Address, error) {
+	// Retrieve the requested block number (or current if none requested)
+	var header *types.Header
+	if number == nil || *number == rpc.LatestBlockNumber {
+		header = api.chain.CurrentHeader()
+	} else {
+		header = api.chain.GetHeaderByNumber(uint64(number.Int64()))
+	}
+
+	// Ensure we have an actually valid block and return the validators from its snapshot
+	if header == nil {
+		return nil, errUnknownBlock
+	}
+
+	var validators []common.Address
+	if header.Decision != nil {
+		sp, err := bdls.DecodeSignedMessage(header.Decision)
+		if err != nil {
+			return nil, err
+		}
+
+		m, err := bdls.DecodeMessage(sp.Message)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, proof := range m.Proof {
+			addr := crypto.PubkeyToAddress(*proof.PublicKey(crypto.S256()))
+			validators = append(validators, addr)
+		}
+	}
+
+	return validators, nil
 }
