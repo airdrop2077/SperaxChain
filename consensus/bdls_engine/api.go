@@ -17,8 +17,11 @@
 package bdls_engine
 
 import (
+	"math/big"
+
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
+	"github.com/Sperax/SperaxChain/consensus/bdls_engine/committee"
 	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/crypto"
 	"github.com/Sperax/SperaxChain/rpc"
@@ -63,6 +66,17 @@ func (api *API) GetValidatorsAtHash(hash common.Hash) ([]common.Address, error) 
 	}
 
 	return api.decodeValidators(header.Decision)
+}
+
+// GetTotalStake returns the total staked value
+func (api *API) GetTotalStaked() (*big.Int, error) {
+	header := api.chain.CurrentHeader()
+	state, err := api.engine.stateAt(header.Hash())
+	if err != nil {
+		return nil, err
+	}
+
+	return committee.TotalStaked(state), nil
 }
 
 func (api *API) decodeValidators(decision []byte) ([]common.Address, error) {
