@@ -2,12 +2,14 @@ package committee
 
 import (
 	"crypto/ecdsa"
+	"encoding/binary"
 	"math/big"
 	"testing"
 
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/core/rawdb"
 	"github.com/Sperax/SperaxChain/core/state"
+	"github.com/Sperax/SperaxChain/core/types"
 	"github.com/Sperax/SperaxChain/crypto"
 	"github.com/Sperax/SperaxChain/ethdb"
 	"github.com/Sperax/SperaxChain/rlp"
@@ -158,4 +160,30 @@ func TestCountValidatorVotes(t *testing.T) {
 }
 
 func TestCreateValidators(t *testing.T) {
+	s := newStateTest()
+	const N = 100000
+
+	for i := 0; i < N; i++ {
+		staker := new(Staker)
+		var address common.Address
+		binary.LittleEndian.PutUint32(address[:], uint32(i))
+		staker.StakedValue = big.NewInt(1234)
+		staker.StakingFrom = 2345
+		staker.StakingTo = 3456
+		staker.StakingHash = crypto.Keccak256Hash([]byte{1})
+		staker.StakedValue = big.NewInt(1000000)
+		SetStakerData(staker, s.state)
+		AddStakerToList(address, s.state)
+		s.state.AddBalance(StakingAddress, staker.StakedValue)
+	}
+
+	stakers := GetAllStakers(s.state)
+	assert.Equal(t, N, len(stakers))
+
+	header := &types.Header{
+		Number: big.NewInt(3000),
+		W:      crypto.Keccak256Hash([]byte{1}),
+	}
+	identities := CreateValidators(header, s.state)
+	t.Log("num validators:", len(identities))
 }

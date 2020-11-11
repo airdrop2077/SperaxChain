@@ -270,6 +270,11 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 				return nil, committee.ErrStakingRequest
 			}
 
+			// make sure the value is larger than 0
+			if st.value.Cmp(common.Big0) > 0 {
+				return nil, committee.ErrStakingZeroValue
+			}
+
 			// minimum staking requirement
 			if st.value.Cmp(committee.StakingUnit) == -1 {
 				log.Debug("TransitionDb", "err", committee.ErrStakingMinimumTokens)

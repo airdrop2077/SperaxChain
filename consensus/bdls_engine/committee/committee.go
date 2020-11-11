@@ -65,11 +65,12 @@ var (
 )
 
 var (
-	ErrStakingRequest       = errors.New("already staked")
-	ErrStakingMinimumTokens = errors.New("staking has less than minimum tokens")
-	ErrStakingInvalidPeriod = errors.New("invalid staking period")
-	ErrRedeemRequest        = errors.New("not staked")
-	ErrRedeemValidNonZero   = errors.New("the transaction to redeem has none 0 value")
+	ErrStakingRequest       = errors.New("STAKING: already staked")
+	ErrStakingMinimumTokens = errors.New("STAKING: less than minimum values")
+	ErrStakingZeroValue     = errors.New("STAKING: cannot stake 0 value")
+	ErrStakingInvalidPeriod = errors.New("STAKING: invalid staking period")
+	ErrRedeemRequest        = errors.New("REDEEM: not staked")
+	ErrRedeemValidNonZero   = errors.New("REDEEM: the redeem transaction has none 0 value")
 )
 
 const (
@@ -325,6 +326,12 @@ func isProposerInternal(proposerHash common.Hash, numStaked *big.Int, totalStake
 
 // countValidatorVotes counts the number of votes for a validator
 func countValidatorVotes(coinbase common.Address, blockNumber uint64, W common.Hash, stakingHash common.Hash, numStaked *big.Int, totalStaked *big.Int) uint64 {
+	// assume total staked is not 0
+	if totalStaked.Cmp(common.Big0) == 0 {
+		log.Error("total staked value is 0")
+		return 0
+	}
+
 	// compute
 	// E2* numStakedUnit /totalStaked * MaxUint256
 	threshold := new(big.Int).Mul(E2, StakingUnit)
