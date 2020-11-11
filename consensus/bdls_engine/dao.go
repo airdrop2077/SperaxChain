@@ -17,6 +17,7 @@
 package bdls_engine
 
 import (
+	fmt "fmt"
 	"math/big"
 
 	"github.com/Sperax/SperaxChain/common"
@@ -24,6 +25,7 @@ import (
 	"github.com/Sperax/SperaxChain/consensus/bdls_engine/committee"
 	"github.com/Sperax/SperaxChain/core/state"
 	"github.com/Sperax/SperaxChain/core/types"
+	"github.com/Sperax/SperaxChain/core/vm"
 	"github.com/Sperax/SperaxChain/crypto"
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/params"
@@ -38,10 +40,77 @@ var (
 	Multiplier           = big.NewInt(1e18)
 )
 
+const (
+	// statistics stored in account storage trie of GasFeeAddress
+	// global
+	KeyTotalGasFeeRewards    = "/v1/totalGasFeeRewards"
+	KeyTotalValidatorRewards = "/v1/totalValidatorRewards"
+	KeyTotalProposerRewards  = "/v1/totalProposerRewards"
+
+	// account
+	KeyAccountTotalGasFeeRewards = "/v1/%v/totalGasFeeRewards"
+	KeyAccountTotalBlockRewards  = "/v1/%v/totalBlockRewards"
+)
+
+// getMapValue retrieves the value with key from account: StakingAddress
+func getMapValue(addr common.Address, key string, state vm.StateDB) common.Hash {
+	keyHash := crypto.Keccak256Hash([]byte(fmt.Sprintf(key, addr)))
+	return state.GetState(GasFeeAddress, keyHash)
+}
+
+// setMapValue sets the value with key to account: StakingAddress
+func setMapValue(addr common.Address, key string, value common.Hash, state vm.StateDB) {
+	keyHash := crypto.Keccak256Hash([]byte(fmt.Sprintf(key, addr)))
+	state.SetState(GasFeeAddress, keyHash, value)
+}
+
+// getTotalGasFees retrieves total gas fee reward from account storage trie
+func getTotalGasFees(state vm.StateDB) *big.Int {
+	keyHash := crypto.Keccak256Hash([]byte(KeyTotalGasFeeRewards))
+	return state.GetState(GasFeeAddress, keyHash).Big()
+}
+
+// setTotalGasFees sets the total gas fee reward to account storage trie
+func setTotalGasFees(number *big.Int, state vm.StateDB) {
+	keyHash := crypto.Keccak256Hash([]byte(KeyTotalGasFeeRewards))
+	state.SetState(GasFeeAddress, keyHash, common.BigToHash(number))
+}
+
+// getTotalValidatorReward retrieves total validators reward from account storage trie
+func getTotalValidatorReward(state vm.StateDB) *big.Int {
+	keyHash := crypto.Keccak256Hash([]byte(KeyTotalValidatorRewards))
+	return state.GetState(GasFeeAddress, keyHash).Big()
+}
+
+// setTotalValidatorReward sets the total validators reward to account storage trie
+func setTotalValidatorReward(number *big.Int, state vm.StateDB) {
+	keyHash := crypto.Keccak256Hash([]byte(KeyTotalValidatorRewards))
+	state.SetState(GasFeeAddress, keyHash, common.BigToHash(number))
+}
+
+// getTotalProposerReward retrieves total gas fee from account storage trie
+func getTotalProposerReward(state vm.StateDB) *big.Int {
+	keyHash := crypto.Keccak256Hash([]byte(KeyTotalProposerRewards))
+	return state.GetState(GasFeeAddress, keyHash).Big()
+}
+
+// setTotalProposerReward sets the total gas fee to account storage trie
+func setTotalProposerReward(number *big.Int, state vm.StateDB) {
+	keyHash := crypto.Keccak256Hash([]byte(KeyTotalProposerRewards))
+	state.SetState(GasFeeAddress, keyHash, common.BigToHash(number))
+}
+
 // mining reward computation
 func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state.StateDB, header *types.Header) {
-	// Reward Block Proposer
-	state.AddBalance(header.Coinbase, ProposerReward)
+	if !committee.IsBaseQuorum(header.Coinbase) {
+		// Reward Block Proposer if it's not base quorum
+		state.AddBalance(header.Coinbase, ProposerReward)
+
+		// statistics for  total proposer rewards distributed
+		totalProposerRewards := getTotalProposerReward(state)
+		totalProposerRewards.Add(totalProposerRewards, ProposerReward)
+		setTotalProposerReward(totalProposerRewards, state)
+	}
 
 	// Ensure the parent is not nil
 	parentHeader := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
@@ -104,6 +173,17 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 					// each validator claim it's block reward share
 					state.AddBalance(address, blockReward)
 				}
+
+				// statistics
+				// total gas fee distributed
+				totalGas := getTotalGasFees(state)
+				totalGas.Add(totalGas, sharedGasFee)
+				setTotalGasFees(totalGas, state)
+
+				// total validator rewards distributed
+				totalValidatorRewards := getTotalValidatorReward(state)
+				totalValidatorRewards.Add(totalValidatorRewards, TotalValidatorReward)
+				setTotalValidatorReward(totalValidatorRewards, state)
 			}
 		}
 	}
