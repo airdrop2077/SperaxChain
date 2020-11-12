@@ -57,7 +57,7 @@ const (
 // getMapValue retrieves the value with key from account: StakingAddress
 func getMapValue(addr common.Address, key string, state vm.StateDB) common.Hash {
 	keyHash := crypto.Keccak256Hash([]byte(fmt.Sprintf(key, addr.String())))
-	return state.GetState(GasFeeAddress, keyHash)
+	return state.GetCommittedState(GasFeeAddress, keyHash)
 }
 
 // setMapValue sets the value with key to account: StakingAddress
@@ -157,16 +157,10 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 				stakers[account] = true
 			}
 
-			// get state at parent height
-			parentState, err := e.stateAt(header.ParentHash)
-			if err != nil {
-				panic(err)
-			}
-
 			// sum total stakes from unique validators
 			for account := range stakers {
 				// NOTE: a validator at height N is immutable
-				staker := committee.GetStakerData(account, parentState)
+				staker := committee.GetStakerData(account, state)
 				if staker.StakedValue.Cmp(common.Big0) > 0 {
 					validatorsStaked.Add(validatorsStaked, staker.StakedValue)
 				} else {
@@ -179,7 +173,7 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 				// retrieve the gas fee account at current height
 				// the current balance of GasFeeAddress is the result of transactions at current height
 				// and will be distributed at next block
-				sharedGasFee := parentState.GetBalance(GasFeeAddress)
+				sharedGasFee := state.GetBalance(GasFeeAddress)
 
 				// gasFeePercentageGain = sharedGasFee * 1e18 / totalStaked
 				// we multiplied by 1e18 here to avoid underflow
@@ -199,7 +193,7 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 				for _, proof := range message.Proof {
 					address := crypto.PubkeyToAddress(*proof.PublicKey(crypto.S256()))
 					if stakers[address] {
-						staker := committee.GetStakerData(address, parentState)
+						staker := committee.GetStakerData(address, state)
 
 						gasFee.Mul(gasFeePercentageGain, staker.StakedValue)
 						gasFee.Div(gasFee, Multiplier)
