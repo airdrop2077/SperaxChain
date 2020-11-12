@@ -40,8 +40,8 @@ const (
 	proposalCollectionTimeout = 5 * time.Second
 )
 
-// verify states in block
-func (e *BDLSEngine) verifyStates(block *types.Block) bool {
+// verify states against parentState
+func (e *BDLSEngine) verifyStates(block *types.Block, parentState *state.StateDB) bool {
 	// check bad block
 	if e.hasBadBlock != nil {
 		if e.hasBadBlock(block.Hash()) {
@@ -57,26 +57,18 @@ func (e *BDLSEngine) verifyStates(block *types.Block) bool {
 		return false
 	}
 
-	// Process the block to verify that the transactions are valid and to retrieve the resulting state and receipts
-	// Get the state from this block's parent.
-	state, err := e.stateAt(block.Header().ParentHash)
-	if err != nil {
-		log.Debug("verifyStates - Error in getting the block's parent's state", "parentHash", block.Header().ParentHash.Hex(), "err", err)
-		return false
-	}
-
 	// Make a copy of the state
-	state = state.Copy()
+	parentState = parentState.Copy()
 
 	// Apply this block's transactions to update the state
-	receipts, _, usedGas, err := e.processBlock(block, state)
+	receipts, _, usedGas, err := e.processBlock(block, parentState)
 	if err != nil {
 		log.Debug("verifyStates - Error in processing the block", "err", err)
 		return false
 	}
 
 	// Validate the block
-	if err := e.validateState(block, state, receipts, usedGas); err != nil {
+	if err := e.validateState(block, parentState, receipts, usedGas); err != nil {
 		log.Debug("verifyStates - Error in validating the block", "err", err)
 		return false
 	}
@@ -143,7 +135,7 @@ func (e *BDLSEngine) verifyRemoteProposal(chain consensus.ChainReader, block *ty
 	}
 
 	// validate the states of transactions
-	if !e.verifyStates(block) {
+	if !e.verifyStates(block, state) {
 		log.Debug("verifyRemoteProposal - verifyStates failed")
 		return false
 	}
