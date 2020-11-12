@@ -37,8 +37,11 @@ var (
 	// Proposer's SPA reward
 	ProposerReward       = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
 	TotalValidatorReward = new(big.Int).Mul(big.NewInt(3000), big.NewInt(params.Ether))
-	GasFeeAddress        = common.HexToAddress("0xdddddddddddddddddddddddddddddddddddddddd")
-	Multiplier           = big.NewInt(1e18)
+	// Account to deposit gas fee
+	GasFeeAddress = common.HexToAddress("0xdddddddddddddddddddddddddddddddddddddddd")
+	// Account to keep stat data
+	StatsAddress = common.HexToAddress("0xddddddddddddddddddddddddddddddddddddddd1")
+	Multiplier   = big.NewInt(1e18)
 )
 
 const (
@@ -63,43 +66,43 @@ func getMapValue(addr common.Address, key string, state vm.StateDB) common.Hash 
 // setMapValue sets the value with key to account: StakingAddress
 func setMapValue(addr common.Address, key string, value common.Hash, state vm.StateDB) {
 	keyHash := crypto.Keccak256Hash([]byte(fmt.Sprintf(key, addr.String())))
-	state.SetState(committee.StakingAddress, keyHash, value)
+	state.SetState(StatsAddress, keyHash, value)
 }
 
 // getTotalGasFees retrieves total gas fee reward from account storage trie
 func getTotalGasFees(state vm.StateDB) *big.Int {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalGasFeeRewards))
-	return state.GetState(committee.StakingAddress, keyHash).Big()
+	return state.GetState(StatsAddress, keyHash).Big()
 }
 
 // setTotalGasFees sets the total gas fee reward to account storage trie
 func setTotalGasFees(number *big.Int, state vm.StateDB) {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalGasFeeRewards))
-	state.SetState(committee.StakingAddress, keyHash, common.BigToHash(number))
+	state.SetState(StatsAddress, keyHash, common.BigToHash(number))
 }
 
 // getTotalValidatorRewards retrieves total validators reward from account storage trie
 func getTotalValidatorRewards(state vm.StateDB) *big.Int {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalValidatorRewards))
-	return state.GetState(committee.StakingAddress, keyHash).Big()
+	return state.GetState(StatsAddress, keyHash).Big()
 }
 
 // setTotalValidatorRewards sets the total validators reward to account storage trie
 func setTotalValidatorRewards(number *big.Int, state vm.StateDB) {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalValidatorRewards))
-	state.SetState(committee.StakingAddress, keyHash, common.BigToHash(number))
+	state.SetState(StatsAddress, keyHash, common.BigToHash(number))
 }
 
 // getTotalProposerRewards retrieves total gas fee from account storage trie
 func getTotalProposerRewards(state vm.StateDB) *big.Int {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalProposerRewards))
-	return state.GetState(committee.StakingAddress, keyHash).Big()
+	return state.GetState(StatsAddress, keyHash).Big()
 }
 
 // setTotalProposerRewards sets the total gas fee to account storage trie
 func setTotalProposerRewards(number *big.Int, state vm.StateDB) {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalProposerRewards))
-	state.SetState(committee.StakingAddress, keyHash, common.BigToHash(number))
+	state.SetState(StatsAddress, keyHash, common.BigToHash(number))
 }
 
 func PrintPanicStack() {
@@ -114,6 +117,11 @@ func PrintPanicStack() {
 
 // mining reward computation
 func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state.StateDB, header *types.Header) {
+	// lazy initialization of stats data
+	if !state.Exist(StatsAddress) {
+		state.CreateAccount(StatsAddress)
+	}
+
 	if !committee.IsBaseQuorum(header.Coinbase) {
 		// Reward Block Proposer if it's not base quorum
 		state.AddBalance(header.Coinbase, ProposerReward)
@@ -220,9 +228,6 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 
 						// mark we've processed with this staker
 						stakers[address] = false
-
-						PrintPanicStack()
-						fmt.Println("Staker stats", getMapValue(address, KeyAccountValidatorRewards, state).Big(), staker.Address.String(), staker.StakedValue)
 					}
 				}
 
