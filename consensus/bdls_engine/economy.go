@@ -113,9 +113,9 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 		setTotalProposerRewards(totalProposerRewards, state)
 
 		// per account proposer rewards statistics
-		accountTotalProposerRewards := getMapValue(header.Coinbase, KeyAccountProposerRewards, state).Big()
-		accountTotalProposerRewards.Add(accountTotalProposerRewards, ProposerReward)
-		setMapValue(header.Coinbase, KeyAccountProposerRewards, common.BigToHash(accountTotalProposerRewards), state)
+		accountProposerRewards := getMapValue(header.Coinbase, KeyAccountProposerRewards, state).Big()
+		accountProposerRewards.Add(accountProposerRewards, ProposerReward)
+		setMapValue(header.Coinbase, KeyAccountProposerRewards, common.BigToHash(accountProposerRewards), state)
 	}
 
 	// Ensure the parent is not nil
@@ -204,9 +204,9 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 					setMapValue(address, KeyAccountGasFeeRewards, common.BigToHash(accountGasFeeRewards), state)
 
 					// per account block rewards statistics
-					accountTotalBlockRewards := getMapValue(address, KeyAccountValidatorRewards, state).Big()
-					accountTotalBlockRewards.Add(accountTotalBlockRewards, gasFee)
-					setMapValue(address, KeyAccountValidatorRewards, common.BigToHash(accountTotalBlockRewards), state)
+					accountBlockRewards := getMapValue(address, KeyAccountValidatorRewards, state).Big()
+					accountBlockRewards.Add(accountBlockRewards, blockReward)
+					setMapValue(address, KeyAccountValidatorRewards, common.BigToHash(accountBlockRewards), state)
 
 				}
 
