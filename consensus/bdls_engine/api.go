@@ -80,6 +80,17 @@ func (api *API) GetTotalStaked() (total *big.Int, err error) {
 	return committee.TotalStaked(state), nil
 }
 
+// GetTotalStakingOperations returns the total staking operations performed
+func (api *API) GetTotalStakingOperations() (count uint64, err error) {
+	header := api.chain.CurrentHeader()
+	state, err := api.engine.stateAt(header.Hash())
+	if err != nil {
+		return 0, err
+	}
+
+	return state.GetNonce(committee.StakingAddress), nil
+}
+
 // GetStakers returns a map for all stakers and it's value
 func (api *API) GetStakers() (stakers []*committee.Staker, err error) {
 	header := api.chain.CurrentHeader()
