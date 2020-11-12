@@ -96,6 +96,17 @@ func (api *API) GetStakers() (stakers []*committee.Staker, err error) {
 	return stakers, nil
 }
 
+// GetStaker returns a staker's information
+func (api *API) GetStaker(account common.Address) (stakers *committee.Staker, err error) {
+	header := api.chain.CurrentHeader()
+	state, err := api.engine.stateAt(header.Hash())
+	if err != nil {
+		return nil, err
+	}
+
+	return committee.GetStakerData(account, state), nil
+}
+
 // GetTotalGasFeeRewards returns the total staked value
 func (api *API) GetTotalGasFeeRewards() (total *big.Int, err error) {
 	header := api.chain.CurrentHeader()
