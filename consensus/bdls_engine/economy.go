@@ -48,9 +48,9 @@ const (
 	KeyTotalProposerRewards  = "/v1/totalProposerRewards"
 
 	// account
-	KeyAccountGasFeeRewards    = "/v1/%v/totalGasFeeRewards"
-	KeyAccountValidatorRewards = "/v1/%v/totalValidatorRewards"
-	KeyAccountProposerRewards  = "/v1/%v/totalProposerRewards"
+	KeyAccountGasFeeRewards    = "/v1/%s/totalGasFeeRewards"
+	KeyAccountValidatorRewards = "/v1/%s/totalValidatorRewards"
+	KeyAccountProposerRewards  = "/v1/%s/totalProposerRewards"
 )
 
 // getMapValue retrieves the value with key from account: StakingAddress
@@ -183,7 +183,7 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 				blockReward := new(big.Int)
 				for _, proof := range message.Proof {
 					address := crypto.PubkeyToAddress(*proof.PublicKey(crypto.S256()))
-					staker := committee.GetStakerData(address, state)
+					staker := committee.GetStakerData(address, parentState)
 
 					gasFee.Mul(gasFeePercentageGain, staker.StakedValue)
 					gasFee.Div(gasFee, Multiplier)
@@ -208,6 +208,8 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 					accountBlockRewards.Add(accountBlockRewards, blockReward)
 					setMapValue(address, KeyAccountValidatorRewards, common.BigToHash(accountBlockRewards), state)
 
+					final := getMapValue(address, KeyAccountValidatorRewards, state).Big()
+					fmt.Println("accountBlockRewards", accountBlockRewards, final)
 				}
 
 				// statistics
