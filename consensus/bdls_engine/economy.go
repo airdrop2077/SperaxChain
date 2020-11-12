@@ -103,6 +103,7 @@ func setTotalProposerRewards(number *big.Int, state vm.StateDB) {
 
 // mining reward computation
 func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state.StateDB, header *types.Header) {
+	defer state.Commit(true)
 	if !committee.IsBaseQuorum(header.Coinbase) {
 		// Reward Block Proposer if it's not base quorum
 		state.AddBalance(header.Coinbase, ProposerReward)
@@ -110,6 +111,7 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 		// statistics for  total proposer rewards distributed
 		totalProposerRewards := getTotalProposerRewards(state)
 		totalProposerRewards.Add(totalProposerRewards, ProposerReward)
+		fmt.Println("totalProposerRewards", totalProposerRewards)
 		setTotalProposerRewards(totalProposerRewards, state)
 
 		// per account proposer rewards statistics
@@ -137,7 +139,7 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 		}
 
 		if len(message.Proof) > 0 {
-			totalStaked := new(big.Int)
+			validatorsStaked := new(big.Int)
 
 			// retrieve unique validators
 			stakers := make(map[common.Address]bool)
@@ -156,11 +158,11 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 			for account := range stakers {
 				// NOTE: a validator at height N is immutable
 				staker := committee.GetStakerData(account, parentState)
-				totalStaked.Add(totalStaked, staker.StakedValue)
+				validatorsStaked.Add(validatorsStaked, staker.StakedValue)
 			}
 
 			// no value staked
-			if totalStaked.Cmp(common.Big0) > 0 {
+			if validatorsStaked.Cmp(common.Big0) > 0 {
 				// retrieve the gas fee account at current height
 				// the current balance of GasFeeAddress is the result of transactions at current height
 				// and will be distributed at next block
@@ -170,13 +172,13 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 				// we multiplied by 1e18 here to avoid underflow
 				gasFeePercentageGain := new(big.Int)
 				gasFeePercentageGain.Mul(sharedGasFee, Multiplier)
-				gasFeePercentageGain.Div(gasFeePercentageGain, totalStaked)
+				gasFeePercentageGain.Div(gasFeePercentageGain, validatorsStaked)
 
 				// blockRewardPercentageGain = (totalvalidator reward) * 1e18 / totalStaked
 				// we multiplied by 1e18 here to avoid underflow
 				blockRewardPercentageGain := new(big.Int)
 				blockRewardPercentageGain.Mul(TotalValidatorReward, Multiplier)
-				blockRewardPercentageGain.Div(blockRewardPercentageGain, totalStaked)
+				blockRewardPercentageGain.Div(blockRewardPercentageGain, validatorsStaked)
 
 				// gas fee will be distributed evenly for how much staker's has staked
 				gasFee := new(big.Int)
@@ -207,9 +209,6 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 					accountBlockRewards := getMapValue(address, KeyAccountValidatorRewards, state).Big()
 					accountBlockRewards.Add(accountBlockRewards, blockReward)
 					setMapValue(address, KeyAccountValidatorRewards, common.BigToHash(accountBlockRewards), state)
-
-					final := getMapValue(address, KeyAccountValidatorRewards, state).Big()
-					fmt.Println("accountBlockRewards", accountBlockRewards, final)
 				}
 
 				// statistics
