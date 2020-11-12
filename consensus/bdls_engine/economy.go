@@ -39,22 +39,20 @@ var (
 	TotalValidatorReward = new(big.Int).Mul(big.NewInt(3000), big.NewInt(params.Ether))
 	// Account to deposit gas fee
 	GasFeeAddress = common.HexToAddress("0xdddddddddddddddddddddddddddddddddddddddd")
-	// Account to keep stat data
-	StatsAddress = common.HexToAddress("0xddddddddddddddddddddddddddddddddddddddd1")
-	Multiplier   = big.NewInt(1e18)
+	Multiplier    = big.NewInt(1e18)
 )
 
 const (
 	// statistics stored in account storage trie of GasFeeAddress
 	// global
-	KeyTotalGasFeeRewards    = "/v1/totalGasFeeRewards"
-	KeyTotalValidatorRewards = "/v1/totalValidatorRewards"
-	KeyTotalProposerRewards  = "/v1/totalProposerRewards"
+	KeyTotalGasFeeRewards    = "/v1/stats/totalGasFeeRewards"
+	KeyTotalValidatorRewards = "/v1/stats/totalValidatorRewards"
+	KeyTotalProposerRewards  = "/v1/stats/totalProposerRewards"
 
 	// account
-	KeyAccountGasFeeRewards    = "/v1/%s/totalGasFeeRewards"
-	KeyAccountValidatorRewards = "/v1/%s/totalValidatorRewards"
-	KeyAccountProposerRewards  = "/v1/%s/totalProposerRewards"
+	KeyAccountGasFeeRewards    = "/v1/stats/%s/totalGasFeeRewards"
+	KeyAccountValidatorRewards = "/v1/stats/%s/totalValidatorRewards"
+	KeyAccountProposerRewards  = "/v1/stats/%s/totalProposerRewards"
 )
 
 // getMapValue retrieves the value with key from account: StakingAddress
@@ -66,43 +64,43 @@ func getMapValue(addr common.Address, key string, state vm.StateDB) common.Hash 
 // setMapValue sets the value with key to account: StakingAddress
 func setMapValue(addr common.Address, key string, value common.Hash, state vm.StateDB) {
 	keyHash := crypto.Keccak256Hash([]byte(fmt.Sprintf(key, addr.String())))
-	state.SetState(StatsAddress, keyHash, value)
+	state.SetState(committee.StakingAddress, keyHash, value)
 }
 
 // getTotalGasFees retrieves total gas fee reward from account storage trie
 func getTotalGasFees(state vm.StateDB) *big.Int {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalGasFeeRewards))
-	return state.GetState(StatsAddress, keyHash).Big()
+	return state.GetState(committee.StakingAddress, keyHash).Big()
 }
 
 // setTotalGasFees sets the total gas fee reward to account storage trie
 func setTotalGasFees(number *big.Int, state vm.StateDB) {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalGasFeeRewards))
-	state.SetState(StatsAddress, keyHash, common.BigToHash(number))
+	state.SetState(committee.StakingAddress, keyHash, common.BigToHash(number))
 }
 
 // getTotalValidatorRewards retrieves total validators reward from account storage trie
 func getTotalValidatorRewards(state vm.StateDB) *big.Int {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalValidatorRewards))
-	return state.GetState(StatsAddress, keyHash).Big()
+	return state.GetState(committee.StakingAddress, keyHash).Big()
 }
 
 // setTotalValidatorRewards sets the total validators reward to account storage trie
 func setTotalValidatorRewards(number *big.Int, state vm.StateDB) {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalValidatorRewards))
-	state.SetState(StatsAddress, keyHash, common.BigToHash(number))
+	state.SetState(committee.StakingAddress, keyHash, common.BigToHash(number))
 }
 
 // getTotalProposerRewards retrieves total gas fee from account storage trie
 func getTotalProposerRewards(state vm.StateDB) *big.Int {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalProposerRewards))
-	return state.GetState(StatsAddress, keyHash).Big()
+	return state.GetState(committee.StakingAddress, keyHash).Big()
 }
 
 // setTotalProposerRewards sets the total gas fee to account storage trie
 func setTotalProposerRewards(number *big.Int, state vm.StateDB) {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalProposerRewards))
-	state.SetState(StatsAddress, keyHash, common.BigToHash(number))
+	state.SetState(committee.StakingAddress, keyHash, common.BigToHash(number))
 }
 
 func PrintPanicStack() {
@@ -117,11 +115,6 @@ func PrintPanicStack() {
 
 // mining reward computation
 func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state.StateDB, header *types.Header) {
-	// lazy initialization of stats data
-	if !state.Exist(StatsAddress) {
-		state.CreateAccount(StatsAddress)
-	}
-
 	if !committee.IsBaseQuorum(header.Coinbase) {
 		// Reward Block Proposer if it's not base quorum
 		state.AddBalance(header.Coinbase, ProposerReward)
