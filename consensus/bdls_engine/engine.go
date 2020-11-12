@@ -262,14 +262,14 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		return consensus.ErrUnknownAncestor
 	}
 
-	// retrieve the staking object at parent height
-	state, err := e.stateAt(header.ParentHash)
+	// retrieve the state at parent height
+	parentState, err := e.stateAt(header.ParentHash)
 	if err != nil {
 		return errors.New("VerifySeal - Error in getting the block's parent's state")
 	}
 
 	// Ensure it's a valid proposer(header.Signature & header.R field)
-	if !e.verifyProposerField(header, state) {
+	if !e.verifyProposerField(header, parentState) {
 		return errors.New("VerifySeal - verifyProposerField failed")
 	}
 
@@ -291,7 +291,7 @@ func (e *BDLSEngine) VerifySeal(chain consensus.ChainReader, header *types.Heade
 		PubKeyToIdentity: PubKeyToIdentity,
 	}
 	// create the consensus object along with participants to validate decide message
-	config.Participants = committee.CreateValidators(header, state)
+	config.Participants = committee.CreateValidators(header, parentState)
 
 	consensus, err := bdls.NewConsensus(config)
 	if err != nil {

@@ -85,9 +85,9 @@ func (e *BDLSEngine) verifyStates(block *types.Block) bool {
 }
 
 // verify the proposer in block header
-func (e *BDLSEngine) verifyProposerField(header *types.Header, state *state.StateDB) bool {
+func (e *BDLSEngine) verifyProposerField(header *types.Header, parentState *state.StateDB) bool {
 	// Ensure the coinbase is a valid proposer
-	if !committee.IsProposer(header, state) {
+	if !committee.IsProposer(header, parentState) {
 		log.Debug("verifyProposerField - IsProposer", "height", header.Number, "proposer", header.Coinbase)
 		return false
 	}
@@ -217,7 +217,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	}
 
 	// retrieve staking object at parent height
-	state, err := e.stateAt(block.Header().ParentHash)
+	parentState, err := e.stateAt(block.Header().ParentHash)
 	if err != nil {
 		log.Error("consensusTask - Error in getting the block's parent's state", "parentHash", block.Header().ParentHash.Hex(), "err", err)
 		return
@@ -248,7 +248,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	}
 
 	// R has set, check if I'm the proposer
-	if committee.IsProposer(header, state) {
+	if committee.IsProposer(header, parentState) {
 		hash := e.SealHash(header).Bytes()
 		sig, err := crypto.Sign(hash, privateKey)
 		if err != nil {
@@ -280,7 +280,7 @@ func (e *BDLSEngine) consensusTask(chain consensus.ChainReader, block *types.Blo
 	}
 
 	// derive the participants from staking object at this height
-	participants := committee.CreateValidators(header, state)
+	participants := committee.CreateValidators(header, parentState)
 
 	// check if i'm the validator, stop here if i'm not a validator
 	var isValidator bool
@@ -331,7 +331,7 @@ PROPOSAL_COLLECTION:
 					}
 
 					// verify proposal fields
-					if !e.verifyRemoteProposal(chain, &proposal, block.NumberU64(), state) {
+					if !e.verifyRemoteProposal(chain, &proposal, block.NumberU64(), parentState) {
 						log.Debug("proposal collection - verifyRemoteProposal failed")
 						continue PROPOSAL_COLLECTION
 					}
@@ -539,7 +539,7 @@ CONSENSUS_TASK:
 					}
 
 					// verify proposal fields
-					if !e.verifyRemoteProposal(chain, &proposal, block.NumberU64(), state) {
+					if !e.verifyRemoteProposal(chain, &proposal, block.NumberU64(), parentState) {
 						log.Debug("proposal during consensus - verifyRemoteProposal failed")
 						continue CONSENSUS_TASK
 					}

@@ -268,17 +268,17 @@ func IsBaseQuorum(address common.Address) bool {
 }
 
 // H(r;0;Ri,r,0;Wr) > max{0;1 i-aip}
-func IsProposer(header *types.Header, state vm.StateDB) bool {
+func IsProposer(header *types.Header, parentState vm.StateDB) bool {
 	// addresses in base quorum are permanent proposers
 	if IsBaseQuorum(header.Coinbase) {
 		return true
 	}
 
 	// get total staked value
-	totalStaked := TotalStaked(state)
+	totalStaked := TotalStaked(parentState)
 
 	// lookup the staker's information
-	staker := GetStakerData(header.Coinbase, state)
+	staker := GetStakerData(header.Coinbase, parentState)
 	if header.Number.Uint64() <= staker.StakingFrom || header.Number.Uint64() > staker.StakingTo {
 		log.Debug("invalid staking period")
 		return false
