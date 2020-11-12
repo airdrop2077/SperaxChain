@@ -95,6 +95,17 @@ func (api *API) GetStakers() (stakers []*committee.Staker, err error) {
 	return stakers, nil
 }
 
+// GetTotalGasFeeRewards returns the total staked value
+func (api *API) GetTotalGasFeeRewards() (total *big.Int, err error) {
+	header := api.chain.CurrentHeader()
+	state, err := api.engine.stateAt(header.Hash())
+	if err != nil {
+		return nil, err
+	}
+
+	return getTotalGasFees(state), nil
+}
+
 // GetTotalValidatorRewards returns the total staked value
 func (api *API) GetTotalValidatorRewards() (total *big.Int, err error) {
 	header := api.chain.CurrentHeader()
@@ -115,6 +126,39 @@ func (api *API) GetTotalProposerRewards() (total *big.Int, err error) {
 	}
 
 	return getTotalProposerRewards(state), nil
+}
+
+// GetAccountGasFeeRewards returns the total staked value
+func (api *API) GetAccountGasFeeRewards(account common.Address) (total *big.Int, err error) {
+	header := api.chain.CurrentHeader()
+	state, err := api.engine.stateAt(header.Hash())
+	if err != nil {
+		return nil, err
+	}
+
+	return getMapValue(account, KeyAccountGasFeeRewards, state).Big(), nil
+}
+
+// GetAccountProposerRewards returns the total staked value
+func (api *API) GetAccountProposerRewards(account common.Address) (total *big.Int, err error) {
+	header := api.chain.CurrentHeader()
+	state, err := api.engine.stateAt(header.Hash())
+	if err != nil {
+		return nil, err
+	}
+
+	return getMapValue(account, KeyAccountProposerRewards, state).Big(), nil
+}
+
+// GetAccountValidatorRewards returns the total staked value
+func (api *API) GetAccountValidatorRewards(account common.Address) (total *big.Int, err error) {
+	header := api.chain.CurrentHeader()
+	state, err := api.engine.stateAt(header.Hash())
+	if err != nil {
+		return nil, err
+	}
+
+	return getMapValue(account, KeyAccountValidatorRewards, state).Big(), nil
 }
 
 func (api *API) decodeValidators(decision []byte) ([]common.Address, error) {

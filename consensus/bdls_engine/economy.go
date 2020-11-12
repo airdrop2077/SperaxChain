@@ -48,9 +48,9 @@ const (
 	KeyTotalProposerRewards  = "/v1/totalProposerRewards"
 
 	// account
-	KeyAccountTotalGasFeeRewards    = "/v1/%v/totalGasFeeRewards"
-	KeyAccountTotalValidatorRewards = "/v1/%v/totalValidatorRewards"
-	KeyAccountTotalProposerRewards  = "/v1/%v/totalProposerRewards"
+	KeyAccountGasFeeRewards    = "/v1/%v/totalGasFeeRewards"
+	KeyAccountValidatorRewards = "/v1/%v/totalValidatorRewards"
+	KeyAccountProposerRewards  = "/v1/%v/totalProposerRewards"
 )
 
 // getMapValue retrieves the value with key from account: StakingAddress
@@ -113,9 +113,9 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 		setTotalProposerRewards(totalProposerRewards, state)
 
 		// per account proposer rewards statistics
-		accountTotalProposerRewards := getMapValue(header.Coinbase, KeyAccountTotalProposerRewards, state).Big()
+		accountTotalProposerRewards := getMapValue(header.Coinbase, KeyAccountProposerRewards, state).Big()
 		accountTotalProposerRewards.Add(accountTotalProposerRewards, ProposerReward)
-		setMapValue(header.Coinbase, KeyAccountTotalValidatorRewards, common.BigToHash(accountTotalProposerRewards), state)
+		setMapValue(header.Coinbase, KeyAccountProposerRewards, common.BigToHash(accountTotalProposerRewards), state)
 	}
 
 	// Ensure the parent is not nil
@@ -199,14 +199,14 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 					state.AddBalance(address, blockReward)
 
 					// per account gas fee statistics
-					accountTotalGasFeeRewards := getMapValue(address, KeyAccountTotalGasFeeRewards, state).Big()
-					accountTotalGasFeeRewards.Add(accountTotalGasFeeRewards, gasFee)
-					setMapValue(address, KeyAccountTotalGasFeeRewards, common.BigToHash(accountTotalGasFeeRewards), state)
+					accountGasFeeRewards := getMapValue(address, KeyAccountGasFeeRewards, state).Big()
+					accountGasFeeRewards.Add(accountGasFeeRewards, gasFee)
+					setMapValue(address, KeyAccountGasFeeRewards, common.BigToHash(accountGasFeeRewards), state)
 
 					// per account block rewards statistics
-					accountTotalBlockRewards := getMapValue(address, KeyAccountTotalValidatorRewards, state).Big()
+					accountTotalBlockRewards := getMapValue(address, KeyAccountValidatorRewards, state).Big()
 					accountTotalBlockRewards.Add(accountTotalBlockRewards, gasFee)
-					setMapValue(address, KeyAccountTotalValidatorRewards, common.BigToHash(accountTotalBlockRewards), state)
+					setMapValue(address, KeyAccountValidatorRewards, common.BigToHash(accountTotalBlockRewards), state)
 
 				}
 
