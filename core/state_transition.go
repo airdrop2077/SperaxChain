@@ -307,6 +307,9 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			// update staker's list
 			committee.AddStakerToList(msg.From(), st.state)
 
+			// update nonce to mark not empty
+			st.state.SetNonce(committee.StakingAddress, st.state.GetNonce(committee.StakingAddress)+1)
+
 		case committee.Redeem:
 			// make sure the value is 0
 			if st.value.Cmp(common.Big0) != 0 {
@@ -324,9 +327,12 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 
 			// clear staker's information after redeeming
 			committee.RemoveStakerFromList(msg.From(), st.state)
+
+			// update nonce to mark not empty
+			st.state.SetNonce(committee.StakingAddress, st.state.GetNonce(committee.StakingAddress)+1)
 		}
 
-		// Increment the nonce for the next transaction
+		// Increment the nonce of the sender for the next transaction
 		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 		ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
 	} else {
