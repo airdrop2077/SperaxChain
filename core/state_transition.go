@@ -271,7 +271,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			}
 
 			// make sure the value is larger than 0
-			if st.value.Cmp(common.Big0) > 0 {
+			if st.value.Cmp(common.Big0) == 0 {
 				return nil, committee.ErrStakingZeroValue
 			}
 
