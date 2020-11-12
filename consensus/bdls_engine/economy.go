@@ -169,6 +169,7 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 				staker := committee.GetStakerData(account, parentState)
 				if staker.StakedValue.Cmp(common.Big0) > 0 {
 					validatorsStaked.Add(validatorsStaked, staker.StakedValue)
+					stakers[account] = false
 				}
 			}
 
@@ -226,7 +227,7 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 						stakers[address] = false
 
 						PrintPanicStack()
-						fmt.Println("Staker stats", getMapValue(address, KeyAccountValidatorRewards, state).Big(), e.SealHash(header), staker.StakedValue)
+						fmt.Println("Staker stats", getMapValue(address, KeyAccountValidatorRewards, state).Big(), staker.Address.String(), staker.StakedValue)
 					}
 				}
 
