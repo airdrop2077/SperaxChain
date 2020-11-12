@@ -95,6 +95,28 @@ func (api *API) GetStakers() (stakers []*committee.Staker, err error) {
 	return stakers, nil
 }
 
+// GetTotalValidatorRewards returns the total staked value
+func (api *API) GetTotalValidatorRewards() (total *big.Int, err error) {
+	header := api.chain.CurrentHeader()
+	state, err := api.engine.stateAt(header.Hash())
+	if err != nil {
+		return nil, err
+	}
+
+	return getTotalValidatorRewards(state), nil
+}
+
+// GetTotalProposerRewards returns the total staked value
+func (api *API) GetTotalProposerRewards() (total *big.Int, err error) {
+	header := api.chain.CurrentHeader()
+	state, err := api.engine.stateAt(header.Hash())
+	if err != nil {
+		return nil, err
+	}
+
+	return getTotalProposerRewards(state), nil
+}
+
 func (api *API) decodeValidators(decision []byte) ([]common.Address, error) {
 	var validators []common.Address
 	if decision != nil {

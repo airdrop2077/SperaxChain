@@ -48,8 +48,9 @@ const (
 	KeyTotalProposerRewards  = "/v1/totalProposerRewards"
 
 	// account
-	KeyAccountTotalGasFeeRewards = "/v1/%v/totalGasFeeRewards"
-	KeyAccountTotalBlockRewards  = "/v1/%v/totalBlockRewards"
+	KeyAccountTotalGasFeeRewards    = "/v1/%v/totalGasFeeRewards"
+	KeyAccountTotalValidatorRewards = "/v1/%v/totalValidatorRewards"
+	KeyAccountTotalProposerRewards  = "/v1/%v/totalProposerRewards"
 )
 
 // getMapValue retrieves the value with key from account: StakingAddress
@@ -76,26 +77,26 @@ func setTotalGasFees(number *big.Int, state vm.StateDB) {
 	state.SetState(GasFeeAddress, keyHash, common.BigToHash(number))
 }
 
-// getTotalValidatorReward retrieves total validators reward from account storage trie
-func getTotalValidatorReward(state vm.StateDB) *big.Int {
+// getTotalValidatorRewards retrieves total validators reward from account storage trie
+func getTotalValidatorRewards(state vm.StateDB) *big.Int {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalValidatorRewards))
 	return state.GetState(GasFeeAddress, keyHash).Big()
 }
 
-// setTotalValidatorReward sets the total validators reward to account storage trie
-func setTotalValidatorReward(number *big.Int, state vm.StateDB) {
+// setTotalValidatorRewards sets the total validators reward to account storage trie
+func setTotalValidatorRewards(number *big.Int, state vm.StateDB) {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalValidatorRewards))
 	state.SetState(GasFeeAddress, keyHash, common.BigToHash(number))
 }
 
-// getTotalProposerReward retrieves total gas fee from account storage trie
-func getTotalProposerReward(state vm.StateDB) *big.Int {
+// getTotalProposerRewards retrieves total gas fee from account storage trie
+func getTotalProposerRewards(state vm.StateDB) *big.Int {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalProposerRewards))
 	return state.GetState(GasFeeAddress, keyHash).Big()
 }
 
-// setTotalProposerReward sets the total gas fee to account storage trie
-func setTotalProposerReward(number *big.Int, state vm.StateDB) {
+// setTotalProposerRewards sets the total gas fee to account storage trie
+func setTotalProposerRewards(number *big.Int, state vm.StateDB) {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalProposerRewards))
 	state.SetState(GasFeeAddress, keyHash, common.BigToHash(number))
 }
@@ -107,9 +108,14 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 		state.AddBalance(header.Coinbase, ProposerReward)
 
 		// statistics for  total proposer rewards distributed
-		totalProposerRewards := getTotalProposerReward(state)
+		totalProposerRewards := getTotalProposerRewards(state)
 		totalProposerRewards.Add(totalProposerRewards, ProposerReward)
-		setTotalProposerReward(totalProposerRewards, state)
+		setTotalProposerRewards(totalProposerRewards, state)
+
+		// per account proposer rewards statistics
+		accountTotalProposerRewards := getMapValue(header.Coinbase, KeyAccountTotalProposerRewards, state).Big()
+		accountTotalProposerRewards.Add(accountTotalProposerRewards, ProposerReward)
+		setMapValue(header.Coinbase, KeyAccountTotalValidatorRewards, common.BigToHash(accountTotalProposerRewards), state)
 	}
 
 	// Ensure the parent is not nil
@@ -118,14 +124,7 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 		return
 	}
 
-	// retrieve the gas fee account at parent height
-	parentState, err := e.stateAt(header.ParentHash)
-	if err != nil {
-		return
-	}
-
 	// reward validators from previous block
-	sharedGasFee := parentState.GetBalance(GasFeeAddress)
 	if parentHeader.Decision != nil {
 		sp, err := bdls.DecodeSignedMessage(parentHeader.Decision)
 		if err != nil {
@@ -138,9 +137,35 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 		}
 
 		if len(message.Proof) > 0 {
-			totalStaked := committee.TotalStaked(parentState)
+			totalStaked := new(big.Int)
+
+			// retrieve unique validators
+			stakers := make(map[common.Address]bool)
+			for k := range message.Proof {
+				account := crypto.PubkeyToAddress(*message.Proof[k].PublicKey(crypto.S256()))
+				stakers[account] = true
+			}
+
+			// get state at parent height
+			parentState, err := e.stateAt(header.ParentHash)
+			if err != nil {
+				panic(err)
+			}
+
+			// sum total stakes from unique validators
+			for account := range stakers {
+				// NOTE: a validator at height N is immutable
+				staker := committee.GetStakerData(account, parentState)
+				totalStaked.Add(totalStaked, staker.StakedValue)
+			}
+
 			// no value staked
 			if totalStaked.Cmp(common.Big0) > 0 {
+				// retrieve the gas fee account at current height
+				// the current balance of GasFeeAddress is the result of transactions at current height
+				// and will be distributed at next block
+				sharedGasFee := parentState.GetBalance(GasFeeAddress)
+
 				// gasFeePercentageGain = sharedGasFee * 1e18 / totalStaked
 				// we multiplied by 1e18 here to avoid underflow
 				gasFeePercentageGain := new(big.Int)
@@ -179,9 +204,9 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 					setMapValue(address, KeyAccountTotalGasFeeRewards, common.BigToHash(accountTotalGasFeeRewards), state)
 
 					// per account block rewards statistics
-					accountTotalBlockRewards := getMapValue(address, KeyAccountTotalBlockRewards, state).Big()
+					accountTotalBlockRewards := getMapValue(address, KeyAccountTotalValidatorRewards, state).Big()
 					accountTotalBlockRewards.Add(accountTotalBlockRewards, gasFee)
-					setMapValue(address, KeyAccountTotalBlockRewards, common.BigToHash(accountTotalBlockRewards), state)
+					setMapValue(address, KeyAccountTotalValidatorRewards, common.BigToHash(accountTotalBlockRewards), state)
 
 				}
 
@@ -192,9 +217,9 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 				setTotalGasFees(totalGas, state)
 
 				// total validator rewards distributed
-				totalValidatorRewards := getTotalValidatorReward(state)
+				totalValidatorRewards := getTotalValidatorRewards(state)
 				totalValidatorRewards.Add(totalValidatorRewards, TotalValidatorReward)
-				setTotalValidatorReward(totalValidatorRewards, state)
+				setTotalValidatorRewards(totalValidatorRewards, state)
 
 				// TODO:
 				// Reward Moving Average(MA)
