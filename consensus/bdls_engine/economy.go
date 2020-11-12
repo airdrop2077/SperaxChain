@@ -57,49 +57,49 @@ const (
 // getMapValue retrieves the value with key from account: StakingAddress
 func getMapValue(addr common.Address, key string, state vm.StateDB) common.Hash {
 	keyHash := crypto.Keccak256Hash([]byte(fmt.Sprintf(key, addr.String())))
-	return state.GetCommittedState(GasFeeAddress, keyHash)
+	return state.GetCommittedState(committee.StakingAddress, keyHash)
 }
 
 // setMapValue sets the value with key to account: StakingAddress
 func setMapValue(addr common.Address, key string, value common.Hash, state vm.StateDB) {
 	keyHash := crypto.Keccak256Hash([]byte(fmt.Sprintf(key, addr.String())))
-	state.SetState(GasFeeAddress, keyHash, value)
+	state.SetState(committee.StakingAddress, keyHash, value)
 }
 
 // getTotalGasFees retrieves total gas fee reward from account storage trie
 func getTotalGasFees(state vm.StateDB) *big.Int {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalGasFeeRewards))
-	return state.GetState(GasFeeAddress, keyHash).Big()
+	return state.GetState(committee.StakingAddress, keyHash).Big()
 }
 
 // setTotalGasFees sets the total gas fee reward to account storage trie
 func setTotalGasFees(number *big.Int, state vm.StateDB) {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalGasFeeRewards))
-	state.SetState(GasFeeAddress, keyHash, common.BigToHash(number))
+	state.SetState(committee.StakingAddress, keyHash, common.BigToHash(number))
 }
 
 // getTotalValidatorRewards retrieves total validators reward from account storage trie
 func getTotalValidatorRewards(state vm.StateDB) *big.Int {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalValidatorRewards))
-	return state.GetState(GasFeeAddress, keyHash).Big()
+	return state.GetState(committee.StakingAddress, keyHash).Big()
 }
 
 // setTotalValidatorRewards sets the total validators reward to account storage trie
 func setTotalValidatorRewards(number *big.Int, state vm.StateDB) {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalValidatorRewards))
-	state.SetState(GasFeeAddress, keyHash, common.BigToHash(number))
+	state.SetState(committee.StakingAddress, keyHash, common.BigToHash(number))
 }
 
 // getTotalProposerRewards retrieves total gas fee from account storage trie
 func getTotalProposerRewards(state vm.StateDB) *big.Int {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalProposerRewards))
-	return state.GetState(GasFeeAddress, keyHash).Big()
+	return state.GetState(committee.StakingAddress, keyHash).Big()
 }
 
 // setTotalProposerRewards sets the total gas fee to account storage trie
 func setTotalProposerRewards(number *big.Int, state vm.StateDB) {
 	keyHash := crypto.Keccak256Hash([]byte(KeyTotalProposerRewards))
-	state.SetState(GasFeeAddress, keyHash, common.BigToHash(number))
+	state.SetState(committee.StakingAddress, keyHash, common.BigToHash(number))
 }
 
 func PrintPanicStack() {
