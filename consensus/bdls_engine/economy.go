@@ -169,6 +169,7 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 				staker := committee.GetStakerData(account, parentState)
 				if staker.StakedValue.Cmp(common.Big0) > 0 {
 					validatorsStaked.Add(validatorsStaked, staker.StakedValue)
+				} else {
 					stakers[account] = false
 				}
 			}
