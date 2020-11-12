@@ -172,6 +172,17 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 
 					// each validator claim it's block reward share
 					state.AddBalance(address, blockReward)
+
+					// per account gas fee statistics
+					accountTotalGasFeeRewards := getMapValue(address, KeyAccountTotalGasFeeRewards, state).Big()
+					accountTotalGasFeeRewards.Add(accountTotalGasFeeRewards, gasFee)
+					setMapValue(address, KeyAccountTotalGasFeeRewards, common.BigToHash(accountTotalGasFeeRewards), state)
+
+					// per account block rewards statistics
+					accountTotalBlockRewards := getMapValue(address, KeyAccountTotalBlockRewards, state).Big()
+					accountTotalBlockRewards.Add(accountTotalBlockRewards, gasFee)
+					setMapValue(address, KeyAccountTotalBlockRewards, common.BigToHash(accountTotalBlockRewards), state)
+
 				}
 
 				// statistics
@@ -184,6 +195,11 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 				totalValidatorRewards := getTotalValidatorReward(state)
 				totalValidatorRewards.Add(totalValidatorRewards, TotalValidatorReward)
 				setTotalValidatorReward(totalValidatorRewards, state)
+
+				// TODO:
+				// Reward Moving Average(MA)
+				// Windowed Inflow + MA
+				// Windowed Outflow + MA
 			}
 		}
 	}
