@@ -55,13 +55,13 @@ const (
 
 // getMapValue retrieves the value with key from account: StakingAddress
 func getMapValue(addr common.Address, key string, state vm.StateDB) common.Hash {
-	keyHash := crypto.Keccak256Hash([]byte(fmt.Sprintf(key, addr)))
+	keyHash := crypto.Keccak256Hash([]byte(fmt.Sprintf(key, addr.String())))
 	return state.GetState(GasFeeAddress, keyHash)
 }
 
 // setMapValue sets the value with key to account: StakingAddress
 func setMapValue(addr common.Address, key string, value common.Hash, state vm.StateDB) {
-	keyHash := crypto.Keccak256Hash([]byte(fmt.Sprintf(key, addr)))
+	keyHash := crypto.Keccak256Hash([]byte(fmt.Sprintf(key, addr.String())))
 	state.SetState(GasFeeAddress, keyHash, value)
 }
 

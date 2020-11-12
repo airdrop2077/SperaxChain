@@ -17,6 +17,7 @@
 package bdls_engine
 
 import (
+	fmt "fmt"
 	"math/big"
 
 	"github.com/Sperax/SperaxChain/common"
@@ -157,6 +158,8 @@ func (api *API) GetAccountValidatorRewards(account common.Address) (total *big.I
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Println("height:", header.Number)
 
 	return getMapValue(account, KeyAccountValidatorRewards, state).Big(), nil
 }
