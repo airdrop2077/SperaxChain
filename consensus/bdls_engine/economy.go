@@ -19,6 +19,7 @@ package bdls_engine
 import (
 	fmt "fmt"
 	"math/big"
+	"runtime"
 
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/consensus"
@@ -101,9 +102,18 @@ func setTotalProposerRewards(number *big.Int, state vm.StateDB) {
 	state.SetState(GasFeeAddress, keyHash, common.BigToHash(number))
 }
 
+func PrintPanicStack() {
+	i := 0
+	funcName, file, line, ok := runtime.Caller(i)
+	for ok {
+		fmt.Printf("frame %v:[func:%v,file:%v,line:%v]\n", i, runtime.FuncForPC(funcName).Name(), file, line)
+		i++
+		funcName, file, line, ok = runtime.Caller(i)
+	}
+}
+
 // mining reward computation
 func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state.StateDB, header *types.Header) {
-	defer state.Commit(true)
 	if !committee.IsBaseQuorum(header.Coinbase) {
 		// Reward Block Proposer if it's not base quorum
 		state.AddBalance(header.Coinbase, ProposerReward)
@@ -111,7 +121,6 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 		// statistics for  total proposer rewards distributed
 		totalProposerRewards := getTotalProposerRewards(state)
 		totalProposerRewards.Add(totalProposerRewards, ProposerReward)
-		fmt.Println("totalProposerRewards", totalProposerRewards)
 		setTotalProposerRewards(totalProposerRewards, state)
 
 		// per account proposer rewards statistics
@@ -158,7 +167,9 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 			for account := range stakers {
 				// NOTE: a validator at height N is immutable
 				staker := committee.GetStakerData(account, parentState)
-				validatorsStaked.Add(validatorsStaked, staker.StakedValue)
+				if staker.StakedValue.Cmp(common.Big0) > 0 {
+					validatorsStaked.Add(validatorsStaked, staker.StakedValue)
+				}
 			}
 
 			// no value staked
@@ -185,30 +196,38 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 				blockReward := new(big.Int)
 				for _, proof := range message.Proof {
 					address := crypto.PubkeyToAddress(*proof.PublicKey(crypto.S256()))
-					staker := committee.GetStakerData(address, parentState)
+					if stakers[address] {
+						staker := committee.GetStakerData(address, parentState)
 
-					gasFee.Mul(gasFeePercentageGain, staker.StakedValue)
-					gasFee.Div(gasFee, Multiplier)
+						gasFee.Mul(gasFeePercentageGain, staker.StakedValue)
+						gasFee.Div(gasFee, Multiplier)
 
-					blockReward.Mul(blockRewardPercentageGain, staker.StakedValue)
-					blockReward.Div(blockReward, Multiplier)
+						blockReward.Mul(blockRewardPercentageGain, staker.StakedValue)
+						blockReward.Div(blockReward, Multiplier)
 
-					// each validator claim it's gas share, and reset balance in account: GasFeeAddress
-					state.AddBalance(address, gasFee)
-					state.SubBalance(GasFeeAddress, gasFee)
+						// each validator claim it's gas share, and reset balance in account: GasFeeAddress
+						state.AddBalance(address, gasFee)
+						state.SubBalance(GasFeeAddress, gasFee)
 
-					// each validator claim it's block reward share
-					state.AddBalance(address, blockReward)
+						// each validator claim it's block reward share
+						state.AddBalance(address, blockReward)
 
-					// per account gas fee statistics
-					accountGasFeeRewards := getMapValue(address, KeyAccountGasFeeRewards, state).Big()
-					accountGasFeeRewards.Add(accountGasFeeRewards, gasFee)
-					setMapValue(address, KeyAccountGasFeeRewards, common.BigToHash(accountGasFeeRewards), state)
+						// per account gas fee statistics
+						accountGasFeeRewards := getMapValue(address, KeyAccountGasFeeRewards, state).Big()
+						accountGasFeeRewards.Add(accountGasFeeRewards, gasFee)
+						setMapValue(address, KeyAccountGasFeeRewards, common.BigToHash(accountGasFeeRewards), state)
 
-					// per account block rewards statistics
-					accountBlockRewards := getMapValue(address, KeyAccountValidatorRewards, state).Big()
-					accountBlockRewards.Add(accountBlockRewards, blockReward)
-					setMapValue(address, KeyAccountValidatorRewards, common.BigToHash(accountBlockRewards), state)
+						// per account block rewards statistics
+						accountBlockRewards := getMapValue(address, KeyAccountValidatorRewards, state).Big()
+						accountBlockRewards.Add(accountBlockRewards, blockReward)
+						setMapValue(address, KeyAccountValidatorRewards, common.BigToHash(accountBlockRewards), state)
+
+						// mark we've processed with this staker
+						stakers[address] = false
+
+						PrintPanicStack()
+						fmt.Println("Staker stats", getMapValue(address, KeyAccountValidatorRewards, state).Big(), e.SealHash(header), staker.StakedValue)
+					}
 				}
 
 				// statistics
