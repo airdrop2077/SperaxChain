@@ -146,7 +146,7 @@ func delegate(ctx *cli.Context) error {
 
 		// create transaction
 		tx := types.NewTransaction(
-			count.Uint64()+1,         // nonce = count+1
+			count.Uint64(),
 			committee.StakingAddress, // staking address
 			amount,
 			gasLimit,
@@ -247,7 +247,7 @@ func redeem(ctx *cli.Context) error {
 
 	// create transaction
 	tx := types.NewTransaction(
-		count.Uint64()+1,         // nonce = count+1
+		count.Uint64(),
 		committee.StakingAddress, // staking address
 		common.Big0,
 		gasLimit,
