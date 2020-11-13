@@ -251,7 +251,7 @@ func redeem(ctx *cli.Context) error {
 		committee.StakingAddress, // staking address
 		common.Big0,
 		gasLimit,
-		gasPrice.Mul(gasPrice, common.Big2),
+		gasPrice,
 		bts,
 	)
 
