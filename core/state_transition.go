@@ -272,16 +272,15 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			err = st.applyRedeemTransaction(req, msg)
 		}
 
+		// Increment the nonce of the sender for the next transaction
+		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+
 		if err == nil {
 			// Apply the transaction with normal value transfer
-			// Increment the nonce of the sender for the next transaction
-			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 			ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
 		} else {
 			// if staking operation is invalid, apply the transaction with 0 value transfer
 			log.Debug("TransitionDb", "err", err)
-			// Increment the nonce of the sender for the next transaction
-			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 			ret, vmerr = nil, err
 		}
 
