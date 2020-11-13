@@ -206,6 +206,7 @@ var (
 		utils.SperaxStakeFromFlag,
 		utils.SperaxStakeToFlag,
 		utils.SperaxStakeAccountFlag,
+		utils.SperaxStakeAmountFlag,
 	}
 )
 

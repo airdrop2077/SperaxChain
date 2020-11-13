@@ -19,14 +19,25 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 
 	"github.com/Sperax/SperaxChain/accounts/keystore"
 	"github.com/Sperax/SperaxChain/cmd/utils"
 	"github.com/Sperax/SperaxChain/common"
+	"github.com/Sperax/SperaxChain/common/hexutil"
 	"github.com/Sperax/SperaxChain/consensus/bdls_engine/committee"
+	"github.com/Sperax/SperaxChain/console"
+	"github.com/Sperax/SperaxChain/core"
+	"github.com/Sperax/SperaxChain/core/types"
+	"github.com/Sperax/SperaxChain/params"
 	"github.com/Sperax/SperaxChain/rlp"
+	"github.com/Sperax/SperaxChain/rpc"
 	"gopkg.in/urfave/cli.v1"
+)
+
+const (
+	TestnetRPC = "http://testapi.sperax.io:8545"
 )
 
 var (
@@ -45,6 +56,7 @@ var (
 				Flags: []cli.Flag{
 					utils.SperaxStakeFromFlag,
 					utils.SperaxStakeToFlag,
+					utils.SperaxStakeAmountFlag,
 					utils.SperaxStakeAccountFlag,
 				},
 				Description: `
@@ -55,8 +67,6 @@ Generate data.payload to delegate SPA via eth.sendTransaction()`,
 				Usage:  "generate data to redeem SPA",
 				Action: utils.MigrateFlags(redeem),
 				Flags: []cli.Flag{
-					utils.SperaxStakeFromFlag,
-					utils.SperaxStakeToFlag,
 					utils.SperaxStakeAccountFlag,
 				},
 				Description: `
@@ -67,8 +77,6 @@ Generate data.payload to redeem SPA via eth.sendTransaction()`,
 )
 
 func delegate(ctx *cli.Context) error {
-	fmt.Println("STAKEING PARAMETERS GENERATION")
-
 	node := makeFullNode(ctx)
 	defer node.Close()
 
@@ -81,7 +89,7 @@ func delegate(ctx *cli.Context) error {
 		utils.Fatalf("account address invalid:%v err:%v ", account, err)
 	}
 
-	unlockAccount(ks, accountStr, 0, passwords)
+	account, password := unlockAccount(ks, accountStr, 0, passwords)
 
 	for _, wallet := range ks.Wallets() {
 		priv, err := wallet.GetPrivateKey(account)
@@ -99,18 +107,83 @@ func delegate(ctx *cli.Context) error {
 		seed := committee.DeriveStakingSeed(priv, req.StakingFrom)
 		req.StakingHash = common.BytesToHash(committee.HashChain(seed, req.StakingFrom, req.StakingTo))
 
-		fmt.Println("FROM:", req.StakingFrom)
-		fmt.Println("TO:", req.StakingTo)
-
 		bts, err := rlp.EncodeToBytes(req)
 		if err != nil {
 			utils.Fatalf("internal error:%v ", err)
 		}
-		fmt.Printf("STAKING PAYLOAD, use with eth.sendTransaction() by setting data.payload=0x%v\n", common.Bytes2Hex(bts))
-		fmt.Println("======================================================================================================")
-		fmt.Printf(`Console transaction example:
-eth.sendTransaction({from: "%v",to: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", value: "YOUR SPA TO STAKE", data:"0x%v"})
-		`, account.Address.String(), common.Bytes2Hex(bts))
+
+		// connect to official RPC server
+		client, err := rpc.Dial(TestnetRPC)
+		if err != nil {
+			return err
+		}
+		defer client.Close()
+
+		// get nonce from RPC
+		var result string
+		err = client.Call(&result, "eth_getTransactionCount", account.Address, "latest")
+		if err != nil {
+			return err
+		}
+
+		count, ok := big.NewInt(0).SetString(result, 0)
+		if !ok {
+			return errors.New("illegal result for eth_getTransactionCount")
+		}
+
+		// get gasPrice form RPC
+		err = client.Call(&result, "eth_gasPrice")
+		if err != nil {
+			return err
+		}
+		gasPrice, ok := big.NewInt(0).SetString(result, 0)
+
+		amount := big.NewInt(ctx.GlobalInt64(utils.SperaxStakeAmountFlag.Name))
+		amount.Mul(amount, big.NewInt(params.Ether))
+
+		// get gas limit
+		gasLimit, err := core.IntrinsicGas(bts, false, true, false)
+
+		// create transaction
+		tx := types.NewTransaction(
+			count.Uint64()+1,         // nonce = count+1
+			committee.StakingAddress, // staking address
+			amount,
+			gasLimit,
+			gasPrice,
+			bts,
+		)
+
+		// sign transaction
+		tx, err = ks.SignTxWithPassphrase(account, password, tx, params.TestnetChainConfig.ChainID)
+		if err != nil {
+			return err
+		}
+
+		// encode to raw
+		enc, err := rlp.EncodeToBytes(tx)
+		if err != nil {
+			return err
+		}
+		rawTx := hexutil.Encode(enc)
+
+		fmt.Println("FROM BLOCK#:", req.StakingFrom)
+		fmt.Println("TO BLOCK#:", req.StakingTo)
+		fmt.Println("NONCE:", tx.Nonce())
+		fmt.Println("AMOUNT:", amount)
+		fmt.Println("GAS LIMIT:", gasLimit)
+		fmt.Println("GAS PRICE:", gasPrice)
+		fmt.Println("DATA:", common.Bytes2Hex(bts))
+		ok, err = console.Stdin.PromptConfirm("SEND DELEGATE REQUEST WITH THESE PARAMETERS?")
+		if ok {
+			err = client.Call(&result, "eth_sendRawTransaction", rawTx)
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("Check transaction: http://explorer.etherscan.io/tx/%s\n", result)
+		}
+
 		return nil
 	}
 
@@ -129,10 +202,85 @@ func redeem(ctx *cli.Context) error {
 		utils.Fatalf("internal error:%v ", err)
 	}
 
-	fmt.Printf("REDEEM PAYLOAD, use with eth.sendTransaction() by setting data.payload=0x%v\n", common.Bytes2Hex(bts))
-	fmt.Println("======================================================================================================")
-	fmt.Printf(`Console transaction example:
-eth.sendTransaction({from: "YOUR ACCOUNT",to: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", value: "0", data:"0x%v"})
-		`, common.Bytes2Hex(bts))
+	node := makeFullNode(ctx)
+	defer node.Close()
+
+	ks := node.AccountManager().Backends(keystore.KeyStoreType)[0].(*keystore.KeyStore)
+	passwords := utils.MakePasswordList(ctx)
+	accountStr := strings.TrimSpace(ctx.GlobalString(utils.SperaxStakeAccountFlag.Name))
+
+	account, err := utils.MakeAddress(ks, accountStr)
+	if err != nil {
+		utils.Fatalf("account address invalid:%v err:%v ", account, err)
+	}
+
+	account, password := unlockAccount(ks, accountStr, 0, passwords)
+
+	// connect to official RPC server
+	client, err := rpc.Dial(TestnetRPC)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	// get nonce from RPC
+	var result string
+	err = client.Call(&result, "eth_getTransactionCount", account.Address, "latest")
+	if err != nil {
+		return err
+	}
+
+	count, ok := big.NewInt(0).SetString(result, 0)
+	if !ok {
+		return errors.New("illegal result for eth_getTransactionCount")
+	}
+
+	// get gasPrice form RPC
+	err = client.Call(&result, "eth_gasPrice")
+	if err != nil {
+		return err
+	}
+	gasPrice, ok := big.NewInt(0).SetString(result, 0)
+
+	// get gas limit
+	gasLimit, err := core.IntrinsicGas(bts, false, true, false)
+
+	// create transaction
+	tx := types.NewTransaction(
+		count.Uint64()+1,         // nonce = count+1
+		committee.StakingAddress, // staking address
+		common.Big0,
+		gasLimit,
+		gasPrice.Mul(gasPrice, common.Big2),
+		bts,
+	)
+
+	// sign transaction
+	tx, err = ks.SignTxWithPassphrase(account, password, tx, params.TestnetChainConfig.ChainID)
+	if err != nil {
+		return err
+	}
+
+	// encode to raw
+	enc, err := rlp.EncodeToBytes(tx)
+	if err != nil {
+		return err
+	}
+	rawTx := hexutil.Encode(enc)
+
+	fmt.Println("NONCE:", tx.Nonce())
+	fmt.Println("GAS LIMIT:", gasLimit)
+	fmt.Println("GAS PRICE:", gasPrice)
+	fmt.Println("DATA:", common.Bytes2Hex(bts))
+
+	ok, err = console.Stdin.PromptConfirm("SEND REDEEM REQUEST WITH THESE PARAMETERS?")
+	if ok {
+		err = client.Call(&result, "eth_sendRawTransaction", rawTx)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Check transaction: http://explorer.etherscan.io/tx/%s\n", result)
+	}
 	return nil
 }

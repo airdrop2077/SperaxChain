@@ -718,6 +718,11 @@ var (
 		Usage: "the end block number to stop running validator node",
 	}
 
+	SperaxStakeAmountFlag = cli.IntFlag{
+		Name:  "stake.amount",
+		Usage: "the amount SPA to stake, unit = 1 SPA",
+	}
+
 	SperaxStakeAccountFlag = cli.StringFlag{
 		Name:  "stake.account",
 		Usage: "the account to stake",
