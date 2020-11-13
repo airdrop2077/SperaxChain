@@ -264,77 +264,27 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		var req committee.StakingRequest
 		rlp.DecodeBytes(msg.Data(), &req)
 
+		var err error
 		switch req.StakingOp {
 		case committee.Staking:
-			if committee.HasStaked(msg.From(), st.state) {
-				return nil, committee.ErrStakingRequest
-			}
-
-			// make sure the value is larger than 0
-			if st.value.Cmp(common.Big0) == 0 {
-				return nil, committee.ErrStakingZeroValue
-			}
-
-			// minimum staking requirement
-			if st.value.Cmp(committee.StakingUnit) == -1 {
-				log.Debug("TransitionDb", "err", committee.ErrStakingMinimumTokens)
-				return nil, committee.ErrStakingMinimumTokens
-			}
-
-			// make sure period has not expired
-			if req.StakingTo <= st.evm.BlockNumber.Uint64() {
-				log.Debug("TransitionDb", "err", committee.ErrStakingAlreadyExpired)
-				return nil, committee.ErrStakingAlreadyExpired
-			}
-
-			// staking period check
-			if !(req.StakingTo > req.StakingFrom) {
-				log.Debug("TransitionDb", "err", committee.ErrStakingInvalidPeriod)
-				return nil, committee.ErrStakingInvalidPeriod
-			}
-
-			// no previous staking information
-			var staker committee.Staker
-			staker.Address = msg.From()
-			staker.StakingFrom = req.StakingFrom
-			staker.StakingTo = req.StakingTo
-			staker.StakingHash = req.StakingHash
-			staker.StakedValue = st.value
-
-			// set staking fields
-			committee.SetStakerData(&staker, st.state)
-
-			// update staker's list
-			committee.AddStakerToList(msg.From(), st.state)
-
-			// update nonce to mark not empty
-			st.state.SetNonce(committee.StakingAddress, st.state.GetNonce(committee.StakingAddress)+1)
-
+			err = st.applyStakingTransaction(req, msg)
 		case committee.Redeem:
-			// make sure the value is 0
-			if st.value.Cmp(common.Big0) != 0 {
-				return nil, committee.ErrRedeemValidNonZero
-			}
-
-			if !committee.HasStaked(msg.From(), st.state) {
-				return nil, committee.ErrRedeemRequest
-			}
-
-			// transfer from StakingAddress to msg.From
-			staker := committee.GetStakerData(msg.From(), st.state)
-			st.state.AddBalance(msg.From(), staker.StakedValue)
-			st.state.SubBalance(committee.StakingAddress, staker.StakedValue)
-
-			// clear staker's information after redeeming
-			committee.RemoveStakerFromList(msg.From(), st.state)
-
-			// update nonce to mark not empty
-			st.state.SetNonce(committee.StakingAddress, st.state.GetNonce(committee.StakingAddress)+1)
+			err = st.applyRedeemTransaction(req, msg)
 		}
 
-		// Increment the nonce of the sender for the next transaction
-		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-		ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
+		if err == nil {
+			// Apply the transaction with normal value transfer
+			// Increment the nonce of the sender for the next transaction
+			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+			ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
+		} else {
+			// if staking operation is invalid, apply the transaction with 0 value transfer
+			log.Debug("TransitionDb", "err", err)
+			// Increment the nonce of the sender for the next transaction
+			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+			ret, vmerr = nil, err
+		}
+
 	} else {
 		// Increment the nonce for the next transaction
 		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
@@ -347,6 +297,73 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		Err:        vmerr,
 		ReturnData: ret,
 	}, nil
+}
+
+func (st *StateTransition) applyStakingTransaction(req committee.StakingRequest, msg Message) error {
+	if committee.HasStaked(msg.From(), st.state) {
+		return committee.ErrStakingRequest
+	}
+
+	// make sure the value is larger than 0
+	if st.value.Cmp(common.Big0) == 0 {
+		return committee.ErrStakingZeroValue
+	}
+
+	// minimum staking requirement
+	if st.value.Cmp(committee.StakingUnit) == -1 {
+		return committee.ErrStakingMinimumTokens
+	}
+
+	// make sure period has not expired
+	if req.StakingTo <= st.evm.BlockNumber.Uint64() {
+		return committee.ErrStakingAlreadyExpired
+	}
+
+	// staking period check
+	if !(req.StakingTo > req.StakingFrom) {
+		return committee.ErrStakingInvalidPeriod
+	}
+
+	// no previous staking information
+	var staker committee.Staker
+	staker.Address = msg.From()
+	staker.StakingFrom = req.StakingFrom
+	staker.StakingTo = req.StakingTo
+	staker.StakingHash = req.StakingHash
+	staker.StakedValue = st.value
+
+	// set staking fields
+	committee.SetStakerData(&staker, st.state)
+
+	// update staker's list
+	committee.AddStakerToList(msg.From(), st.state)
+
+	// update nonce to mark not empty
+	st.state.SetNonce(committee.StakingAddress, st.state.GetNonce(committee.StakingAddress)+1)
+	return nil
+}
+
+func (st *StateTransition) applyRedeemTransaction(req committee.StakingRequest, msg Message) error {
+	// make sure the value is 0
+	if st.value.Cmp(common.Big0) != 0 {
+		return committee.ErrRedeemValidNonZero
+	}
+
+	if !committee.HasStaked(msg.From(), st.state) {
+		return committee.ErrRedeemRequest
+	}
+
+	// transfer from StakingAddress to msg.From
+	staker := committee.GetStakerData(msg.From(), st.state)
+	st.state.AddBalance(msg.From(), staker.StakedValue)
+	st.state.SubBalance(committee.StakingAddress, staker.StakedValue)
+
+	// clear staker's information after redeeming
+	committee.RemoveStakerFromList(msg.From(), st.state)
+
+	// update nonce to mark not empty
+	st.state.SetNonce(committee.StakingAddress, st.state.GetNonce(committee.StakingAddress)+1)
+	return nil
 }
 
 func (st *StateTransition) refundGas() {
