@@ -360,6 +360,13 @@ func (st *StateTransition) applyRedeemTransaction(req committee.StakingRequest, 
 	// clear staker's information after redeeming
 	committee.RemoveStakerFromList(msg.From(), st.state)
 
+	// clear stakers's data
+	staker.StakingFrom = 0
+	staker.StakingTo = 0
+	staker.StakingHash = common.Hash{}
+	staker.StakedValue = common.Big0
+	committee.SetStakerData(staker, st.state)
+
 	// update nonce to mark not empty
 	st.state.SetNonce(committee.StakingAddress, st.state.GetNonce(committee.StakingAddress)+1)
 	return nil
