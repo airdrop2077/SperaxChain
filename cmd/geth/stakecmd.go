@@ -123,6 +123,7 @@ func delegate(ctx *cli.Context) error {
 		switch {
 		case ctx.GlobalBool(utils.TestnetFlag.Name):
 			apiURL = TestnetRPC
+			txURL = TestnetTxExplorer
 		default:
 		}
 
@@ -237,6 +238,7 @@ func redeem(ctx *cli.Context) error {
 	switch {
 	case ctx.GlobalBool(utils.TestnetFlag.Name):
 		apiURL = TestnetRPC
+		txURL = TestnetTxExplorer
 	default:
 	}
 
