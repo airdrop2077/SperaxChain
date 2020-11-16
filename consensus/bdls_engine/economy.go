@@ -235,10 +235,17 @@ func (e *BDLSEngine) accumulateRewards(chain consensus.ChainReader, state *state
 				totalValidatorRewards.Add(totalValidatorRewards, TotalValidatorReward)
 				setTotalValidatorRewards(totalValidatorRewards, state)
 
-				// TODO:
-				// Reward Moving Average(MA)
-				// Windowed Inflow + MA
-				// Windowed Outflow + MA
+				// NOTE:
+				//
+				// The stats data above needs to be kept in statedb for ACCOUNTABILITY, i.e.
+				// stakers cannot deny their rewards.
+				//
+				// The stats data below will be kept in snapshot for REWARDING ALGORITHM
+				// like:
+				// 	Reward Moving Average(MA)
+				// 	Windowed Inflow + MA
+				// 	Windowed Outflow + MA
+				// 	...
 			}
 		}
 	}

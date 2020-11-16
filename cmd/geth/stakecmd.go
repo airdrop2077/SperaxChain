@@ -37,7 +37,11 @@ import (
 )
 
 const (
-	TestnetRPC = "http://testapi.sperax.io:8545"
+	MainnetRPC        = "http://api.sperax.io:8545"
+	MainnetTxExplorer = "http://explorer.sperax.io/tx/"
+
+	TestnetRPC        = "http://api.testnet.sperax.io:8545"
+	TestnetTxExplorer = "http://explorer.testnet.sperax.io/tx/"
 )
 
 var (
@@ -112,8 +116,18 @@ func delegate(ctx *cli.Context) error {
 			utils.Fatalf("internal error:%v ", err)
 		}
 
+		// api route
+		// currently we have testnet & mainnet
+		apiURL := MainnetRPC
+		txURL := MainnetTxExplorer
+		switch {
+		case ctx.GlobalBool(utils.TestnetFlag.Name):
+			apiURL = TestnetRPC
+		default:
+		}
+
 		// connect to official RPC server
-		client, err := rpc.Dial(TestnetRPC)
+		client, err := rpc.Dial(apiURL)
 		if err != nil {
 			return err
 		}
@@ -181,7 +195,7 @@ func delegate(ctx *cli.Context) error {
 				return err
 			}
 
-			fmt.Printf("Check transaction: http://explorer.etherscan.io/tx/%s\n", result)
+			fmt.Printf("Check transaction: %v%s\n", txURL, result)
 		}
 
 		return nil
@@ -216,8 +230,18 @@ func redeem(ctx *cli.Context) error {
 
 	account, password := unlockAccount(ks, accountStr, 0, passwords)
 
+	// api route
+	// currently we have testnet & mainnet
+	apiURL := MainnetRPC
+	txURL := MainnetTxExplorer
+	switch {
+	case ctx.GlobalBool(utils.TestnetFlag.Name):
+		apiURL = TestnetRPC
+	default:
+	}
+
 	// connect to official RPC server
-	client, err := rpc.Dial(TestnetRPC)
+	client, err := rpc.Dial(apiURL)
 	if err != nil {
 		return err
 	}
@@ -280,7 +304,7 @@ func redeem(ctx *cli.Context) error {
 			return err
 		}
 
-		fmt.Printf("Check transaction: http://explorer.etherscan.io/tx/%s\n", result)
+		fmt.Printf("Check transaction: %v%s\n", txURL, result)
 	}
 	return nil
 }
