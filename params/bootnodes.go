@@ -36,7 +36,6 @@ const dnsPrefix = "enrtree://AKA3AM6LPBYEUDMVNU3BSVQJ5AD45Y7YPOHJLEF6W26QOE4VTUD
 // These DNS names provide bootstrap connectivity for public testnets and the mainnet.
 // See https://github.com/ethereum/discv4-dns-lists for more information.
 var KnownDNSNetworks = map[common.Hash]string{
-	// TODO(xtaci): setup dns
-	MainnetGenesisHash: dnsPrefix + "mainnet.sperax.io",
-	TestnetGenesisHash: dnsPrefix + "test01.sperax.io",
+	MainnetGenesisHash: dnsPrefix + ".mainnet.sperax.io",
+	TestnetGenesisHash: dnsPrefix + "b01.testnet.sperax.io",
 }
