@@ -35,9 +35,9 @@ import (
 )
 
 const (
-	baseLatency               = 200 * time.Millisecond
+	baseLatency               = 1 * time.Second
 	maxBaseLatency            = 10 * time.Second
-	proposalCollectionTimeout = 5 * time.Second
+	proposalCollectionTimeout = 3 * time.Second
 )
 
 // verify states against parentState
