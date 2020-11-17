@@ -491,36 +491,11 @@ CONSENSUS_TASK:
 
 				switch em.Type {
 				case EngineMessageType_Consensus:
-					err := consensus.ReceiveMessage(em.Message, time.Now()) // input to core
-					if err != nil {
-						//	log.Debug("consensus receive:", "err", err)
-					}
-					newHeight, newRound, newState := consensus.CurrentState()
-
-					// new block confirmed
+					_ = consensus.ReceiveMessage(em.Message, time.Now()) // input to core
+					// check if new block confirmed
+					newHeight, _, _ := consensus.CurrentState()
 					if newHeight == block.NumberU64() {
-						hash := common.BytesToHash(newState)
-						log.Info("BDLS CONSENSUS <decide>", "HEIGHT", newHeight, "ROUND", newRound, "SEALHASH", hash)
-
-						// every validator can finalize this block to it's local blockchain now
-						newblock := lookupConsensusBlock(hash)
-						if newblock != nil {
-							// mined by me
-							header := newblock.Header()
-							bts, err := consensus.CurrentProof().Marshal()
-							if err != nil {
-								log.Crit("consensusMessenger", "consensus.CurrentProof", err)
-								panic(err)
-							}
-
-							// store the the proof in block header
-							header.Decision = bts
-
-							// broadcast the mined block if i'm the proposer
-							mined := newblock.WithSeal(header)
-							results <- mined
-						}
-						return
+						break CONSENSUS_TASK
 					}
 				case EngineMessageType_Proposal: // keep updating local block cache
 					var proposal types.Block
@@ -565,8 +540,38 @@ CONSENSUS_TASK:
 			e.sendProposal(candidateProposal)
 		case <-updateTick.C:
 			_ = consensus.Update(time.Now())
+			// check if new block confirmed
+			newHeight, _, _ := consensus.CurrentState()
+			if newHeight == block.NumberU64() {
+				break CONSENSUS_TASK
+			}
 		case <-stop:
 			return
 		}
 	}
+
+	// DECIDED
+	newHeight, newRound, newState := consensus.CurrentState()
+	hash := common.BytesToHash(newState)
+	log.Info("BDLS CONSENSUS <decide>", "HEIGHT", newHeight, "ROUND", newRound, "SEALHASH", hash)
+
+	// every validator can finalize this block to it's local blockchain now
+	newblock := lookupConsensusBlock(hash)
+	if newblock != nil {
+		// mined by me
+		header := newblock.Header()
+		bts, err := consensus.CurrentProof().Marshal()
+		if err != nil {
+			log.Crit("consensusMessenger", "consensus.CurrentProof", err)
+			panic(err)
+		}
+
+		// seal the the proof in block header
+		header.Decision = bts
+
+		// broadcast the mined block
+		mined := newblock.WithSeal(header)
+		results <- mined
+	}
+	return
 }
