@@ -35,7 +35,7 @@ import (
 )
 
 const (
-	baseLatency               = 1 * time.Second
+	baseLatency               = 500 * time.Millisecond
 	maxBaseLatency            = 10 * time.Second
 	proposalCollectionTimeout = 3 * time.Second
 )
@@ -473,10 +473,9 @@ PROPOSAL_COLLECTION:
 	// propose the block hash
 	consensus.Propose(candidateProposal.Hash().Bytes())
 
-	// after mined function
-	sealBlock := func() {
+	// if a block hash has received it's decide message
+	sealBlock := func(newHeight uint64, newRound uint64, newState bdls.State) {
 		// DECIDED
-		newHeight, newRound, newState := consensus.CurrentState()
 		hash := common.BytesToHash(newState)
 		log.Info("BDLS CONSENSUS <decide>", "HEIGHT", newHeight, "ROUND", newRound, "SEALHASH", hash)
 
@@ -520,9 +519,9 @@ CONSENSUS_TASK:
 				case EngineMessageType_Consensus:
 					_ = consensus.ReceiveMessage(em.Message, time.Now()) // input to core
 					// check if new block confirmed
-					newHeight, _, _ := consensus.CurrentState()
+					newHeight, newRound, newState := consensus.CurrentState()
 					if newHeight == block.NumberU64() {
-						sealBlock()
+						sealBlock(newHeight, newRound, newState)
 						return
 					}
 				case EngineMessageType_Proposal: // keep updating local block cache
@@ -566,14 +565,16 @@ CONSENSUS_TASK:
 			// we need to resend the proposal periodically to prevent some nodes missed the message
 			log.Debug("consensusTask", "resend proposal block#", candidateProposal.Hash())
 			e.sendProposal(candidateProposal)
+
 		case <-updateTick.C:
 			_ = consensus.Update(time.Now())
 			// check if new block confirmed
-			newHeight, _, _ := consensus.CurrentState()
+			newHeight, newRound, newState := consensus.CurrentState()
 			if newHeight == block.NumberU64() {
-				sealBlock()
+				sealBlock(newHeight, newRound, newState)
 				return
 			}
+
 		case <-stop:
 			return
 		}
