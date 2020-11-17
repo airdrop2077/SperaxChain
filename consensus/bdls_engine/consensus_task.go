@@ -473,6 +473,33 @@ PROPOSAL_COLLECTION:
 	// propose the block hash
 	consensus.Propose(candidateProposal.Hash().Bytes())
 
+	// after mined function
+	sealBlock := func() {
+		// DECIDED
+		newHeight, newRound, newState := consensus.CurrentState()
+		hash := common.BytesToHash(newState)
+		log.Info("BDLS CONSENSUS <decide>", "HEIGHT", newHeight, "ROUND", newRound, "SEALHASH", hash)
+
+		// every validator can finalize this block to it's local blockchain now
+		newblock := lookupConsensusBlock(hash)
+		if newblock != nil {
+			// mined by me
+			header := newblock.Header()
+			bts, err := consensus.CurrentProof().Marshal()
+			if err != nil {
+				log.Crit("consensusMessenger", "consensus.CurrentProof", err)
+				panic(err)
+			}
+
+			// seal the the proof in block header
+			header.Decision = bts
+
+			// broadcast the mined block
+			mined := newblock.WithSeal(header)
+			results <- mined
+		}
+	}
+
 	// core consensus loop
 CONSENSUS_TASK:
 	for {
@@ -495,7 +522,8 @@ CONSENSUS_TASK:
 					// check if new block confirmed
 					newHeight, _, _ := consensus.CurrentState()
 					if newHeight == block.NumberU64() {
-						break CONSENSUS_TASK
+						sealBlock()
+						return
 					}
 				case EngineMessageType_Proposal: // keep updating local block cache
 					var proposal types.Block
@@ -543,35 +571,11 @@ CONSENSUS_TASK:
 			// check if new block confirmed
 			newHeight, _, _ := consensus.CurrentState()
 			if newHeight == block.NumberU64() {
-				break CONSENSUS_TASK
+				sealBlock()
+				return
 			}
 		case <-stop:
 			return
 		}
 	}
-
-	// DECIDED
-	newHeight, newRound, newState := consensus.CurrentState()
-	hash := common.BytesToHash(newState)
-	log.Info("BDLS CONSENSUS <decide>", "HEIGHT", newHeight, "ROUND", newRound, "SEALHASH", hash)
-
-	// every validator can finalize this block to it's local blockchain now
-	newblock := lookupConsensusBlock(hash)
-	if newblock != nil {
-		// mined by me
-		header := newblock.Header()
-		bts, err := consensus.CurrentProof().Marshal()
-		if err != nil {
-			log.Crit("consensusMessenger", "consensus.CurrentProof", err)
-			panic(err)
-		}
-
-		// seal the the proof in block header
-		header.Decision = bts
-
-		// broadcast the mined block
-		mined := newblock.WithSeal(header)
-		results <- mined
-	}
-	return
 }
