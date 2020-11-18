@@ -38,6 +38,8 @@ const (
 	baseLatency               = 500 * time.Millisecond
 	maxBaseLatency            = 10 * time.Second
 	proposalCollectionTimeout = 3 * time.Second
+	updatePeriod              = 100 * time.Millisecond
+	resendPeriod              = 10 * time.Second
 )
 
 // verify states against parentState
@@ -461,11 +463,11 @@ PROPOSAL_COLLECTION:
 	consensus.SetLatency(latency)
 
 	// the consensus updater ticker
-	updateTick := time.NewTicker(20 * time.Millisecond)
+	updateTick := time.NewTicker(updatePeriod)
 	defer updateTick.Stop()
 
 	// the proposal resending ticker
-	resendProposalTick := time.NewTicker(10 * time.Second)
+	resendProposalTick := time.NewTicker(resendPeriod)
 	defer resendProposalTick.Stop()
 
 	// cache the candidate block
