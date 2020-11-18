@@ -29,6 +29,7 @@ import (
 	"github.com/Sperax/SperaxChain/common"
 	"github.com/Sperax/SperaxChain/common/hexutil"
 	"github.com/Sperax/SperaxChain/rlp"
+	"github.com/Sperax/bdls"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -324,11 +325,30 @@ func (b *Block) Transaction(hash common.Hash) *Transaction {
 	return nil
 }
 
-func (b *Block) Number() *big.Int     { return new(big.Int).Set(b.header.Number) }
-func (b *Block) GasLimit() uint64     { return b.header.GasLimit }
-func (b *Block) GasUsed() uint64      { return b.header.GasUsed }
-func (b *Block) Difficulty() *big.Int { return new(big.Int).Set(b.header.Difficulty) }
-func (b *Block) Time() uint64         { return b.header.Time }
+func (b *Block) Number() *big.Int { return new(big.Int).Set(b.header.Number) }
+func (b *Block) GasLimit() uint64 { return b.header.GasLimit }
+func (b *Block) GasUsed() uint64  { return b.header.GasUsed }
+func (b *Block) Difficulty() *big.Int {
+	difficulty := new(big.Int).Set(b.header.Difficulty)
+	// SPERAX: Difficulty Extension
+	// to incentive participants to acquire more proofs
+	if len(b.header.Decision) != 0 {
+		sp, err := bdls.DecodeSignedMessage(b.header.Decision)
+		if err != nil {
+			return difficulty
+		}
+
+		message, err := bdls.DecodeMessage(sp.Message)
+		if err != nil {
+			return difficulty
+		}
+
+		difficulty.Add(difficulty, big.NewInt(int64(len(message.GetProof()))))
+	}
+	return difficulty
+}
+
+func (b *Block) Time() uint64 { return b.header.Time }
 
 func (b *Block) NumberU64() uint64        { return b.header.Number.Uint64() }
 func (b *Block) MixDigest() common.Hash   { return b.header.MixDigest }

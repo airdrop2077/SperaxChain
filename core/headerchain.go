@@ -33,6 +33,7 @@ import (
 	"github.com/Sperax/SperaxChain/ethdb"
 	"github.com/Sperax/SperaxChain/log"
 	"github.com/Sperax/SperaxChain/params"
+	"github.com/Sperax/bdls"
 	lru "github.com/hashicorp/golang-lru"
 )
 
@@ -152,6 +153,18 @@ func (hc *HeaderChain) WriteHeader(header *types.Header) (status WriteStatus, er
 	head := hc.CurrentHeader().Number.Uint64()
 	localTd := hc.GetTd(hc.currentHeaderHash, head)
 	externTd := new(big.Int).Add(header.Difficulty, ptd)
+
+	// SPERAX: Difficulty Extension
+	// to incentive participants to acquire more proofs
+	if len(header.Decision) != 0 {
+		sp, err := bdls.DecodeSignedMessage(header.Decision)
+		if err == nil {
+			message, err := bdls.DecodeMessage(sp.Message)
+			if err == nil {
+				externTd.Add(externTd, big.NewInt(int64(len(message.GetProof()))))
+			}
+		}
+	}
 
 	// Irrelevant of the canonical status, write the td and header to the database
 	//
